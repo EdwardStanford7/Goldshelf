@@ -1,5 +1,5 @@
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CopyPlus, ListOrdered } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -76,6 +76,7 @@ function PublicProfileRoute() {
     const [copyMode, setCopyMode] = useState<CopyMode>("new");
     const [copyCategoryName, setCopyCategoryName] = useState("");
     const [copyTargetCategoryId, setCopyTargetCategoryId] = useState("");
+    const entryScrollRef = useRef<HTMLDivElement | null>(null);
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
         loaderData?.categories[0]?.id ?? null
     );
@@ -150,6 +151,11 @@ function PublicProfileRoute() {
         setCopyMode("new");
         setCopyCategoryName(category.name);
         setCopyTargetCategoryId(profileData.viewer.categories[0]?.id ?? "");
+    }
+
+    function selectCategory(categoryId: string) {
+        setSelectedCategoryId(categoryId);
+        entryScrollRef.current?.scrollTo({ top: 0 });
     }
 
     async function handleCopyCategory() {
@@ -233,7 +239,7 @@ function PublicProfileRoute() {
     const { profile, viewer } = profileData;
 
     return (
-        <main className="grid min-h-screen content-start gap-4 bg-background px-[clamp(1rem,3vw,2.25rem)] py-5 text-foreground">
+        <main className="grid h-dvh min-h-screen grid-rows-[auto_auto_minmax(0,1fr)] gap-4 overflow-hidden bg-background px-[clamp(1rem,3vw,2.25rem)] py-5 text-foreground max-[720px]:h-auto max-[720px]:grid-rows-none max-[720px]:overflow-visible">
             <PublicProfileTopbar signedIn={viewer.isSignedIn} />
 
             <Card className="min-w-0 flex-row items-center justify-end gap-[0.8rem] px-4 shadow-panel">
@@ -273,8 +279,8 @@ function PublicProfileRoute() {
             </Card>
 
             {profileData.categories.length > 0 ? (
-                <div className="m-0 grid w-full grid-cols-[220px_minmax(0,1fr)] items-start overflow-hidden rounded-md border border-border bg-card shadow-panel max-[720px]:grid-cols-1">
-                    <nav className="sticky top-0 grid max-h-screen content-start gap-0.5 overflow-y-auto border-r border-border bg-sidebar p-[0.65rem] max-[720px]:static max-[720px]:flex max-[720px]:max-h-none max-[720px]:flex-row max-[720px]:flex-nowrap max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:overflow-y-hidden max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label="Categories">
+                <div className="m-0 grid min-h-0 w-full grid-cols-[220px_minmax(0,1fr)] items-stretch overflow-hidden rounded-md border border-border bg-card shadow-panel max-[720px]:grid-cols-1 max-[720px]:overflow-visible">
+                    <nav className="grid min-h-0 content-start gap-0.5 overflow-y-auto border-r border-border bg-sidebar p-[0.65rem] max-[720px]:flex max-[720px]:max-h-none max-[720px]:flex-row max-[720px]:flex-nowrap max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:overflow-y-hidden max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label="Categories">
                         {profileData.categories.map((category) => {
                             const isActive = category.id === selectedCategoryId;
                             return (
@@ -286,14 +292,14 @@ function PublicProfileRoute() {
                                     key={category.id}
                                     type="button"
                                     aria-current={isActive ? "true" : undefined}
-                                    onClick={() => setSelectedCategoryId(category.id)}
+                                    onClick={() => selectCategory(category.id)}
                                 >
                                     <span className="block min-w-0 truncate text-[0.92rem]">{category.name}</span>
                                 </button>
                             );
                         })}
                     </nav>
-                    <div className="min-w-0 p-4">
+                    <div ref={entryScrollRef} className="min-h-0 min-w-0 overflow-y-auto p-4 max-[720px]:overflow-visible">
                         {(() => {
                             const category = profileData.categories.find(
                                 (c) => c.id === selectedCategoryId
