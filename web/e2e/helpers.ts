@@ -194,6 +194,24 @@ export async function winMatchups(page: Page, winnerName: string, maxRounds = 15
     throw new Error(`Ranking session still offered ${winnerName} after ${maxRounds} matchups`);
 }
 
+export function serverFnExportName(url: string) {
+    const match = url.match(/_serverFn\/([A-Za-z0-9_-]+)/);
+    if (!match) {
+        return null;
+    }
+
+    try {
+        const meta = JSON.parse(Buffer.from(match[1], "base64url").toString()) as { export?: string };
+        return meta.export ?? null;
+    } catch {
+        return null;
+    }
+}
+
+export function isServerFnRequest(url: string, exportName: string) {
+    return serverFnExportName(url)?.startsWith(exportName) ?? false;
+}
+
 /**
  * Resolves when a TanStack Start server function response arrives. Server fn
  * URLs encode `{file, export}` as base64url after `/_serverFn/`, so match on
@@ -205,17 +223,7 @@ export async function winMatchups(page: Page, winnerName: string, maxRounds = 15
  */
 export function serverFnResponse(page: Page, exportName: string) {
     return page.waitForResponse((response) => {
-        const match = response.url().match(/_serverFn\/([A-Za-z0-9_-]+)/);
-        if (!match) {
-            return false;
-        }
-
-        try {
-            const meta = JSON.parse(Buffer.from(match[1], "base64url").toString()) as { export?: string };
-            return meta.export?.startsWith(exportName) ?? false;
-        } catch {
-            return false;
-        }
+        return isServerFnRequest(response.url(), exportName);
     });
 }
 

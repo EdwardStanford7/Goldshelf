@@ -33,12 +33,18 @@ export function formatDateTime(timestamp: number, timeZone?: "UTC") {
     }).format(new Date(timestamp));
 }
 
+export const REQUEST_LOAD_FAILURE_MESSAGE = "Could not reach the server. Please try again.";
+
 export function isRequestLoadFailure(error: unknown) {
     if (!(error instanceof TypeError)) {
         return false;
     }
 
     return /^(load failed|failed to fetch|networkerror|fetch failed)$/i.test(error.message.trim());
+}
+
+export function isTransientRequestFailure(error: unknown) {
+    return isRequestLoadFailure(error);
 }
 
 export function errorMessage(error: unknown) {
@@ -50,8 +56,8 @@ export function errorMessage(error: unknown) {
         return "Image search timed out";
     }
 
-    if (isRequestLoadFailure(error)) {
-        return "Could not reach the server. Please try again.";
+    if (isTransientRequestFailure(error)) {
+        return REQUEST_LOAD_FAILURE_MESSAGE;
     }
 
     return error instanceof Error ? error.message : String(error);

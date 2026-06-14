@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { hasAdminRole } from "@/lib/admin";
+import { errorMessage } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 import type {
     AdminSessionSummary,
@@ -653,8 +654,4 @@ function formatDateTime(timestamp: number) {
         hour: "numeric",
         minute: "2-digit"
     }).format(new Date(timestamp));
-}
-
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : "Something went wrong.";
 }

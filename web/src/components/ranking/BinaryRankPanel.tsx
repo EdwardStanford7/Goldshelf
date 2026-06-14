@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image as ImageIcon, MoreVertical, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { redirectIfUnauthorized } from "@/lib/errors";
-import { errorMessage } from "@/lib/format";
+import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage, isNoImageKey, shouldPromptForImage } from "@/lib/images";
 import { getBinarySession, submitBinaryWinner } from "@/server/rankingSessions";
 import type { BinarySessionView, CategoryWithEntries, Entry } from "@/lib/types";
@@ -52,6 +52,8 @@ export function BinaryRankPanel({
     const [submitting, setSubmitting] = useState(false);
     const [renamingEntryId, setRenamingEntryId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
+    const pendingTransientLoadRef = useRef(false);
+    const [transientLoadRetryToken, setTransientLoadRetryToken] = useState(0);
 
     useEffect(() => {
         let isCurrent = true;
@@ -68,15 +70,24 @@ export function BinaryRankPanel({
                     return;
                 }
 
+                pendingTransientLoadRef.current = false;
                 setSession(nextSession);
             })
             .catch((loadError) => {
                 if (isCurrent && !redirectIfUnauthorized(loadError)) {
                     if (isUnavailableSessionError(loadError)) {
+                        pendingTransientLoadRef.current = false;
                         void onUnavailable(sessionId);
                         return;
                     }
 
+                    if (isTransientRequestFailure(loadError)) {
+                        pendingTransientLoadRef.current = true;
+                        setError(null);
+                        return;
+                    }
+
+                    pendingTransientLoadRef.current = false;
                     setError(errorMessage(loadError));
                 }
             });
@@ -84,7 +95,40 @@ export function BinaryRankPanel({
         return () => {
             isCurrent = false;
         };
-    }, [sessionId, imageRefreshVersion]);
+    }, [sessionId, imageRefreshVersion, transientLoadRetryToken]);
+
+    useEffect(() => {
+        function retryPendingTransientLoad() {
+            if (!pendingTransientLoadRef.current) {
+                return;
+            }
+
+            pendingTransientLoadRef.current = false;
+            setTransientLoadRetryToken((token) => token + 1);
+        }
+
+        function handleVisibilityChange() {
+            if (document.visibilityState === "visible") {
+                retryPendingTransientLoad();
+            }
+        }
+
+        function handlePageShow() {
+            retryPendingTransientLoad();
+        }
+
+        window.addEventListener("focus", retryPendingTransientLoad);
+        window.addEventListener("online", retryPendingTransientLoad);
+        window.addEventListener("pageshow", handlePageShow);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener("focus", retryPendingTransientLoad);
+            window.removeEventListener("online", retryPendingTransientLoad);
+            window.removeEventListener("pageshow", handlePageShow);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, []);
 
     useEffect(() => {
         if (!session) {

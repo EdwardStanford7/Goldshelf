@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { redirectIfUnauthorized } from "@/lib/errors";
-import { errorMessage } from "@/lib/format";
+import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import {
     imageCandidateToPosterBlob,
     imageElementToPosterBlob,
@@ -40,6 +40,8 @@ export function ImagePickerModal({
     const displayedQueryRef = useRef<string | null>(null);
     const searchRequestIdRef = useRef(0);
     const activeSearchControllerRef = useRef<AbortController | null>(null);
+    const pendingTransientSearchRef = useRef<string | null>(null);
+    const loadingRef = useRef(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     useEscapeKey(true, onClose);
 
@@ -66,8 +68,10 @@ export function ImagePickerModal({
             return;
         }
 
+        pendingTransientSearchRef.current = null;
         const cachedCandidates = candidatesByQueryRef.current.get(submittedQuery.toLowerCase());
         if (cachedCandidates && cachedCandidates.length > 0) {
+            pendingTransientSearchRef.current = null;
             candidatesRef.current = cachedCandidates;
             thumbnailPosterBlobsRef.current.clear();
             displayedQueryRef.current = submittedQuery;
@@ -121,9 +125,21 @@ export function ImagePickerModal({
             candidatesByQueryRef.current.set(submittedQuery.toLowerCase(), nextCandidates);
             thumbnailPosterBlobsRef.current.clear();
             displayedQueryRef.current = submittedQuery;
+            pendingTransientSearchRef.current = null;
             setCandidates(nextCandidates);
         } catch (searchError) {
             if (requestId !== searchRequestIdRef.current) {
+                return;
+            }
+
+            if (isTransientRequestFailure(searchError)) {
+                pendingTransientSearchRef.current = submittedQuery;
+                if (candidatesRef.current.length > 0) {
+                    setCandidates(candidatesRef.current);
+                } else {
+                    setCandidates([]);
+                }
+                setError(null);
                 return;
             }
 
@@ -149,6 +165,10 @@ export function ImagePickerModal({
     }, [target.kind, target.item.id]);
 
     useEffect(() => {
+        loadingRef.current = loading;
+    }, [loading]);
+
+    useEffect(() => {
         setQuery(defaultQuery);
         candidatesRef.current = [];
         candidatesByQueryRef.current.clear();
@@ -162,6 +182,40 @@ export function ImagePickerModal({
         searchRequestIdRef.current += 1;
         activeSearchControllerRef.current?.abort();
     }, []);
+
+    useEffect(() => {
+        function retryPendingTransientSearch() {
+            const pendingQuery = pendingTransientSearchRef.current;
+            if (!pendingQuery || loadingRef.current) {
+                return;
+            }
+
+            pendingTransientSearchRef.current = null;
+            void search(pendingQuery);
+        }
+
+        function handleVisibilityChange() {
+            if (document.visibilityState === "visible") {
+                retryPendingTransientSearch();
+            }
+        }
+
+        function handlePageShow() {
+            retryPendingTransientSearch();
+        }
+
+        window.addEventListener("focus", retryPendingTransientSearch);
+        window.addEventListener("online", retryPendingTransientSearch);
+        window.addEventListener("pageshow", handlePageShow);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener("focus", retryPendingTransientSearch);
+            window.removeEventListener("online", retryPendingTransientSearch);
+            window.removeEventListener("pageshow", handlePageShow);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [search]);
 
     async function selectCandidate(
         candidate: ImageSearchCandidate,

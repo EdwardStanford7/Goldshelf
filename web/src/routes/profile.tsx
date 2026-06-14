@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { showToast } from "@/lib/toast";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile, followRelationLabel } from "@/lib/follows";
+import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage } from "@/lib/images";
 import type { FollowProfileSummary, FollowSearchResult, ProfileSettingsData } from "@/lib/types";
 
@@ -104,6 +105,10 @@ function ProfileRoute() {
                 })
                 .catch((searchError) => {
                     if (!canceled) {
+                        if (isTransientRequestFailure(searchError)) {
+                            return;
+                        }
+
                         setFollowSearchResults([]);
                         setActionError(searchError);
                     }
@@ -146,6 +151,18 @@ function ProfileRoute() {
         return nextSettings;
     }
 
+    async function refreshSettingsAfterMutation() {
+        try {
+            return await refreshSettings();
+        } catch (settingsError) {
+            if (isTransientRequestFailure(settingsError)) {
+                return null;
+            }
+
+            throw settingsError;
+        }
+    }
+
     async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setSavingProfile(true);
@@ -160,7 +177,7 @@ function ProfileRoute() {
                     isPublic: profileIsPublic
                 }
             });
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Profile saved.");
         } catch (profileError) {
             setActionError(profileError);
@@ -211,7 +228,7 @@ function ProfileRoute() {
                 throw new Error(body?.message ?? "Profile photo upload failed");
             }
 
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setProfileImageDraft(null);
             setStatus("Profile photo updated.");
         } catch (imageError) {
@@ -235,7 +252,7 @@ function ProfileRoute() {
                 throw new Error(body?.message ?? "Profile photo could not be removed");
             }
 
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Profile photo removed.");
         } catch (imageError) {
             setActionError(imageError);
@@ -251,7 +268,7 @@ function ProfileRoute() {
 
         try {
             await updateCategoryVisibility({ data: { categoryId, isPublic } });
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Profile sharing saved.");
         } catch (visibilityError) {
             setActionError(visibilityError);
@@ -270,7 +287,7 @@ function ProfileRoute() {
             const result = await requestFollowByProfileSlug({ data: { profileSlugOrUrl: followInput } });
             setFollowInput("");
             setFollowSearchResults([]);
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus(result.relationState === "requested" ? "Follow request sent." : "Profile followed.");
         } catch (followError) {
             setActionError(followError);
@@ -286,7 +303,7 @@ function ProfileRoute() {
 
         try {
             await followProfile({ data: { profileUserId: profile.userId } });
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Profile followed.");
         } catch (followError) {
             setActionError(followError);
@@ -302,7 +319,7 @@ function ProfileRoute() {
 
         try {
             await approveFollowRequest({ data: { followerUserId: profile.userId } });
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Follow request accepted.");
         } catch (followError) {
             setActionError(followError);
@@ -318,7 +335,7 @@ function ProfileRoute() {
 
         try {
             await declineFollowRequest({ data: { followerUserId: profile.userId } });
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Follow request declined.");
         } catch (followError) {
             setActionError(followError);
@@ -334,7 +351,7 @@ function ProfileRoute() {
 
         try {
             await cancelFollowRequest({ data: { followedUserId: profile.userId } });
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Follow request canceled.");
         } catch (followError) {
             setActionError(followError);
@@ -350,7 +367,7 @@ function ProfileRoute() {
 
         try {
             await removeFollow({ data: { followedUserId: profile.userId } });
-            await refreshSettings();
+            await refreshSettingsAfterMutation();
             setStatus("Profile unfollowed.");
         } catch (followError) {
             setActionError(followError);
@@ -1004,8 +1021,4 @@ function imageElementToAvatarBlob(image: HTMLImageElement, center: CropCenter, z
             reject(error);
         }
     });
-}
-
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : String(error);
 }

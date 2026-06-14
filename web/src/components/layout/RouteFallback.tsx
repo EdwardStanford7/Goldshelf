@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { errorMessage } from "@/lib/format";
 
 /** Shown for unmatched URLs (router `defaultNotFoundComponent`). */
 export function DefaultNotFound() {
@@ -17,7 +18,7 @@ export function DefaultErrorComponent({ error }: { error: Error }) {
     return (
         <RouteFallbackShell
             title="Something went wrong"
-            body={error.message || "An unexpected error occurred. Please try again."}
+            body={errorMessage(error) || "An unexpected error occurred. Please try again."}
         />
     );
 }

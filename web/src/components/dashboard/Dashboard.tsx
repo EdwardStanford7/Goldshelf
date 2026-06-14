@@ -62,7 +62,7 @@ import {
     dateInputToTimestamp,
     errorMessage,
     formatDateTime,
-    isRequestLoadFailure
+    isTransientRequestFailure
 } from "@/lib/format";
 import { shouldPromptForImage } from "@/lib/images";
 import { parseLegacyWorkbook, writeExportWorkbook } from "@/lib/importExport";
@@ -116,6 +116,7 @@ interface ReversibleAction {
 
 const UNDO_STACK_LIMIT = 20;
 const RESUME_REFRESH_AFTER_MS = 5 * 60 * 1000;
+const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 const SIDEBAR_PANEL_CLASS =
     "grid min-h-0 min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
 
@@ -190,6 +191,8 @@ export function Dashboard({
     const queueSettingsRef = useRef(initialDashboard.queueSettings);
     const lastResumeRefreshAtRef = useRef(Date.now());
     const resumeRefreshInFlightRef = useRef(false);
+    const resumeRetryTimerRef = useRef<number | null>(null);
+    const resumeRetryAttemptRef = useRef(0);
     const [entrySearch, setEntrySearch] = useState("");
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
@@ -352,6 +355,59 @@ export function Dashboard({
         return nextDashboard;
     }
 
+    function clearResumeRetryTimer() {
+        if (resumeRetryTimerRef.current !== null) {
+            window.clearTimeout(resumeRetryTimerRef.current);
+            resumeRetryTimerRef.current = null;
+        }
+    }
+
+    function resetResumeRetry() {
+        resumeRetryAttemptRef.current = 0;
+        clearResumeRetryTimer();
+    }
+
+    function scheduleResumeRefreshRetry() {
+        if (resumeRetryTimerRef.current !== null) {
+            return;
+        }
+
+        const retryIndex = Math.min(
+            resumeRetryAttemptRef.current,
+            TRANSIENT_REFRESH_RETRY_DELAYS_MS.length - 1
+        );
+        const retryDelay = TRANSIENT_REFRESH_RETRY_DELAYS_MS[retryIndex];
+        resumeRetryAttemptRef.current = Math.min(
+            resumeRetryAttemptRef.current + 1,
+            TRANSIENT_REFRESH_RETRY_DELAYS_MS.length - 1
+        );
+        resumeRetryTimerRef.current = window.setTimeout(() => {
+            resumeRetryTimerRef.current = null;
+            void refreshAfterResume(true);
+        }, retryDelay);
+    }
+
+    function handleTransientDashboardRefreshError(error: unknown) {
+        if (!isTransientRequestFailure(error)) {
+            return false;
+        }
+
+        scheduleResumeRefreshRetry();
+        return true;
+    }
+
+    async function refreshAfterMutation() {
+        try {
+            return await refresh();
+        } catch (error) {
+            if (handleTransientDashboardRefreshError(error)) {
+                return null;
+            }
+
+            throw error;
+        }
+    }
+
     function reconcileActiveRankingAfterResume(nextDashboard: DashboardData) {
         const currentSessionId = activeSessionIdRef.current;
         const serverSession = nextDashboard.activeBinarySession;
@@ -381,29 +437,34 @@ export function Dashboard({
         setMessage("That ranking is no longer active.", "danger");
     }
 
-    useEffect(() => {
-        async function refreshAfterResume(force = false) {
-            if (
-                busyRef.current ||
-                resumeRefreshInFlightRef.current ||
-                (!force && Date.now() - lastResumeRefreshAtRef.current < RESUME_REFRESH_AFTER_MS)
-            ) {
+    async function refreshAfterResume(force = false) {
+        if (
+            busyRef.current ||
+            resumeRefreshInFlightRef.current ||
+            (!force && Date.now() - lastResumeRefreshAtRef.current < RESUME_REFRESH_AFTER_MS)
+        ) {
+            return;
+        }
+
+        resumeRefreshInFlightRef.current = true;
+        try {
+            const nextDashboard = await refresh();
+            resetResumeRetry();
+            reconcileActiveRankingAfterResume(nextDashboard);
+        } catch (error) {
+            if (redirectIfUnauthorized(error)) {
                 return;
             }
 
-            resumeRefreshInFlightRef.current = true;
-            try {
-                const nextDashboard = await refresh();
-                reconcileActiveRankingAfterResume(nextDashboard);
-            } catch (error) {
-                if (!redirectIfUnauthorized(error) && !isRequestLoadFailure(error)) {
-                    setErrorMessage(error);
-                }
-            } finally {
-                lastResumeRefreshAtRef.current = Date.now();
-                resumeRefreshInFlightRef.current = false;
+            if (!handleTransientDashboardRefreshError(error)) {
+                setErrorMessage(error);
             }
+        } finally {
+            resumeRefreshInFlightRef.current = false;
         }
+    }
+
+    useEffect(() => {
 
         function handleFocus() {
             void refreshAfterResume();
@@ -419,13 +480,20 @@ export function Dashboard({
             void refreshAfterResume(event.persisted);
         }
 
+        function handleOnline() {
+            void refreshAfterResume(true);
+        }
+
         window.addEventListener("focus", handleFocus);
         window.addEventListener("pageshow", handlePageShow);
+        window.addEventListener("online", handleOnline);
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
         return () => {
+            clearResumeRetryTimer();
             window.removeEventListener("focus", handleFocus);
             window.removeEventListener("pageshow", handlePageShow);
+            window.removeEventListener("online", handleOnline);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
     }, []);
@@ -631,7 +699,7 @@ export function Dashboard({
     async function handleImageSaved() {
         setImagePickerTarget(null);
         setImageRefreshVersion((version) => version + 1);
-        await refresh();
+        await refreshAfterMutation();
     }
 
     async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
@@ -651,7 +719,7 @@ export function Dashboard({
             formElement.reset();
             setCategoryDraftName("");
             setSelectedCategoryId(categoryId);
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -665,7 +733,7 @@ export function Dashboard({
 
         try {
             await renameCategory({ data: { categoryId, name } });
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -750,7 +818,7 @@ export function Dashboard({
         placement: DropPlacement
     ) {
         const result = await moveCategoryRelativeToCategory({ data: { categoryId, targetCategoryId, placement } });
-        await refresh();
+        await refreshAfterMutation();
         return result;
     }
 
@@ -781,7 +849,7 @@ export function Dashboard({
         try {
             await deleteCategory({ data: { categoryId: category.id } });
             setSelectedCategoryId(nextCategory?.id ?? "");
-            await refresh();
+            await refreshAfterMutation();
             pushToast({
                 message: `Deleted ${category.name}.`,
                 variant: "danger"
@@ -865,7 +933,7 @@ export function Dashboard({
                 setActiveBinarySessionId(result.sessionId);
             }
 
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -892,7 +960,7 @@ export function Dashboard({
                 ...currentDashboard,
                 queueSettings: savedSettings
             }));
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             queueSettingsRef.current = previousSettings;
             setDashboard((currentDashboard) => ({
@@ -942,7 +1010,7 @@ export function Dashboard({
             setMessage(`${entry.name} was added as the first ranked entry in ${entry.categoryName}.`);
         }
 
-        const nextDashboard = await refresh();
+        const nextDashboard = await refreshAfterMutation();
         return { result, nextDashboard };
     }
 
@@ -963,6 +1031,11 @@ export function Dashboard({
 
         try {
             const { result, nextDashboard } = await beginQueuedEntryRanking(nextEntry, false);
+            if (!nextDashboard) {
+                setQueueRankingActive(false);
+                return;
+            }
+
             if (result.kind !== "session" && queueRankModeRef.current) {
                 await startNextQueuedRank(nextDashboard.queuedEntries);
             }
@@ -1000,12 +1073,12 @@ export function Dashboard({
 
     async function removeQueuedEntryForHistory(entry: QueuedEntry) {
         await deleteQueuedEntry({ data: { queuedEntryId: entry.id } });
-        await refresh();
+        await refreshAfterMutation();
     }
 
     async function restoreQueuedEntryForHistory(entry: QueuedEntry) {
         await restoreQueuedEntry({ data: { queuedEntryId: entry.id } });
-        await refresh();
+        await refreshAfterMutation();
     }
 
     async function handleDeleteQueuedEntry(entry: QueuedEntry) {
@@ -1034,7 +1107,7 @@ export function Dashboard({
 
         try {
             await renameQueuedEntry({ data: { queuedEntryId: entry.id, name } });
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -1052,7 +1125,7 @@ export function Dashboard({
                 setActiveBinarySessionId(result.sessionId);
                 scrollMainToTop();
             }
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -1137,7 +1210,7 @@ export function Dashboard({
         placement: DropPlacement
     ) {
         const result = await moveEntryRelativeToEntry({ data: { entryId, targetEntryId, placement } });
-        await refresh();
+        await refreshAfterMutation();
         return result;
     }
 
@@ -1165,7 +1238,7 @@ export function Dashboard({
 
         try {
             await renameEntry({ data: { entryId, name } });
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -1175,12 +1248,12 @@ export function Dashboard({
 
     async function deleteEntryForHistory(entry: Entry) {
         await deleteEntry({ data: { entryId: entry.id } });
-        await refresh();
+        await refreshAfterMutation();
     }
 
     async function restoreEntryForHistory(entry: Entry) {
         await restoreEntry({ data: { entryId: entry.id } });
-        await refresh();
+        await refreshAfterMutation();
     }
 
     async function handleDelete(entry: Entry) {
@@ -1213,7 +1286,7 @@ export function Dashboard({
                 setActiveBinarySessionId(result.sessionId);
             }
             setSelectedCategoryId(targetCategoryId);
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -1239,7 +1312,7 @@ export function Dashboard({
                     ? `Cancelled reranking ${session.subject.name}.`
                     : `Cancelled adding ${session.subject.name}.`
             );
-            await refresh();
+            await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -1262,7 +1335,11 @@ export function Dashboard({
         markBinarySessionClosed(sessionId);
         setActiveBinarySessionId(null);
         setQueueRankingActive(false);
-        const nextDashboard = await refresh();
+        const nextDashboard = await refreshAfterMutation();
+        if (!nextDashboard) {
+            return;
+        }
+
         if (
             nextDashboard.activeBinarySession &&
             !closedBinarySessionIdsRef.current.has(nextDashboard.activeBinarySession.id)
@@ -1312,7 +1389,7 @@ export function Dashboard({
                 variant: "success"
             });
             formElement.reset();
-            await refresh();
+            await refreshAfterMutation();
             return true;
         } catch (error) {
             pushToast({
@@ -1774,9 +1851,11 @@ export function Dashboard({
                                 if (activeSessionIdRef.current === sessionId) {
                                     setActiveBinarySessionId(null);
                                 }
-                                const nextDashboard = await refresh();
-                                if (queueRankModeRef.current) {
+                                const nextDashboard = await refreshAfterMutation();
+                                if (queueRankModeRef.current && nextDashboard) {
                                     await startNextQueuedRank(nextDashboard.queuedEntries);
+                                } else if (queueRankModeRef.current) {
+                                    setQueueRankingActive(false);
                                 }
                             }}
                             onUnavailable={handleMissingBinarySession}
