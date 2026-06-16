@@ -310,7 +310,7 @@ export function RepairRankPanel({
                         type="button"
                         onClick={() => void cancelRepair()}
                     >
-                        Cancel Repair
+                        Exit Repair Mode
                     </Button>
                 </div>
             </div>

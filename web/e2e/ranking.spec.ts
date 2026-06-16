@@ -221,7 +221,7 @@ test.describe("Ranking", () => {
         await gotoApp(page);
         await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
 
-        await page.getByRole("button", { name: "Cancel Repair" }).click();
+        await page.getByRole("button", { name: "Exit Repair Mode" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeHidden({ timeout: 15_000 });
         await expect(page.getByText("New Entry")).toBeVisible();
     });
@@ -257,7 +257,7 @@ test.describe("Ranking", () => {
         await expect(page.getByRole("menuitem", { name: /Pick Image|Change Image/ })).toBeEnabled();
         await page.keyboard.press("Escape");
 
-        await page.getByRole("button", { name: "Cancel Repair" }).click();
+        await page.getByRole("button", { name: "Exit Repair Mode" }).click();
         await expect(localRepairPanel).toBeHidden({ timeout: 15_000 });
     });
 

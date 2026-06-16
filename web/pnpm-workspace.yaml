@@ -6,6 +6,5 @@ allowBuilds:
 
 overrides:
   esbuild: ^0.28.1
-  # @better-auth/kysely-adapter claims kysely ^0.29 support but imports
-  # DEFAULT_MIGRATION_TABLE/DEFAULT_MIGRATION_LOCK_TABLE, which 0.29 removed.
+  hono@<4.12.25: '>=4.12.25'
   kysely: ^0.28.17

@@ -547,7 +547,7 @@ export async function assertNoActiveBinarySession(userId: string) {
             .bind(userId)
     );
     if (activeRepairSession) {
-        throw new Error("Finish or cancel repair mode before starting another ranking");
+        throw new Error("Finish or Exit Repair Mode mode before starting another ranking");
     }
 }
 
