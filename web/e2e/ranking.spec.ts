@@ -120,6 +120,7 @@ test.describe("Ranking", () => {
         await page.getByTestId("mobile-tools-trigger").click();
         let drawer = page.getByRole("dialog", { name: "Dashboard tools" });
         await drawer.getByLabel("Actions for Movies").click();
+        await expect(page.getByRole("menuitem", { name: "Repair This Category" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Rename" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Delete" })).toBeEnabled();
         await page.keyboard.press("Escape");
@@ -191,6 +192,73 @@ test.describe("Ranking", () => {
         expect(metrics.scrollRegionTop).toBeGreaterThanOrEqual(metrics.topbarBottom - 1);
         expect(metrics.firstRowCardWidth).toBeGreaterThan(200);
         expect(metrics.firstRowRightGap).toBeLessThanOrEqual(12);
+    });
+
+    test("repair mode starts, skips, survives reload, and cancels", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([{
+            email: "repair-loop@e2e.test",
+            name: "Repair Loop",
+            queueSettings: {
+                enabled: false,
+                delayDays: 0,
+                promptForMissingImages: false
+            },
+            categories: [{ name: "Movies", entries: ["Alpha", "Beta", "Gamma", "Delta"] }]
+        }]);
+        await signInViaApi(context, "repair-loop@e2e.test");
+        await gotoApp(page);
+
+        await page.getByRole("button", { name: "Repair All" }).click();
+        await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("New Entry")).toBeHidden();
+
+        await page.getByRole("button", { name: "Skip" }).click();
+        await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
+
+        await gotoApp(page);
+        await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
+
+        await page.getByRole("button", { name: "Cancel Repair" }).click();
+        await expect(page.getByText("Repair Check · Movies")).toBeHidden({ timeout: 15_000 });
+        await expect(page.getByText("New Entry")).toBeVisible();
+    });
+
+    test("repair anomaly enters local repair and active choices expose metadata actions", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([{
+            email: "repair-anomaly@e2e.test",
+            name: "Repair Anomaly",
+            queueSettings: {
+                enabled: false,
+                delayDays: 0,
+                promptForMissingImages: false
+            },
+            categories: [{ name: "Movies", entries: ["Alpha", "Beta", "Gamma", "Delta"] }]
+        }]);
+        await signInViaApi(context, "repair-anomaly@e2e.test");
+        await gotoApp(page);
+
+        await page.locator("[data-category-id]").filter({ hasText: "Movies" }).click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Repair This Category" }).click();
+        const repairPanel = page.locator("section", { hasText: "Repair Check · Movies" }).first();
+        await expect(repairPanel).toBeVisible({ timeout: 15_000 });
+
+        await repairPanel.locator("article > button.block").nth(1).click();
+        const localRepairPanel = page.locator("section", { hasText: "Local Repair · Movies" }).first();
+        await expect(localRepairPanel).toBeVisible({ timeout: 15_000 });
+
+        await localRepairPanel.locator("article").first().click({ button: "right" });
+        await expect(page.getByRole("menuitem", { name: "Rename" })).toBeEnabled();
+        await expect(page.getByRole("menuitem", { name: /Pick Image|Change Image/ })).toBeEnabled();
+        await page.keyboard.press("Escape");
+
+        await page.getByRole("button", { name: "Cancel Repair" }).click();
+        await expect(localRepairPanel).toBeHidden({ timeout: 15_000 });
     });
 
     test("create a category and add the first entry", async ({ page, context }) => {

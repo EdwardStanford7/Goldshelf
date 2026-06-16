@@ -15,6 +15,20 @@ import {
     parseRankingOperationState,
     serializeRankingOperationState
 } from "../src/server/engine/rankingState";
+import {
+    addRecentRepairPair,
+    addRepairComparison,
+    advancePairRepairState,
+    chooseRepairMatchup,
+    emptyRepairOperationState,
+    pickRepairFirstIndex,
+    pickRepairSecondIndex,
+    pickWeightedRepairCategory,
+    repairPairKey,
+    startAdjacentRepairState,
+    startBinaryReinsertRepairState
+} from "../src/lib/repair";
+import type { Entry } from "../src/lib/types";
 
 describe("pure binary ranking", () => {
     it("places a new entry at the top", () => {
@@ -222,3 +236,133 @@ describe("ranking comparison cache", () => {
         expect(freshState.comparisons).toEqual([]);
     });
 });
+
+describe("repair mode sampling", () => {
+    it("excludes categories with fewer than two entries and weights by entry count", () => {
+        const category = pickWeightedRepairCategory(
+            [
+                { id: "empty", entryCount: 0 },
+                { id: "one", entryCount: 1 },
+                { id: "small", entryCount: 2 },
+                { id: "large", entryCount: 8 }
+            ],
+            () => 0.95
+        );
+
+        expect(category?.id).toBe("large");
+    });
+
+    it("keeps center-biased and local-biased indexes in bounds", () => {
+        for (let index = 0; index < 40; index += 1) {
+            let randomValue = index / 41;
+            const random = () => {
+                randomValue = (randomValue + 0.37) % 1;
+                return randomValue;
+            };
+            const firstIndex = pickRepairFirstIndex(20, random);
+            const secondIndex = pickRepairSecondIndex(20, firstIndex, random);
+
+            expect(firstIndex).toBeGreaterThanOrEqual(0);
+            expect(firstIndex).toBeLessThan(20);
+            expect(secondIndex).toBeGreaterThanOrEqual(0);
+            expect(secondIndex).toBeLessThan(20);
+            expect(secondIndex).not.toBe(firstIndex);
+        }
+    });
+
+    it("avoids immediate duplicate repair pairs when another pair is available", () => {
+        const entries = makeRepairEntries(["a", "b", "c", "d"]);
+        const recentPairs = [repairPairKey("b", "c")];
+        const matchup = chooseRepairMatchup(entries, recentPairs, sequenceRandom([
+            0.5, 0.5, 0.1, 0.1,
+            0.5, 0.5, 0.9, 0.1
+        ]));
+
+        expect(matchup).not.toBeNull();
+        expect(repairPairKey(matchup!.higherEntryId, matchup!.lowerEntryId)).not.toBe(recentPairs[0]);
+    });
+});
+
+describe("repair mode comparison cache", () => {
+    it("tracks recent pairs and replaces inverse duplicate comparison answers", () => {
+        const state = emptyRepairOperationState();
+        state.recentPairs = addRecentRepairPair(state.recentPairs, "a", "b");
+        state.recentPairs = addRecentRepairPair(state.recentPairs, "b", "a");
+
+        expect(state.recentPairs).toEqual([repairPairKey("a", "b")]);
+
+        const first = addRepairComparison(state, "a", "b");
+        const replacement = addRepairComparison(first, "b", "a");
+
+        expect(replacement.comparisons).toEqual([{ winnerId: "b", loserId: "a" }]);
+    });
+});
+
+describe("repair mode adjacent repair", () => {
+    it("does not move the lower-ranked winner above middle entries it loses to", () => {
+        const state = startAdjacentRepairState(["p", "h", "m1", "m2", "l", "q"], "l", "h");
+        const result = advancePairRepairState(state, [
+            { winnerId: "l", loserId: "h" },
+            { winnerId: "m2", loserId: "l" },
+            { winnerId: "m1", loserId: "h" },
+            { winnerId: "m2", loserId: "h" },
+            { winnerId: "q", loserId: "h" }
+        ]);
+
+        expect(result.complete).toBe(true);
+        expect(result.state.workingOrderIds).toEqual(["p", "m1", "m2", "l", "q", "h"]);
+    });
+
+    it("moves an over-ranked higher entry down after the known inversion", () => {
+        const state = startAdjacentRepairState(["p", "h", "m1", "m2", "l", "q"], "l", "h");
+        const result = advancePairRepairState(state, [
+            { winnerId: "l", loserId: "h" },
+            { winnerId: "m2", loserId: "l" },
+            { winnerId: "m1", loserId: "h" },
+            { winnerId: "m2", loserId: "h" },
+            { winnerId: "h", loserId: "q" }
+        ]);
+
+        expect(result.complete).toBe(true);
+        expect(result.state.workingOrderIds).toEqual(["p", "m1", "m2", "l", "h", "q"]);
+    });
+});
+
+describe("repair mode binary re-place", () => {
+    it("places both entries through the full category while keeping the winner above the loser", () => {
+        const state = startBinaryReinsertRepairState(["a", "h", "b", "c", "d", "e", "f", "l", "g"], "l", "h");
+        const result = advancePairRepairState(state, [
+            { winnerId: "l", loserId: "h" },
+            { winnerId: "b", loserId: "l" },
+            { winnerId: "l", loserId: "d" },
+            { winnerId: "c", loserId: "l" },
+            { winnerId: "l", loserId: "d" },
+            { winnerId: "f", loserId: "h" },
+            { winnerId: "h", loserId: "g" }
+        ], () => 0.5);
+
+        expect(result.complete).toBe(true);
+        expect(result.state.workingOrderIds.indexOf("l")).toBeLessThan(result.state.workingOrderIds.indexOf("h"));
+        expect(result.state.workingOrderIds).toEqual(["a", "b", "c", "l", "d", "e", "f", "h", "g"]);
+    });
+});
+
+function makeRepairEntries(ids: string[]): Entry[] {
+    return ids.map((id, index) => ({
+        id,
+        categoryId: "cat",
+        name: id,
+        rankPosition: index,
+        imageKey: null,
+        createdAt: index
+    }));
+}
+
+function sequenceRandom(values: number[]) {
+    let index = 0;
+    return () => {
+        const value = values[index] ?? values[values.length - 1] ?? 0;
+        index += 1;
+        return value;
+    };
+}

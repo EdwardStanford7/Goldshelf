@@ -7,7 +7,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       className="toaster group"
-      closeButton
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />

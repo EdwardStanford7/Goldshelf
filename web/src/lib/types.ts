@@ -1,3 +1,5 @@
+import type { RepairScope, RepairSessionPhase, RepairStrategy } from "./repair";
+
 export type RankingSource = "new_entry" | "rerank_entry" | "switch_category";
 export type RankingOperationKind = "single";
 
@@ -47,6 +49,7 @@ export interface DashboardData {
     queueSettings: QueueSettings;
     queuedEntries: QueuedEntry[];
     activeBinarySession: ActiveBinarySession | null;
+    activeRepairSession: ActiveRepairSession | null;
     profile: CurrentUserProfile;
 }
 
@@ -133,6 +136,14 @@ export interface ActiveBinarySession {
     operationKind: RankingOperationKind;
 }
 
+export interface ActiveRepairSession {
+    id: string;
+    scope: RepairScope;
+    scopeCategoryId: string | null;
+    categoryId: string;
+    categoryName: string;
+}
+
 export type RankingDisplayPhase = "binary" | "placement_check" | "local_repair";
 
 export interface BinarySessionView {
@@ -147,6 +158,20 @@ export interface BinarySessionView {
     lowerBound: number;
     upperBound: number;
     comparisonCount: number;
+}
+
+export interface RepairSessionView {
+    id: string;
+    scope: RepairScope;
+    scopeCategoryId: string | null;
+    categoryId: string;
+    categoryName: string;
+    phase: RepairSessionPhase;
+    strategy: RepairStrategy;
+    subject: Entry;
+    opponent: Entry;
+    comparisonCount: number;
+    repairCount: number;
 }
 
 export interface ParsedImportEntry {

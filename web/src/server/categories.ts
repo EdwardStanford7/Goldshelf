@@ -157,6 +157,13 @@ export const deleteCategory = createServerFn({ method: "POST" })
                 .prepare(`DELETE FROM ranking_sessions WHERE user_id = ? AND category_id = ?`)
                 .bind(userId, categoryId),
             db
+                .prepare(
+                    `DELETE FROM repair_sessions
+                     WHERE user_id = ?
+                       AND (scope_category_id = ? OR active_category_id = ?)`
+                )
+                .bind(userId, categoryId, categoryId),
+            db
                 .prepare(`DELETE FROM entry_queue WHERE user_id = ? AND category_id = ?`)
                 .bind(userId, categoryId),
             db

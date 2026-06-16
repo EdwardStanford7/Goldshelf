@@ -6,6 +6,7 @@ import { type EntryRow, mapEntry } from "@/server/stores/entryStore";
 import { getQueueSettings, listQueuedEntries } from "@/server/stores/queueStore";
 import { ensureUserProfile, mapCurrentUserProfile } from "@/server/stores/profileStore";
 import { getActiveBinarySession, repairInterruptedRankingState } from "@/server/engine/rankingSessions";
+import { getActiveRepairSession, repairInterruptedRepairState } from "@/server/engine/repairSessions";
 import { purgeExpiredDeletedItems } from "@/server/engine/maintenance";
 
 /**
@@ -17,11 +18,13 @@ import { purgeExpiredDeletedItems } from "@/server/engine/maintenance";
 export async function buildDashboard(userId: string): Promise<DashboardData> {
     const db = getDb();
     await repairInterruptedRankingState(userId);
+    await repairInterruptedRepairState(userId);
     await purgeExpiredDeletedItems(userId);
     const profile = await ensureUserProfile(userId);
     const queueSettings = await getQueueSettings(userId);
     const queuedEntries = await listQueuedEntries(userId);
     const activeBinarySession = await getActiveBinarySession(userId);
+    const activeRepairSession = await getActiveRepairSession(userId);
     const categories = await all<CategoryRow>(
         db
             .prepare(
@@ -39,6 +42,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
             queueSettings,
             queuedEntries,
             activeBinarySession,
+            activeRepairSession,
             profile: mapCurrentUserProfile(profile)
         };
     }
@@ -72,6 +76,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
         queueSettings,
         queuedEntries,
         activeBinarySession,
+        activeRepairSession,
         profile: mapCurrentUserProfile(profile)
     };
 }

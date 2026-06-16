@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { GripVertical, MoreVertical, Pencil, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     ContextMenu,
@@ -35,6 +35,7 @@ export function CategoryListItem({
     listLocked,
     onDelete,
     onRename,
+    onRepair,
     onSelect
 }: {
     category: CategoryWithEntries;
@@ -44,6 +45,7 @@ export function CategoryListItem({
     listLocked: boolean;
     onDelete: () => void;
     onRename: (name: string) => Promise<void>;
+    onRepair: () => void;
     onSelect: () => void;
 }) {
     const [isRenaming, setIsRenaming] = useState(false);
@@ -159,6 +161,12 @@ export function CategoryListItem({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem
+                                disabled={busy || listLocked || category.entries.length < 2}
+                                onSelect={onRepair}
+                            >
+                                <Wrench />Repair This Category
+                            </DropdownMenuItem>
                             <DropdownMenuItem disabled={busy} onSelect={startRename}>
                                 <Pencil />Rename
                             </DropdownMenuItem>
@@ -174,6 +182,12 @@ export function CategoryListItem({
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent>
+                <ContextMenuItem
+                    disabled={busy || listLocked || category.entries.length < 2}
+                    onSelect={onRepair}
+                >
+                    <Wrench />Repair This Category
+                </ContextMenuItem>
                 <ContextMenuItem onSelect={startRename}>
                     <Pencil />Rename
                 </ContextMenuItem>

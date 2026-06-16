@@ -34,6 +34,7 @@ import {
     parseRankingOperationState,
     serializeRankingOperationState
 } from "./rankingState";
+import { repairInterruptedRepairState } from "./repairSessions";
 
 export interface SessionRow {
     id: string;
@@ -529,9 +530,24 @@ export async function getActiveSessionRow(userId: string) {
 
 export async function assertNoActiveBinarySession(userId: string) {
     await repairInterruptedRankingState(userId);
+    await repairInterruptedRepairState(userId);
     const activeSession = await getActiveSessionRow(userId);
     if (activeSession) {
         throw new Error("Finish or cancel the active ranking before starting another one");
+    }
+
+    const activeRepairSession = await first<{ id: string }>(
+        getDb()
+            .prepare(
+                `SELECT id
+                 FROM repair_sessions
+                 WHERE user_id = ? AND status = 'active'
+                 LIMIT 1`
+            )
+            .bind(userId)
+    );
+    if (activeRepairSession) {
+        throw new Error("Finish or cancel repair mode before starting another ranking");
     }
 }
 

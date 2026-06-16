@@ -17,9 +17,10 @@ import {
     rectSortingStrategy,
     verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { Library, Menu, Search, Swords } from "lucide-react";
+import { Library, Menu, Search, Swords, Wrench } from "lucide-react";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { BinaryRankPanel } from "@/components/ranking/BinaryRankPanel";
+import { RepairRankPanel } from "@/components/ranking/RepairRankPanel";
 import { Button } from "@/components/ui/button";
 import { BrandLink } from "@/components/ui/BrandLink";
 import { BusyOverlay } from "@/components/ui/BusyOverlay";
@@ -95,6 +96,7 @@ import {
     updateQueueSettings
 } from "@/server/queue";
 import { cancelBinarySession } from "@/server/rankingSessions";
+import { cancelRepairSession, startRepairSession } from "@/server/repairSessions";
 import { applyThemeMode, readInitialThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import type {
     BinarySessionView,
@@ -102,7 +104,8 @@ import type {
     DashboardData,
     Entry,
     QueuedEntry,
-    QueueSettings
+    QueueSettings,
+    RepairSessionView
 } from "@/lib/types";
 
 interface ReversibleAction {
@@ -184,9 +187,13 @@ export function Dashboard({
 }) {
     const navigate = useNavigate();
     const initialActiveSessionId = initialDashboard.activeBinarySession?.id ?? null;
+    const initialActiveRepairSessionId = initialDashboard.activeRepairSession?.id ?? null;
     const [dashboard, setDashboard] = useState(initialDashboard);
     const [selectedCategoryId, setSelectedCategoryId] = useState(
-        initialDashboard.activeBinarySession?.categoryId ?? initialDashboard.categories[0]?.id ?? ""
+        initialDashboard.activeBinarySession?.categoryId ??
+        initialDashboard.activeRepairSession?.categoryId ??
+        initialDashboard.categories[0]?.id ??
+        ""
     );
     const queueSettingsRef = useRef(initialDashboard.queueSettings);
     const lastResumeRefreshAtRef = useRef(Date.now());
@@ -198,12 +205,18 @@ export function Dashboard({
     const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
     const activeSessionIdRef = useRef<string | null>(initialActiveSessionId);
     const closedBinarySessionIdsRef = useRef<Set<string>>(new Set());
+    const [activeRepairSessionId, setActiveRepairSessionIdState] = useState<string | null>(initialActiveRepairSessionId);
+    const activeRepairSessionIdRef = useRef<string | null>(initialActiveRepairSessionId);
+    const closedRepairSessionIdsRef = useRef<Set<string>>(new Set());
     const [queueRankMode, setQueueRankMode] = useState(false);
     const queueRankModeRef = useRef(false);
     const [categoryDraftName, setCategoryDraftName] = useState("");
     const [entryDraftName, setEntryDraftName] = useState("");
     const [entryCategoryId, setEntryCategoryId] = useState(
-        initialDashboard.activeBinarySession?.categoryId ?? initialDashboard.categories[0]?.id ?? ""
+        initialDashboard.activeBinarySession?.categoryId ??
+        initialDashboard.activeRepairSession?.categoryId ??
+        initialDashboard.categories[0]?.id ??
+        ""
     );
     const [busy, setBusy] = useState(false);
     const busyRef = useRef(false);
@@ -263,10 +276,13 @@ export function Dashboard({
     const canDragReorderEntries = Boolean(
         selectedCategory &&
         !activeSessionId &&
+        !activeRepairSessionId &&
         !entrySearch.trim() &&
         selectedCategory.entries.length > 1
     );
-    const canDragReorderCategories = !busy && !activeSessionId && dashboard.categories.length > 1;
+    const activeFlowId = activeSessionId ?? activeRepairSessionId;
+    const activeFlowLocked = Boolean(activeFlowId);
+    const canDragReorderCategories = !busy && !activeFlowLocked && dashboard.categories.length > 1;
     const canCreateCategory = categoryDraftName.trim().length > 0;
     const canCreateEntry = entryDraftName.trim().length > 0;
 
@@ -277,7 +293,7 @@ export function Dashboard({
     useEffect(() => {
         setActiveEntryId(null);
         setEntryDragOrder(null);
-    }, [activeSessionId, entrySearch, selectedCategoryId]);
+    }, [activeRepairSessionId, activeSessionId, entrySearch, selectedCategoryId]);
 
     useEffect(() => {
         if (!canDragReorderCategories) {
@@ -290,13 +306,30 @@ export function Dashboard({
         activeSessionIdRef.current = sessionId;
         if (sessionId) {
             setEntrySearch("");
+            setActiveRepairSessionId(null);
         }
         setActiveSessionIdState(sessionId);
+    }
+
+    function setActiveRepairSessionId(sessionId: string | null) {
+        activeRepairSessionIdRef.current = sessionId;
+        if (sessionId) {
+            setEntrySearch("");
+            setActiveBinarySessionId(null);
+            setQueueRankingActive(false);
+        }
+        setActiveRepairSessionIdState(sessionId);
     }
 
     function markBinarySessionClosed(sessionId: string | null) {
         if (sessionId) {
             closedBinarySessionIdsRef.current.add(sessionId);
+        }
+    }
+
+    function markRepairSessionClosed(sessionId: string | null) {
+        if (sessionId) {
+            closedRepairSessionIdsRef.current.add(sessionId);
         }
     }
 
@@ -338,6 +371,7 @@ export function Dashboard({
         if (
             !dashboard.activeBinarySession ||
             activeSessionId ||
+            activeRepairSessionId ||
             closedBinarySessionIdsRef.current.has(dashboard.activeBinarySession.id)
         ) {
             return;
@@ -345,7 +379,21 @@ export function Dashboard({
 
         setActiveBinarySessionId(dashboard.activeBinarySession.id);
         setSelectedCategoryId(dashboard.activeBinarySession.categoryId);
-    }, [activeSessionId, dashboard.activeBinarySession]);
+    }, [activeRepairSessionId, activeSessionId, dashboard.activeBinarySession]);
+
+    useEffect(() => {
+        if (
+            !dashboard.activeRepairSession ||
+            activeSessionId ||
+            activeRepairSessionId ||
+            closedRepairSessionIdsRef.current.has(dashboard.activeRepairSession.id)
+        ) {
+            return;
+        }
+
+        setActiveRepairSessionId(dashboard.activeRepairSession.id);
+        setSelectedCategoryId(dashboard.activeRepairSession.categoryId);
+    }, [activeRepairSessionId, activeSessionId, dashboard.activeRepairSession]);
 
     async function refresh() {
         const nextDashboard = await loadDashboard();
@@ -437,6 +485,42 @@ export function Dashboard({
         setMessage("That ranking is no longer active.", "danger");
     }
 
+    function reconcileActiveRepairAfterResume(nextDashboard: DashboardData) {
+        const currentSessionId = activeRepairSessionIdRef.current;
+        const serverSession = nextDashboard.activeRepairSession;
+        if (!currentSessionId) {
+            if (
+                !activeSessionIdRef.current &&
+                serverSession &&
+                !closedRepairSessionIdsRef.current.has(serverSession.id)
+            ) {
+                setActiveRepairSessionId(serverSession.id);
+                setSelectedCategoryId(serverSession.categoryId);
+            }
+            return;
+        }
+
+        if (serverSession?.id === currentSessionId) {
+            setSelectedCategoryId(serverSession.categoryId);
+            return;
+        }
+
+        markRepairSessionClosed(currentSessionId);
+        setActiveRepairSessionId(null);
+
+        if (
+            !activeSessionIdRef.current &&
+            serverSession &&
+            !closedRepairSessionIdsRef.current.has(serverSession.id)
+        ) {
+            setActiveRepairSessionId(serverSession.id);
+            setSelectedCategoryId(serverSession.categoryId);
+            return;
+        }
+
+        setMessage("That repair mode session is no longer active.", "danger");
+    }
+
     async function refreshAfterResume(force = false) {
         if (
             busyRef.current ||
@@ -451,6 +535,7 @@ export function Dashboard({
             const nextDashboard = await refresh();
             resetResumeRetry();
             reconcileActiveRankingAfterResume(nextDashboard);
+            reconcileActiveRepairAfterResume(nextDashboard);
         } catch (error) {
             if (redirectIfUnauthorized(error)) {
                 return;
@@ -1068,7 +1153,7 @@ export function Dashboard({
 
     function handleStopQueueRank() {
         setQueueRankingActive(false);
-        setMessage(activeSessionId ? "Queue ranking will stop after the current item." : "Queue ranking stopped.");
+        setMessage(activeFlowLocked ? "Queue ranking will stop after the current item." : "Queue ranking stopped.");
     }
 
     async function removeQueuedEntryForHistory(entry: QueuedEntry) {
@@ -1320,6 +1405,46 @@ export function Dashboard({
         }
     }
 
+    async function handleStartRepair(categoryId: string | null, closeDrawer = false) {
+        setQueueRankingActive(false);
+        startBusy(categoryId ? "Starting category repair..." : "Starting repair mode...");
+        setMessage(null);
+
+        try {
+            const result = await startRepairSession({ data: { categoryId } });
+            setActiveRepairSessionId(result.sessionId);
+            setSelectedCategoryId(result.categoryId);
+            if (closeDrawer) {
+                setMobileDrawerOpen(false);
+                scrollMainToTop();
+            } else {
+                scrollMainToTop();
+            }
+            await refreshAfterMutation();
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
+    async function handleCancelRepairSession(session: RepairSessionView) {
+        startBusy("Cancelling repair mode...");
+        setMessage(null);
+
+        try {
+            await cancelRepairSession({ data: { sessionId: session.id } });
+            markRepairSessionClosed(session.id);
+            setActiveRepairSessionId(null);
+            setMessage("Repair mode cancelled.");
+            await refreshAfterMutation();
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
     function handleOpenProfile() {
         void navigate({ to: "/profile" });
     }
@@ -1350,6 +1475,33 @@ export function Dashboard({
         }
 
         setMessage("That ranking is no longer active.", "danger");
+    }
+
+    async function handleMissingRepairSession(sessionId: string) {
+        if (
+            closedRepairSessionIdsRef.current.has(sessionId) ||
+            activeRepairSessionIdRef.current !== sessionId
+        ) {
+            return;
+        }
+
+        markRepairSessionClosed(sessionId);
+        setActiveRepairSessionId(null);
+        const nextDashboard = await refreshAfterMutation();
+        if (!nextDashboard) {
+            return;
+        }
+
+        if (
+            nextDashboard.activeRepairSession &&
+            !closedRepairSessionIdsRef.current.has(nextDashboard.activeRepairSession.id)
+        ) {
+            setActiveRepairSessionId(nextDashboard.activeRepairSession.id);
+            setSelectedCategoryId(nextDashboard.activeRepairSession.categoryId);
+            return;
+        }
+
+        setMessage("That repair mode session is no longer active.", "danger");
     }
 
     async function handleImport(event: FormEvent<HTMLFormElement>) {
@@ -1478,7 +1630,7 @@ export function Dashboard({
 
     const accountMenuProps = {
         busy,
-        listLocked: Boolean(activeSessionId),
+        listLocked: activeFlowLocked,
         settings: dashboard.queueSettings,
         onExport: handleExport,
         onOpenImport: () => setImportToastOpen(true),
@@ -1533,10 +1685,23 @@ export function Dashboard({
         );
     }
 
-    function renderCategoryList(closeOnSelect = false) {
+    function renderCategoryList(closeOnSelect = false, closeOnRepair = false) {
+        const hasRepairableCategory = dashboard.categories.some((category) => category.entries.length >= 2);
         return (
             <section className={SIDEBAR_PANEL_CLASS}>
-                <strong className="min-w-0 max-w-full">Categories</strong>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                    <strong className="min-w-0 max-w-full">Categories</strong>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy || activeFlowLocked || !hasRepairableCategory}
+                        type="button"
+                        onClick={() => void handleStartRepair(null, closeOnRepair)}
+                    >
+                        <Wrench data-icon="inline-start" />
+                        <span>Repair All</span>
+                    </Button>
+                </div>
                 <DndContext
                     sensors={sensors}
                     onDragStart={handleCategoryDragStart}
@@ -1555,9 +1720,10 @@ export function Dashboard({
                                     key={category.id}
                                     busy={busy}
                                     canDragReorder={canDragReorderCategories}
-                                    listLocked={Boolean(activeSessionId)}
+                                    listLocked={activeFlowLocked}
                                     onDelete={() => setCategoryDeleteTarget(category)}
                                     onRename={(name) => handleRenameCategory(category.id, name)}
+                                    onRepair={() => void handleStartRepair(category.id, closeOnRepair)}
                                     onSelect={() => selectCategory(category.id, closeOnSelect)}
                                 />
                             ))}
@@ -1593,7 +1759,7 @@ export function Dashboard({
     }
 
     function renderNewEntryPanel(onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>) {
-        if (!selectedCategory || activeSessionId) {
+        if (!selectedCategory || activeFlowLocked) {
             return null;
         }
 
@@ -1645,7 +1811,7 @@ export function Dashboard({
         const drawer = Boolean(options.drawer);
         return (
             <QueuePanel
-                activeSessionId={activeSessionId}
+                activeSessionId={activeFlowId}
                 busy={busy}
                 queueRankMode={queueRankMode}
                 queuedEntries={dashboard.queuedEntries}
@@ -1685,10 +1851,10 @@ export function Dashboard({
         const hasCategories = dashboard.categories.length > 0;
         return (
             <>
-                {hasCategories ? renderCategoryList(true) : renderNewCategoryPanel(handleCreateCategoryFromDrawer)}
+                {hasCategories ? renderCategoryList(true, true) : renderNewCategoryPanel(handleCreateCategoryFromDrawer)}
                 {renderNewEntryPanel(handleCreateEntryFromDrawer)}
                 {renderQueuePanel({ drawer: true })}
-                {hasCategories ? renderNewCategoryPanel(handleCreateCategoryFromDrawer) : renderCategoryList(true)}
+                {hasCategories ? renderNewCategoryPanel(handleCreateCategoryFromDrawer) : renderCategoryList(true, true)}
             </>
         );
     }
@@ -1703,7 +1869,7 @@ export function Dashboard({
                 <ImportSpreadsheetToast
                     busy={busy}
                     busyLabel={busyLabel}
-                    disabled={busy || Boolean(activeSessionId)}
+                    disabled={busy || activeFlowLocked}
                     onClose={() => setImportToastOpen(false)}
                     onImport={async (event) => {
                         const imported = await handleImport(event);
@@ -1785,7 +1951,7 @@ export function Dashboard({
                         </SheetContent>
                     </Sheet>
                 </div>
-                {selectedCategory && !activeSessionId ? (
+                {selectedCategory && !activeFlowLocked ? (
                     <div className="mt-2 grid min-w-0">
                         <Input
                             aria-label="Search entries"
@@ -1812,7 +1978,7 @@ export function Dashboard({
                                 : "Create a category to start ranking."}
                         </p>
                     </div>
-                    {selectedCategory && !activeSessionId ? (
+                    {selectedCategory && !activeFlowLocked ? (
                         <div className="mr-auto grid w-[min(26rem,100%)] max-w-104 min-w-0 flex-[0_1_26rem] gap-2 max-[720px]:w-full max-[720px]:max-w-none">
                             <Input
                                 aria-label="Search entries"
@@ -1869,6 +2035,30 @@ export function Dashboard({
                         />
                     ) : null}
 
+                    {!activeSessionId && activeRepairSessionId ? (
+                        <RepairRankPanel
+                            imageRefreshVersion={imageRefreshVersion}
+                            sessionId={activeRepairSessionId}
+                            onCancel={handleCancelRepairSession}
+                            onComplete={async (sessionId) => {
+                                markRepairSessionClosed(sessionId);
+                                if (activeRepairSessionIdRef.current === sessionId) {
+                                    setActiveRepairSessionId(null);
+                                }
+                                await refreshAfterMutation();
+                                setMessage("Repair mode finished.");
+                            }}
+                            onUnavailable={handleMissingRepairSession}
+                            onNeedImage={requestImageForMatch}
+                            onPickImage={(entry, category) => setImagePickerTarget({
+                                kind: "entry",
+                                item: entry,
+                                category
+                            })}
+                            onRename={(entry, name) => handleRename(entry.id, name)}
+                        />
+                    ) : null}
+
                     <DndContext
                         sensors={sensors}
                         onDragStart={handleEntryDragStart}
@@ -1891,7 +2081,7 @@ export function Dashboard({
                                         categories={dashboard.categories}
                                         key={entry.id}
                                         canDragReorder={canDragReorderEntries}
-                                        listLocked={Boolean(activeSessionId)}
+                                        listLocked={activeFlowLocked}
                                         listSize={selectedCategory.entries.length}
                                         selectedCategoryId={selectedCategory.id}
                                         showPercentile={showEntryPercentile}
