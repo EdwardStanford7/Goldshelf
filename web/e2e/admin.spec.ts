@@ -74,7 +74,7 @@ test.describe("Admin user support", () => {
             await expect(page.getByText("Repeated abusive uploads")).toBeVisible();
             await expect(page.getByText("No active sessions.")).toBeVisible();
 
-            const banRows = await getAdminAuditRows({ targetUserId: targetUser!.id, action: "ban_user" });
+            const banRows = await waitForAdminAuditRows({ targetUserId: targetUser!.id, action: "ban_user" }, 1);
             expect(banRows).toHaveLength(1);
             expect(banRows[0].reason).toBe("Repeated abusive uploads");
 
@@ -92,7 +92,7 @@ test.describe("Admin user support", () => {
             await expect(page.getByText("Active").first()).toBeVisible();
             await expect(page.getByRole("button", { name: "Ban User" })).toBeVisible();
 
-            const unbanRows = await getAdminAuditRows({ targetUserId: targetUser!.id, action: "unban_user" });
+            const unbanRows = await waitForAdminAuditRows({ targetUserId: targetUser!.id, action: "unban_user" }, 1);
             expect(unbanRows).toHaveLength(1);
         } finally {
             await targetContext.close();
@@ -120,18 +120,18 @@ test.describe("Admin user support", () => {
 
             await page.getByRole("button", { name: "Revoke", exact: true }).first().click();
             await expect(page.getByRole("button", { name: "Revoke", exact: true })).toHaveCount(1);
-            const revokeSessionRows = await getAdminAuditRows({
+            const revokeSessionRows = await waitForAdminAuditRows({
                 targetUserId: targetUser!.id,
                 action: "revoke_session"
-            });
+            }, 1);
             expect(revokeSessionRows).toHaveLength(1);
 
             await page.getByRole("button", { name: "Revoke All" }).click();
             await expect(page.getByText("No active sessions.")).toBeVisible();
-            const revokeAllRows = await getAdminAuditRows({
+            const revokeAllRows = await waitForAdminAuditRows({
                 targetUserId: targetUser!.id,
                 action: "revoke_sessions"
-            });
+            }, 1);
             expect(revokeAllRows).toHaveLength(1);
         } finally {
             await targetContextOne.close();
@@ -162,4 +162,19 @@ async function expectNoHorizontalOverflow(page: Page) {
         document.documentElement.scrollWidth > document.documentElement.clientWidth
     );
     expect(hasHorizontalOverflow).toBe(false);
+}
+
+async function waitForAdminAuditRows(
+    filters: { targetUserId?: string; action?: string },
+    expectedLength: number
+) {
+    await expect.poll(async () => {
+        const rows = await getAdminAuditRows(filters);
+        return rows.length;
+    }, {
+        intervals: [100, 150, 250, 500],
+        timeout: 5_000
+    }).toBe(expectedLength);
+
+    return getAdminAuditRows(filters);
 }

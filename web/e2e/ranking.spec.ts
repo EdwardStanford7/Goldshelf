@@ -211,7 +211,7 @@ test.describe("Ranking", () => {
         await signInViaApi(context, "repair-loop@e2e.test");
         await gotoApp(page);
 
-        await page.getByRole("button", { name: "Repair All" }).click();
+        await page.getByRole("button", { name: "Repair Mode" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("New Entry")).toBeHidden();
 

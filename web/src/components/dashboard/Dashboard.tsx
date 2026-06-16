@@ -1699,7 +1699,7 @@ export function Dashboard({
                         onClick={() => void handleStartRepair(null, closeOnRepair)}
                     >
                         <Wrench data-icon="inline-start" />
-                        <span>Repair All</span>
+                        <span>Repair Mode</span>
                     </Button>
                 </div>
                 <DndContext
@@ -2071,8 +2071,8 @@ export function Dashboard({
                         >
                             <section
                                 className={`grid min-w-0 gap-3 ${entrySearch.trim()
-                                        ? "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
-                                        : "grid-cols-[repeat(auto-fit,minmax(min(100%,16.5rem),1fr))]"
+                                    ? "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
+                                    : "grid-cols-[repeat(auto-fit,minmax(min(100%,16.5rem),1fr))]"
                                     }`}
                             >
                                 {selectedCategory ? orderedEntries.map((entry) => (
