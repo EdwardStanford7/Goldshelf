@@ -290,13 +290,22 @@ test.describe("Queue", () => {
         await page.getByPlaceholder("New entry").fill("Zeta");
         await page.getByPlaceholder("New entry").press("Enter");
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("New Entry")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Queue", exact: true })).toBeVisible();
+
+        await page.getByPlaceholder("New entry").fill("Blade Runner");
+        await page.getByPlaceholder("New entry").press("Enter");
+        await expect(page.getByText(/Queued Blade Runner for ranking on/)).toBeVisible();
+        await expect(page.getByText("2 queued")).toBeVisible();
+        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible();
 
         await page.getByRole("button", { name: "Ranking actions" }).click();
         await page.getByRole("menuitem", { name: "Cancel Add and Add to Queue" }).click();
         await expect(page.getByText("Cancelled adding Zeta and moved it to the queue.")).toBeVisible();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeHidden();
-        await expect(page.getByText("2 queued")).toBeVisible();
+        await expect(page.getByText("3 queued")).toBeVisible();
         await expect(queueItem(page, "Zeta")).toBeVisible();
+        await expect(queueItem(page, "Blade Runner")).toBeVisible();
 
         await queueItem(page, "Solaris").click({ button: "right" });
         await page.getByRole("menuitem", { name: "Rank Now" }).click();
@@ -305,8 +314,9 @@ test.describe("Queue", () => {
         await page.getByRole("button", { name: "Ranking actions" }).click();
         await page.getByRole("menuitem", { name: "Cancel Add and Delete from Queue" }).click();
         await expect(page.getByText("Cancelled ranking Solaris and removed it from the queue.")).toBeVisible();
-        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(page.getByText("2 queued")).toBeVisible();
         await expect(queueItem(page, "Zeta")).toBeVisible();
+        await expect(queueItem(page, "Blade Runner")).toBeVisible();
         await expect(queueItem(page, "Solaris")).toBeHidden();
     });
 

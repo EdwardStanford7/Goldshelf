@@ -305,6 +305,7 @@ export function Dashboard({
     );
     const activeFlowId = activeSessionId ?? activeRepairSessionId;
     const activeFlowLocked = Boolean(activeFlowId);
+    const forceQueueNewEntry = activeFlowLocked || queueRankMode;
     const canDragReorderCategories = !busy && !activeFlowLocked && dashboard.categories.length > 1;
     const canCreateCategory = categoryDraftName.trim().length > 0;
     const canCreateEntry = entryDraftName.trim().length > 0;
@@ -995,7 +996,8 @@ export function Dashboard({
         const queueSettings = queueSettingsRef.current;
 
         try {
-            if (queueSettings.enabled) {
+            const shouldQueueEntry = queueSettings.enabled || forceQueueNewEntry;
+            if (shouldQueueEntry) {
                 const result = await createQueuedEntry({
                     data: {
                         categoryId: targetCategory.id,
@@ -1815,7 +1817,7 @@ export function Dashboard({
     }
 
     function renderNewEntryPanel(onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>) {
-        if (!selectedCategory || activeFlowLocked) {
+        if (!selectedCategory) {
             return null;
         }
 
@@ -1855,7 +1857,7 @@ export function Dashboard({
                             disabled={busy || !canCreateEntry}
                             type="submit"
                         >
-                            Add
+                            {forceQueueNewEntry ? "Queue" : "Add"}
                         </Button>
                     </div>
                 </form>

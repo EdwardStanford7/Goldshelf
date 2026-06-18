@@ -213,7 +213,14 @@ test.describe("Ranking", () => {
 
         await page.getByRole("button", { name: "Repair Mode" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByText("New Entry")).toBeHidden();
+        await expect(page.getByText("New Entry")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Queue", exact: true })).toBeVisible();
+
+        await page.getByPlaceholder("New entry").fill("Omega");
+        await page.getByPlaceholder("New entry").press("Enter");
+        await expect(page.getByText(/Queued Omega for ranking on/)).toBeVisible();
+        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(page.getByText("Repair Check · Movies")).toBeVisible();
 
         await page.getByRole("button", { name: "Skip" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
