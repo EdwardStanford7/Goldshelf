@@ -42,7 +42,8 @@ test.describe("Entry operations", () => {
         await page.getByText("#2 Arrival").click({ button: "right" });
         await page.getByRole("menuitem", { name: "Rerank" }).click();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
-        await page.getByRole("button", { name: "Cancel Rerank" }).click();
+        await page.getByRole("button", { name: "Ranking actions" }).click();
+        await page.getByRole("menuitem", { name: "Cancel Rerank" }).click();
         await expect(page.getByText("Cancelled reranking Arrival.")).toBeVisible();
         await expect(page.getByText("#1 Solaris")).toBeVisible();
         await expect(page.getByText("#2 Arrival")).toBeVisible();

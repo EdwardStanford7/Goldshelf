@@ -2,6 +2,7 @@ import type { RepairScope, RepairSessionPhase, RepairStrategy } from "./repair";
 
 export type RankingSource = "new_entry" | "rerank_entry" | "switch_category";
 export type RankingOperationKind = "single";
+export type CancelBinarySessionMode = "default" | "delete_queue" | "queue_new";
 
 export interface Entry {
     id: string;
@@ -158,6 +159,7 @@ export interface BinarySessionView {
     lowerBound: number;
     upperBound: number;
     comparisonCount: number;
+    queuedEntryId: string | null;
 }
 
 export interface RepairSessionView {

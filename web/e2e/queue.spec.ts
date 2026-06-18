@@ -232,6 +232,84 @@ test.describe("Queue", () => {
         await expect(page.getByText("#6 Dune")).toBeVisible();
     });
 
+    test("queue ranking can skip the current queued entry for the current run", async ({
+        context,
+        page
+    }) => {
+        await seedUsers([{
+            email: "queue-skip@e2e.test",
+            name: "Queue Skip",
+            queueSettings: {
+                enabled: true,
+                delayDays: 0,
+                promptForMissingImages: false
+            },
+            categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
+            queuedEntries: [
+                { categoryName: "Movies", name: "Memento", availableAt: 1, createdAt: 1 },
+                { categoryName: "Movies", name: "Klute", availableAt: 2, createdAt: 2 }
+            ]
+        }]);
+        await signInViaApi(context, "queue-skip@e2e.test");
+        await gotoApp(page);
+
+        await page.getByRole("button", { name: "Rank Queue" }).click();
+        await expect(page.getByRole("button", { name: "Memento" })).toBeVisible({ timeout: 15_000 });
+
+        await page.getByRole("button", { name: "Skip Queued Rank" }).click();
+        await expect(page.getByRole("button", { name: "Klute" })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("button", { name: "Memento" })).toBeHidden();
+
+        await winMatchups(page, "Klute");
+        await expect(page.getByText("No unskipped ready queued entries remain.")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(queueItem(page, "Memento")).toBeVisible();
+        await expect(page.getByText("#1 Klute")).toBeVisible();
+    });
+
+    test("active add ranking actions can queue new adds or remove queued adds", async ({
+        context,
+        page
+    }) => {
+        await seedUsers([{
+            email: "cancel-options@e2e.test",
+            name: "Cancel Options",
+            queueSettings: {
+                enabled: false,
+                delayDays: 0,
+                promptForMissingImages: false
+            },
+            categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
+            queuedEntries: [
+                { categoryName: "Movies", name: "Solaris", availableAt: 1, createdAt: 1 }
+            ]
+        }]);
+        await signInViaApi(context, "cancel-options@e2e.test");
+        await gotoApp(page);
+
+        await page.getByPlaceholder("New entry").fill("Zeta");
+        await page.getByPlaceholder("New entry").press("Enter");
+        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+
+        await page.getByRole("button", { name: "Ranking actions" }).click();
+        await page.getByRole("menuitem", { name: "Cancel Add and Add to Queue" }).click();
+        await expect(page.getByText("Cancelled adding Zeta and moved it to the queue.")).toBeVisible();
+        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeHidden();
+        await expect(page.getByText("2 queued")).toBeVisible();
+        await expect(queueItem(page, "Zeta")).toBeVisible();
+
+        await queueItem(page, "Solaris").click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Rank Now" }).click();
+        await expect(page.getByRole("button", { name: "Solaris" })).toBeVisible({ timeout: 15_000 });
+
+        await page.getByRole("button", { name: "Ranking actions" }).click();
+        await page.getByRole("menuitem", { name: "Cancel Add and Delete from Queue" }).click();
+        await expect(page.getByText("Cancelled ranking Solaris and removed it from the queue.")).toBeVisible();
+        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(queueItem(page, "Zeta")).toBeVisible();
+        await expect(queueItem(page, "Solaris")).toBeHidden();
+    });
+
     test("spreadsheet export and import preserves queued entries and skips duplicates", async ({
         context,
         page

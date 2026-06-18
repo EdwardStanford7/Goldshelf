@@ -8,6 +8,7 @@ import {
 import type {
     ActiveBinarySession,
     BinarySessionView,
+    CancelBinarySessionMode,
     Entry,
     RankingOperationKind,
     RankingSource
@@ -25,6 +26,8 @@ import {
     rewriteCategoryOrderStatements
 } from "./stores/entryStore";
 import {
+    consumeQueuedEntryStatement,
+    getQueueSettings,
     restoreStartedQueuedEntryStatement
 } from "./stores/queueStore";
 import {
@@ -42,6 +45,8 @@ import {
     submitBubbleRepairWinner,
     submitLocalRepairWinner
 } from "./engine/rankingSessions";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const getBinarySession = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
@@ -99,16 +104,18 @@ export const getBinarySession = createServerFn({ method: "GET" })
             opponent,
             lowerBound: session.lower_bound,
             upperBound: session.upper_bound,
-            comparisonCount: session.comparison_count ?? 0
+            comparisonCount: session.comparison_count ?? 0,
+            queuedEntryId: operationState.queuedEntryId
         };
     });
 
 export const cancelBinarySession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string }) => data)
+    .inputValidator((data: { sessionId: string; mode?: CancelBinarySessionMode }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { sessionId } = data;
+        const mode = normalizeCancelMode(data.mode);
         const db = getDb();
         const session = await first<SessionRow>(
             db
@@ -127,6 +134,9 @@ export const cancelBinarySession = createServerFn({ method: "POST" })
 
         if (session.source !== "new_entry" && session.source !== "rerank_entry") {
             throw new Error("Only new-entry and rerank sessions can be cancelled");
+        }
+        if (session.source === "rerank_entry" && mode !== "default") {
+            throw new Error("Rerank sessions can only be cancelled normally");
         }
 
         const entry = await getOwnedEntry(userId, session.subject_entry_id);
@@ -172,34 +182,90 @@ export const cancelBinarySession = createServerFn({ method: "POST" })
 
         const operationState = parseRankingOperationState(session.operation_state);
         const queuedEntryId = operationState.queuedEntryId;
+        if (mode === "delete_queue" && !queuedEntryId) {
+            throw new Error("Only queued ranking sessions can be removed from the queue");
+        }
+        if (mode === "queue_new" && queuedEntryId) {
+            throw new Error("Queued ranking sessions are already in the queue");
+        }
+
+        let imageKeyToDelete: string | null = null;
         statements.push(
             db
                 .prepare(
                     `UPDATE entries
-             SET status = 'deleted', updated_at = ?
+             SET status = 'deleted', image_key = NULL, updated_at = ?
              WHERE id = ? AND user_id = ? AND status = 'ranking'`
                 )
                 .bind(updatedAt, session.subject_entry_id, userId)
         );
 
         if (queuedEntryId) {
-            statements.push(
-                restoreStartedQueuedEntryStatement(
-                    db,
-                    userId,
-                    queuedEntryId,
-                    session.category_id,
-                    entry.name,
-                    updatedAt
-                )
+            if (mode === "delete_queue") {
+                statements.push(consumeQueuedEntryStatement(db, userId, queuedEntryId));
+                imageKeyToDelete = entry.imageKey;
+            } else {
+                statements.push(
+                    restoreStartedQueuedEntryStatement(
+                        db,
+                        userId,
+                        queuedEntryId,
+                        session.category_id,
+                        entry.name,
+                        updatedAt
+                    )
+                );
+            }
+        } else if (mode === "queue_new") {
+            const duplicateQueuedEntry = await first<{ id: string }>(
+                db
+                    .prepare(
+                        `SELECT id
+                         FROM entry_queue
+                         WHERE user_id = ? AND category_id = ? AND name = ? AND status = 'queued'
+                         LIMIT 1`
+                    )
+                    .bind(userId, session.category_id, entry.name)
             );
+            if (duplicateQueuedEntry) {
+                throw new Error("That entry is already queued in this category");
+            }
+
+            const settings = await getQueueSettings(userId);
+            const queueId = newId("queue");
+            statements.push(
+                db
+                    .prepare(
+                        `INSERT INTO entry_queue (
+                           id, user_id, category_id, name, image_key, available_at,
+                           status, created_at, updated_at
+                         )
+                         VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+                    )
+                    .bind(
+                        queueId,
+                        userId,
+                        session.category_id,
+                        entry.name,
+                        entry.imageKey,
+                        updatedAt + settings.delayDays * DAY_MS,
+                        entry.createdAt,
+                        updatedAt
+                    )
+            );
+        } else {
+            imageKeyToDelete = entry.imageKey;
         }
 
         await db.batch(statements);
-        if (!queuedEntryId && hasStoredImage(entry.imageKey)) {
-            await env.IMAGES.delete(entry.imageKey);
+        if (hasStoredImage(imageKeyToDelete)) {
+            await env.IMAGES.delete(imageKeyToDelete);
         }
     });
+
+function normalizeCancelMode(mode: CancelBinarySessionMode | undefined): CancelBinarySessionMode {
+    return mode === "delete_queue" || mode === "queue_new" ? mode : "default";
+}
 
 export const submitBinaryWinner = createServerFn({ method: "POST" })
     .middleware([authMiddleware])

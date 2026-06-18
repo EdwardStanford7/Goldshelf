@@ -1,17 +1,19 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, MoreVertical, Pencil } from "lucide-react";
+import { Image as ImageIcon, ListPlus, MoreVertical, Pencil, SkipForward, Trash2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     ContextMenu,
     ContextMenuContent,
     ContextMenuItem,
+    ContextMenuSeparator,
     ContextMenuTrigger
 } from "@/components/ui/context-menu";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -19,7 +21,7 @@ import { redirectIfUnauthorized } from "@/lib/errors";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage, isNoImageKey, shouldPromptForImage } from "@/lib/images";
 import { getBinarySession, submitBinaryWinner } from "@/server/rankingSessions";
-import type { BinarySessionView, CategoryWithEntries, Entry } from "@/lib/types";
+import type { BinarySessionView, CancelBinarySessionMode, CategoryWithEntries, Entry } from "@/lib/types";
 
 const RANK_PANEL_CLASS =
     "max-w-full min-w-0 rounded-md border border-border bg-card p-4 shadow-panel";
@@ -36,16 +38,18 @@ export function BinaryRankPanel({
     onUnavailable,
     onNeedImage,
     onPickImage,
-    onRename
+    onRename,
+    onSkipQueued
 }: {
     sessionId: string;
     imageRefreshVersion: number;
-    onCancel: (session: BinarySessionView) => Promise<void>;
+    onCancel: (session: BinarySessionView, mode?: CancelBinarySessionMode) => Promise<void>;
     onComplete: (sessionId: string) => Promise<void>;
     onUnavailable: (sessionId: string) => Promise<void>;
     onNeedImage: (entry: Entry, category: Pick<CategoryWithEntries, "id" | "name">) => void;
     onPickImage: (entry: Entry, category: Pick<CategoryWithEntries, "id" | "name">) => void;
     onRename: (entry: Entry, name: string) => Promise<void>;
+    onSkipQueued: (session: BinarySessionView) => Promise<void>;
 }) {
     const [session, setSession] = useState<BinarySessionView | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -191,7 +195,7 @@ export function BinaryRankPanel({
         }
     }
 
-    async function cancelRanking() {
+    async function cancelRanking(mode: CancelBinarySessionMode = "default") {
         if (!session) {
             return;
         }
@@ -199,7 +203,7 @@ export function BinaryRankPanel({
         setError(null);
         setSubmitting(true);
         try {
-            await onCancel(session);
+            await onCancel(session, mode);
         } catch (cancelError) {
             if (!redirectIfUnauthorized(cancelError)) {
                 if (isUnavailableSessionError(cancelError)) {
@@ -208,6 +212,29 @@ export function BinaryRankPanel({
                 }
 
                 setError(errorMessage(cancelError));
+            }
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function skipQueuedRank() {
+        if (!session) {
+            return;
+        }
+
+        setError(null);
+        setSubmitting(true);
+        try {
+            await onSkipQueued(session);
+        } catch (skipError) {
+            if (!redirectIfUnauthorized(skipError)) {
+                if (isUnavailableSessionError(skipError)) {
+                    await onUnavailable(sessionId);
+                    return;
+                }
+
+                setError(errorMessage(skipError));
             }
         } finally {
             setSubmitting(false);
@@ -266,6 +293,14 @@ export function BinaryRankPanel({
         return <section className={RANK_PANEL_CLASS}>Loading ranking...</section>;
     }
 
+    const sessionActionState = {
+        canCancelAdd: session.source === "new_entry",
+        canQueueNewAdd: session.source === "new_entry" && !session.queuedEntryId,
+        canDeleteQueuedAdd: session.source === "new_entry" && Boolean(session.queuedEntryId),
+        canSkipQueuedAdd: session.source === "new_entry" && Boolean(session.queuedEntryId),
+        canCancelRerank: session.source === "rerank_entry"
+    };
+
     return (
         <section className={`${RANK_PANEL_CLASS} grid content-start gap-[0.9rem]`}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:flex-col max-[720px]:items-stretch *:max-w-full *:min-w-0">
@@ -279,19 +314,45 @@ export function BinaryRankPanel({
                             : `${session.comparisonCount} comparisons`}
                     </p>
                 </div>
-                {session.source === "new_entry" || session.source === "rerank_entry" ? (
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={submitting}
-                        type="button"
-                        onClick={() => void cancelRanking()}
-                    >
-                        {session.source === "rerank_entry"
-                            ? "Cancel Rerank"
-                            : "Cancel Add"}
-                    </Button>
-                ) : null}
+                <div className="flex flex-wrap justify-end gap-2">
+                    {sessionActionState.canSkipQueuedAdd ? (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={submitting}
+                            type="button"
+                            onClick={() => void skipQueuedRank()}
+                        >
+                            <SkipForward data-icon="inline-start" />
+                            <span>Skip Queued Rank</span>
+                        </Button>
+                    ) : null}
+                    {hasSessionActionMenu(sessionActionState) ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    aria-label="Ranking actions"
+                                    disabled={submitting}
+                                    size="icon-sm"
+                                    type="button"
+                                    variant="outline"
+                                >
+                                    <MoreVertical className="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-60">
+                                <SessionDropdownActions
+                                    disabled={submitting}
+                                    state={sessionActionState}
+                                    onCancel={() => void cancelRanking()}
+                                    onDeleteQueued={() => void cancelRanking("delete_queue")}
+                                    onQueueNew={() => void cancelRanking("queue_new")}
+                                    onSkipQueued={() => void skipQueuedRank()}
+                                />
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : null}
+                </div>
             </div>
             <div className="grid min-w-0 grid-cols-2 gap-4 max-[720px]:grid-cols-1">
                 {[session.subject, session.opponent].map((entry) => (
@@ -313,10 +374,134 @@ export function BinaryRankPanel({
                         onRenameValueChange={setRenameValue}
                         onStartRename={() => startRename(entry)}
                         onSubmitRename={() => void submitRename(entry)}
+                        renderContextActions={() => hasSessionActionMenu(sessionActionState) ? (
+                            <>
+                                <ContextMenuSeparator />
+                                <SessionContextActions
+                                    disabled={submitting}
+                                    state={sessionActionState}
+                                    onCancel={() => void cancelRanking()}
+                                    onDeleteQueued={() => void cancelRanking("delete_queue")}
+                                    onQueueNew={() => void cancelRanking("queue_new")}
+                                    onSkipQueued={() => void skipQueuedRank()}
+                                />
+                            </>
+                        ) : null}
+                        renderDropdownActions={() => hasSessionActionMenu(sessionActionState) ? (
+                            <>
+                                <DropdownMenuSeparator />
+                                <SessionDropdownActions
+                                    disabled={submitting}
+                                    state={sessionActionState}
+                                    onCancel={() => void cancelRanking()}
+                                    onDeleteQueued={() => void cancelRanking("delete_queue")}
+                                    onQueueNew={() => void cancelRanking("queue_new")}
+                                    onSkipQueued={() => void skipQueuedRank()}
+                                />
+                            </>
+                        ) : null}
                     />
                 ))}
             </div>
         </section>
+    );
+}
+
+function hasSessionActionMenu(state: SessionActionState) {
+    return state.canCancelAdd ||
+        state.canCancelRerank ||
+        state.canDeleteQueuedAdd ||
+        state.canQueueNewAdd ||
+        state.canSkipQueuedAdd;
+}
+
+interface SessionActionState {
+    canCancelAdd: boolean;
+    canQueueNewAdd: boolean;
+    canDeleteQueuedAdd: boolean;
+    canSkipQueuedAdd: boolean;
+    canCancelRerank: boolean;
+}
+
+function SessionDropdownActions({
+    disabled,
+    state,
+    onCancel,
+    onDeleteQueued,
+    onQueueNew,
+    onSkipQueued
+}: {
+    disabled: boolean;
+    state: SessionActionState;
+    onCancel: () => void;
+    onDeleteQueued: () => void;
+    onQueueNew: () => void;
+    onSkipQueued: () => void;
+}) {
+    return (
+        <>
+            {state.canSkipQueuedAdd ? (
+                <DropdownMenuItem disabled={disabled} onSelect={onSkipQueued}>
+                    <SkipForward />Skip Queued Rank
+                </DropdownMenuItem>
+            ) : null}
+            {state.canQueueNewAdd ? (
+                <DropdownMenuItem disabled={disabled} onSelect={onQueueNew}>
+                    <ListPlus />Cancel Add and Add to Queue
+                </DropdownMenuItem>
+            ) : null}
+            {state.canDeleteQueuedAdd ? (
+                <DropdownMenuItem disabled={disabled} variant="destructive" onSelect={onDeleteQueued}>
+                    <Trash2 />Cancel Add and Delete from Queue
+                </DropdownMenuItem>
+            ) : null}
+            {state.canCancelAdd || state.canCancelRerank ? (
+                <DropdownMenuItem disabled={disabled} onSelect={onCancel}>
+                    <XCircle />{state.canCancelRerank ? "Cancel Rerank" : "Cancel Add"}
+                </DropdownMenuItem>
+            ) : null}
+        </>
+    );
+}
+
+function SessionContextActions({
+    disabled,
+    state,
+    onCancel,
+    onDeleteQueued,
+    onQueueNew,
+    onSkipQueued
+}: {
+    disabled: boolean;
+    state: SessionActionState;
+    onCancel: () => void;
+    onDeleteQueued: () => void;
+    onQueueNew: () => void;
+    onSkipQueued: () => void;
+}) {
+    return (
+        <>
+            {state.canSkipQueuedAdd ? (
+                <ContextMenuItem disabled={disabled} onSelect={onSkipQueued}>
+                    <SkipForward />Skip Queued Rank
+                </ContextMenuItem>
+            ) : null}
+            {state.canQueueNewAdd ? (
+                <ContextMenuItem disabled={disabled} onSelect={onQueueNew}>
+                    <ListPlus />Cancel Add and Add to Queue
+                </ContextMenuItem>
+            ) : null}
+            {state.canDeleteQueuedAdd ? (
+                <ContextMenuItem disabled={disabled} variant="destructive" onSelect={onDeleteQueued}>
+                    <Trash2 />Cancel Add and Delete from Queue
+                </ContextMenuItem>
+            ) : null}
+            {state.canCancelAdd || state.canCancelRerank ? (
+                <ContextMenuItem disabled={disabled} onSelect={onCancel}>
+                    <XCircle />{state.canCancelRerank ? "Cancel Rerank" : "Cancel Add"}
+                </ContextMenuItem>
+            ) : null}
+        </>
     );
 }
 
@@ -346,7 +531,9 @@ function MatchCard({
     onPickImage,
     onRenameValueChange,
     onStartRename,
-    onSubmitRename
+    onSubmitRename,
+    renderContextActions,
+    renderDropdownActions
 }: {
     disabled: boolean;
     entry: Entry;
@@ -358,6 +545,8 @@ function MatchCard({
     onRenameValueChange: (value: string) => void;
     onStartRename: () => void;
     onSubmitRename: () => void;
+    renderContextActions: () => ReactNode;
+    renderDropdownActions: () => ReactNode;
 }) {
     function handleRenameSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -433,6 +622,7 @@ function MatchCard({
                                 <ImageIcon />
                                 {hasStoredImage(entry.imageKey) ? "Change Image" : "Pick Image"}
                             </DropdownMenuItem>
+                            {renderDropdownActions()}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </article>
@@ -445,6 +635,7 @@ function MatchCard({
                     <ImageIcon />
                     {hasStoredImage(entry.imageKey) ? "Change Image" : "Pick Image"}
                 </ContextMenuItem>
+                {renderContextActions()}
             </ContextMenuContent>
         </ContextMenu>
     );

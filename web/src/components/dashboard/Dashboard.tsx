@@ -100,6 +100,7 @@ import { cancelRepairSession, startRepairSession } from "@/server/repairSessions
 import { applyThemeMode, readInitialThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import type {
     BinarySessionView,
+    CancelBinarySessionMode,
     CategoryWithEntries,
     DashboardData,
     Entry,
@@ -174,6 +175,27 @@ function importResultMessage(result: {
         : importedMessage;
 }
 
+function cancelBinarySessionMessage(
+    session: BinarySessionView,
+    mode: CancelBinarySessionMode
+) {
+    if (session.source === "rerank_entry") {
+        return `Cancelled reranking ${session.subject.name}.`;
+    }
+
+    if (mode === "delete_queue") {
+        return `Cancelled ranking ${session.subject.name} and removed it from the queue.`;
+    }
+
+    if (mode === "queue_new") {
+        return `Cancelled adding ${session.subject.name} and moved it to the queue.`;
+    }
+
+    return session.queuedEntryId
+        ? `Cancelled ranking ${session.subject.name} and returned it to the queue.`
+        : `Cancelled adding ${session.subject.name}.`;
+}
+
 export function Dashboard({
     initialDashboard,
     userIsAdmin,
@@ -210,6 +232,7 @@ export function Dashboard({
     const closedRepairSessionIdsRef = useRef<Set<string>>(new Set());
     const [queueRankMode, setQueueRankMode] = useState(false);
     const queueRankModeRef = useRef(false);
+    const skippedQueueRankIdsRef = useRef<Set<string>>(new Set());
     const [categoryDraftName, setCategoryDraftName] = useState("");
     const [entryDraftName, setEntryDraftName] = useState("");
     const [entryCategoryId, setEntryCategoryId] = useState(
@@ -585,6 +608,9 @@ export function Dashboard({
 
     function setQueueRankingActive(isActive: boolean) {
         queueRankModeRef.current = isActive;
+        if (!isActive) {
+            skippedQueueRankIdsRef.current = new Set();
+        }
         setQueueRankMode(isActive);
     }
 
@@ -1060,15 +1086,15 @@ export function Dashboard({
         }
     }
 
-    function getReadyQueuedEntries(queuedEntries: QueuedEntry[]) {
+    function getReadyQueuedEntries(queuedEntries: QueuedEntry[], excludedQueuedEntryIds: Set<string> = new Set()) {
         const currentTime = Date.now();
         return queuedEntries
-            .filter((entry) => entry.availableAt <= currentTime)
+            .filter((entry) => entry.availableAt <= currentTime && !excludedQueuedEntryIds.has(entry.id))
             .sort((left, right) => left.availableAt - right.availableAt || left.createdAt - right.createdAt);
     }
 
     function getNextReadyQueuedEntry(queuedEntries: QueuedEntry[]) {
-        const readyEntries = getReadyQueuedEntries(queuedEntries);
+        const readyEntries = getReadyQueuedEntries(queuedEntries, skippedQueueRankIdsRef.current);
         if (readyEntries.length === 0) {
             return null;
         }
@@ -1106,8 +1132,11 @@ export function Dashboard({
 
         const nextEntry = getNextReadyQueuedEntry(queuedEntries);
         if (!nextEntry) {
+            const skippedCount = skippedQueueRankIdsRef.current.size;
             setQueueRankingActive(false);
-            setMessage("No ready queued entries remain.");
+            setMessage(skippedCount > 0
+                ? "No unskipped ready queued entries remain."
+                : "No ready queued entries remain.");
             return;
         }
 
@@ -1147,6 +1176,7 @@ export function Dashboard({
     }
 
     async function handleStartQueueRank() {
+        skippedQueueRankIdsRef.current = new Set();
         setQueueRankingActive(true);
         await startNextQueuedRank(dashboard.queuedEntries);
     }
@@ -1379,7 +1409,10 @@ export function Dashboard({
         }
     }
 
-    async function handleCancelBinarySession(session: BinarySessionView) {
+    async function handleCancelBinarySession(
+        session: BinarySessionView,
+        mode: CancelBinarySessionMode = "default"
+    ) {
         startBusy(
             session.source === "rerank_entry"
                 ? "Cancelling rerank..."
@@ -1389,16 +1422,39 @@ export function Dashboard({
         setQueueRankingActive(false);
 
         try {
-            await cancelBinarySession({ data: { sessionId: session.id } });
+            await cancelBinarySession({ data: { sessionId: session.id, mode } });
             markBinarySessionClosed(session.id);
             setActiveBinarySessionId(null);
-            setMessage(
-                session.source === "rerank_entry"
-                    ? `Cancelled reranking ${session.subject.name}.`
-                    : `Cancelled adding ${session.subject.name}.`
-            );
+            setMessage(cancelBinarySessionMessage(session, mode));
             await refreshAfterMutation();
         } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
+    async function handleSkipQueuedBinarySession(session: BinarySessionView) {
+        if (!session.queuedEntryId) {
+            return;
+        }
+
+        startBusy("Skipping queued rank...");
+        setMessage(null);
+
+        try {
+            skippedQueueRankIdsRef.current.add(session.queuedEntryId);
+            await cancelBinarySession({ data: { sessionId: session.id, mode: "default" } });
+            markBinarySessionClosed(session.id);
+            setActiveBinarySessionId(null);
+            const nextDashboard = await refreshAfterMutation();
+            if (queueRankModeRef.current && nextDashboard) {
+                await startNextQueuedRank(nextDashboard.queuedEntries);
+            } else {
+                setMessage(`Skipped ${session.subject.name} and returned it to the queue.`);
+            }
+        } catch (error) {
+            skippedQueueRankIdsRef.current.delete(session.queuedEntryId);
             setErrorMessage(error);
         } finally {
             finishBusy();
@@ -1436,7 +1492,7 @@ export function Dashboard({
             await cancelRepairSession({ data: { sessionId: session.id } });
             markRepairSessionClosed(session.id);
             setActiveRepairSessionId(null);
-            setMessage("Repair mode cancelled.");
+            setMessage("Repair mode exited.");
             await refreshAfterMutation();
         } catch (error) {
             setErrorMessage(error);
@@ -2032,6 +2088,7 @@ export function Dashboard({
                                 category
                             })}
                             onRename={(entry, name) => handleRename(entry.id, name)}
+                            onSkipQueued={handleSkipQueuedBinarySession}
                         />
                     ) : null}
 
