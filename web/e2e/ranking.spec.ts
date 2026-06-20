@@ -194,6 +194,70 @@ test.describe("Ranking", () => {
         expect(metrics.firstRowRightGap).toBeLessThanOrEqual(12);
     });
 
+    test("desktop sidebar scrolls instead of collapsing controls on short viewports", async ({
+        page,
+        context
+    }) => {
+        await page.setViewportSize({ width: 1000, height: 520 });
+        await seedUsers([{
+            email: "short-sidebar@e2e.test",
+            name: "Short Sidebar",
+            queueSettings: {
+                enabled: true,
+                delayDays: 0,
+                promptForMissingImages: false
+            },
+            categories: [
+                { name: "Books", entries: ["Dune", "Hyperion"] },
+                { name: "Movies", entries: ["Arrival", "Heat"] },
+                { name: "Shows", entries: ["Severance", "Andor"] },
+                { name: "Games", entries: ["Celeste", "Hades"] }
+            ],
+            queuedEntries: [
+                { categoryName: "Books", name: "Foundation", availableAt: 1, createdAt: 1 },
+                { categoryName: "Movies", name: "Memento", availableAt: 2, createdAt: 2 },
+                { categoryName: "Shows", name: "Dark", availableAt: 3, createdAt: 3 }
+            ]
+        }]);
+        await signInViaApi(context, "short-sidebar@e2e.test");
+        await gotoApp(page);
+
+        const metrics = await page.getByTestId("dashboard-sidebar").evaluate((sidebar) => {
+            const controls = Array.from(sidebar.querySelectorAll<HTMLElement>("input, button, [role='combobox']"));
+            const sections = Array.from(sidebar.querySelectorAll<HTMLElement>("section"));
+            const protrudingControls = controls.filter((control) => {
+                const section = control.closest("section");
+                if (!section) {
+                    return false;
+                }
+
+                let ancestor = control.parentElement;
+                while (ancestor && ancestor !== section) {
+                    const overflowY = getComputedStyle(ancestor).overflowY;
+                    if (overflowY === "auto" || overflowY === "scroll") {
+                        return false;
+                    }
+                    ancestor = ancestor.parentElement;
+                }
+
+                const controlBox = control.getBoundingClientRect();
+                const sectionBox = section.getBoundingClientRect();
+                return controlBox.top < sectionBox.top - 1 || controlBox.bottom > sectionBox.bottom + 1;
+            });
+
+            return {
+                clientHeight: sidebar.clientHeight,
+                minSectionHeight: Math.min(...sections.map((section) => section.getBoundingClientRect().height)),
+                protrudingControlCount: protrudingControls.length,
+                scrollHeight: sidebar.scrollHeight
+            };
+        });
+
+        expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+        expect(metrics.minSectionHeight).toBeGreaterThan(80);
+        expect(metrics.protrudingControlCount).toBe(0);
+    });
+
     test("repair mode starts, skips, survives reload, and cancels", async ({
         page,
         context

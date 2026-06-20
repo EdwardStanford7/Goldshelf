@@ -122,7 +122,7 @@ const UNDO_STACK_LIMIT = 20;
 const RESUME_REFRESH_AFTER_MS = 5 * 60 * 1000;
 const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 const SIDEBAR_PANEL_CLASS =
-    "grid min-h-0 min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
+    "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
 
 /**
  * Apply an optimistic drag ordering (a list of ids) on top of the canonical
@@ -1958,7 +1958,10 @@ export function Dashboard({
                     {" "}and stored images for this category.
                 </ConfirmDialog>
             ) : null}
-            <aside className="grid min-h-0 min-w-0 content-start gap-[1.15rem] overflow-x-hidden overflow-y-auto border-r border-border bg-sidebar p-4 max-[720px]:hidden">
+            <aside
+                className="grid h-dvh max-h-dvh min-h-0 min-w-0 auto-rows-max content-start gap-[1.15rem] overflow-x-hidden overflow-y-auto border-r border-border bg-sidebar p-4 max-[720px]:hidden"
+                data-testid="dashboard-sidebar"
+            >
                 {renderDesktopSidebar()}
             </aside>
 

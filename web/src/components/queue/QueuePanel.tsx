@@ -46,7 +46,7 @@ export function QueuePanel({
     const pendingEntries = queuedEntries.filter((entry) => entry.availableAt > currentTime);
 
     return (
-        <section className="grid min-h-0 min-w-0 max-w-full content-start gap-[0.9rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15">
+        <section className="grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.9rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15">
             <div className="flex flex-wrap items-center justify-between gap-[0.7rem]">
                 <strong className="min-w-0 max-w-full">Queue</strong>
                 <div className="flex min-w-0 max-w-full flex-wrap justify-end gap-[0.4rem]">
