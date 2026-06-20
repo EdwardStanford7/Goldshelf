@@ -22,22 +22,22 @@ import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import type { QueuedEntry } from "@/lib/types";
 
 export function QueuedEntryRow({
-    actionLocked,
     entry,
     isReady,
     metadataDisabled,
     onDelete,
     onPickImage,
     onRename,
+    rankLocked,
     onStart
 }: {
-    actionLocked: boolean;
     entry: QueuedEntry;
     isReady: boolean;
     metadataDisabled: boolean;
     onDelete: (entry: QueuedEntry) => Promise<void>;
     onPickImage: (entry: QueuedEntry) => void;
     onRename: (entry: QueuedEntry, name: string) => Promise<void>;
+    rankLocked: boolean;
     onStart: (entry: QueuedEntry) => Promise<void>;
 }) {
     const [isRenaming, setIsRenaming] = useState(false);
@@ -91,7 +91,7 @@ export function QueuedEntryRow({
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem disabled={actionLocked} onSelect={() => void onStart(entry)}>
+                                <DropdownMenuItem disabled={rankLocked} onSelect={() => void onStart(entry)}>
                                     <Swords />Rank Now
                                 </DropdownMenuItem>
                                 <DropdownMenuItem disabled={metadataDisabled} onSelect={startRename}>
@@ -101,7 +101,7 @@ export function QueuedEntryRow({
                                     <ImageIcon />
                                     {hasStoredImage(entry.imageKey) ? "Change image" : "Pick image"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem variant="destructive" disabled={actionLocked} onSelect={() => void onDelete(entry)}>
+                                <DropdownMenuItem variant="destructive" disabled={metadataDisabled} onSelect={() => void onDelete(entry)}>
                                     <Trash2 />Remove
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -151,7 +151,7 @@ export function QueuedEntryRow({
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent>
-                <ContextMenuItem disabled={actionLocked} onSelect={() => void onStart(entry)}>
+                <ContextMenuItem disabled={rankLocked} onSelect={() => void onStart(entry)}>
                     <Swords />Rank Now
                 </ContextMenuItem>
                 <ContextMenuItem
@@ -164,7 +164,7 @@ export function QueuedEntryRow({
                     <ImageIcon />
                     {hasStoredImage(entry.imageKey) ? `Change image` : `Pick image`}
                 </ContextMenuItem>
-                <ContextMenuItem variant="destructive" disabled={actionLocked} onSelect={() => void onDelete(entry)}>
+                <ContextMenuItem variant="destructive" disabled={metadataDisabled} onSelect={() => void onDelete(entry)}>
                     <Trash2 />Remove
                 </ContextMenuItem>
             </ContextMenuContent>
