@@ -1,5 +1,5 @@
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { CopyPlus, ListOrdered } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -27,6 +27,7 @@ import { showToast } from "@/lib/toast";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { followButtonLabel, followRelationLabel } from "@/lib/follows";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
+import { nextMultiSelection } from "@/lib/multiSelect";
 import { orderEntries } from "@/lib/ranking";
 import {
     approveFollowRequest,
@@ -158,8 +159,13 @@ function PublicProfileRoute() {
         entryScrollRef.current?.scrollTo({ top: 0 });
     }
 
-    async function handleCopyCategory() {
+    async function handleCopyCategory(sourceEntryIds: string[]) {
         if (!profileData || !copyDialogCategory || !profileData.viewer.isSignedIn || profileData.viewer.isSelf) {
+            return;
+        }
+
+        if (sourceEntryIds.length === 0) {
+            showToast("Select at least one entry to copy", "danger");
             return;
         }
 
@@ -188,12 +194,14 @@ function PublicProfileRoute() {
                     ? {
                         sourceCategoryId: copyDialogCategory.id,
                         mode: "new",
-                        categoryName: cleanCategoryName
+                        categoryName: cleanCategoryName,
+                        sourceEntryIds
                     }
                     : {
                         sourceCategoryId: copyDialogCategory.id,
                         mode: "merge",
-                        targetCategoryId: copyTargetCategoryId
+                        targetCategoryId: copyTargetCategoryId,
+                        sourceEntryIds
                     }
             });
             if (copyMode === "new") {
@@ -209,9 +217,15 @@ function PublicProfileRoute() {
                 });
             }
             setCopyDialogCategory(null);
+            const copyMessage = result.copiedCount > 0
+                ? `Copied ${result.copiedCount} ${result.copiedCount === 1 ? "entry" : "entries"} to ${result.categoryName}.`
+                : `No new entries copied to ${result.categoryName}.`;
+            const skippedMessage = result.skippedCount > 0
+                ? ` Skipped ${result.skippedCount} duplicate${result.skippedCount === 1 ? "" : "s"}.`
+                : "";
             showToast(
-                `Copied ${result.copiedCount} ${result.copiedCount === 1 ? "entry" : "entries"} to ${result.categoryName}.`,
-                "success"
+                `${copyMessage}${skippedMessage}`,
+                result.copiedCount > 0 ? "success" : "default"
             );
         } catch (copyError) {
             if (redirectIfUnauthorized(copyError)) {
@@ -341,7 +355,7 @@ function PublicProfileRoute() {
                         setCopyTargetCategoryId(viewer.categories[0]?.id ?? "");
                     }
                 }}
-                onSubmit={() => void handleCopyCategory()}
+                onSubmit={(sourceEntryIds) => void handleCopyCategory(sourceEntryIds)}
                 onTargetCategoryIdChange={setCopyTargetCategoryId}
             />
         </main>
@@ -388,9 +402,28 @@ function CopyCategoryDialog({
     onCancel: () => void;
     onCategoryNameChange: (name: string) => void;
     onModeChange: (mode: CopyMode) => void;
-    onSubmit: () => void;
+    onSubmit: (sourceEntryIds: string[]) => void;
     onTargetCategoryIdChange: (categoryId: string) => void;
 }) {
+    const orderedEntries = useMemo(
+        () => category ? orderEntries(category.entries) : [],
+        [category]
+    );
+    const [entrySearch, setEntrySearch] = useState("");
+    const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
+    const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!category) {
+            return;
+        }
+
+        const nextEntries = orderEntries(category.entries);
+        setEntrySearch("");
+        setSelectedEntryIds(new Set(nextEntries.map((entry) => entry.id)));
+        setSelectionAnchorId(null);
+    }, [category]);
+
     if (!category) {
         return null;
     }
@@ -401,7 +434,52 @@ function CopyCategoryDialog({
     );
     const submitDisabled = saving ||
         (mode === "new" && (!cleanCategoryName || duplicateCategoryName)) ||
-        (mode === "merge" && !targetCategoryId);
+        (mode === "merge" && !targetCategoryId) ||
+        selectedEntryIds.size === 0;
+    const searchTerm = entrySearch.trim().toLowerCase();
+    const visibleEntries = searchTerm
+        ? orderedEntries.filter((entry) => entry.name.toLowerCase().includes(searchTerm))
+        : orderedEntries;
+    const orderedEntryIds = visibleEntries.map((entry) => entry.id);
+    const entryPositionById = new Map(orderedEntries.map((entry, index) => [entry.id, index + 1]));
+
+    function handleSelectEntry(entryId: string, event: MouseEvent) {
+        if (saving) {
+            return;
+        }
+
+        const nextSelection = nextMultiSelection({
+            anchorId: selectionAnchorId,
+            clickedId: entryId,
+            ctrlKey: event.ctrlKey,
+            metaKey: event.metaKey,
+            orderedIds: orderedEntryIds,
+            plainBehavior: "toggle",
+            selectedIds: selectedEntryIds,
+            shiftKey: event.shiftKey
+        });
+        setSelectedEntryIds(nextSelection.selectedIds);
+        setSelectionAnchorId(nextSelection.anchorId);
+    }
+
+    function selectVisible() {
+        setSelectedEntryIds((currentSelectedIds) => new Set([
+            ...currentSelectedIds,
+            ...orderedEntryIds
+        ]));
+        setSelectionAnchorId(orderedEntryIds.at(-1) ?? selectionAnchorId);
+    }
+
+    function deselectVisible() {
+        setSelectedEntryIds((currentSelectedIds) => {
+            const nextSelectedIds = new Set(currentSelectedIds);
+            for (const id of orderedEntryIds) {
+                nextSelectedIds.delete(id);
+            }
+            return nextSelectedIds;
+        });
+        setSelectionAnchorId(orderedEntryIds.at(-1) ?? selectionAnchorId);
+    }
 
     return (
         <AlertDialog
@@ -412,7 +490,7 @@ function CopyCategoryDialog({
                 }
             }}
         >
-            <AlertDialogContent className="max-w-[min(calc(100vw-2rem),30rem)] sm:max-w-[30rem]">
+            <AlertDialogContent className="max-w-[min(calc(100vw-2rem),44rem)] sm:max-w-[44rem]">
                 <AlertDialogHeader>
                     <AlertDialogTitle>Copy {category.name}</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -484,13 +562,88 @@ function CopyCategoryDialog({
                             </Select>
                         </label>
                     )}
+
+                    <section className="grid gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <strong className="text-sm">Entries</strong>
+                            <span className="text-sm text-muted-foreground">
+                                {selectedEntryIds.size} of {orderedEntries.length} selected
+                            </span>
+                        </div>
+                        <Input
+                            aria-label="Search entries to copy"
+                            disabled={saving}
+                            placeholder="Search entries"
+                            value={entrySearch}
+                            onChange={(event) => setEntrySearch(event.currentTarget.value)}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                disabled={saving || visibleEntries.length === 0}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={selectVisible}
+                            >
+                                Select visible
+                            </Button>
+                            <Button
+                                disabled={saving || visibleEntries.length === 0}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={deselectVisible}
+                            >
+                                Deselect visible
+                            </Button>
+                        </div>
+                        <div className="grid max-h-[min(42vh,22rem)] min-h-0 gap-1 overflow-y-auto rounded-md border border-border bg-background p-1">
+                            {visibleEntries.map((entry) => {
+                                const selected = selectedEntryIds.has(entry.id);
+                                return (
+                                    <button
+                                        aria-checked={selected}
+                                        aria-label={`Select ${entry.name}`}
+                                        className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-sm border px-2 py-2 text-left text-sm ${selected
+                                            ? "border-primary bg-accent text-accent-strong"
+                                            : "border-transparent hover:border-border hover:bg-muted"
+                                            }`}
+                                        disabled={saving}
+                                        key={entry.id}
+                                        role="checkbox"
+                                        type="button"
+                                        onClick={(event) => handleSelectEntry(entry.id, event)}
+                                    >
+                                        <input
+                                            aria-hidden
+                                            checked={selected}
+                                            className="w-auto"
+                                            readOnly
+                                            tabIndex={-1}
+                                            type="checkbox"
+                                        />
+                                        <span className="min-w-0 truncate">
+                                            #{entryPositionById.get(entry.id)} {entry.name}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                            {visibleEntries.length === 0 ? (
+                                <p className="m-0 px-2 py-3 text-sm text-muted-foreground">No matching entries.</p>
+                            ) : null}
+                        </div>
+                    </section>
                 </div>
 
                 <AlertDialogFooter>
                     <Button disabled={saving} variant="outline" type="button" onClick={onCancel}>
                         Cancel
                     </Button>
-                    <Button disabled={submitDisabled} type="button" onClick={onSubmit}>
+                    <Button
+                        disabled={submitDisabled}
+                        type="button"
+                        onClick={() => onSubmit(Array.from(selectedEntryIds))}
+                    >
                         {saving ? "Copying..." : "Copy List"}
                     </Button>
                 </AlertDialogFooter>

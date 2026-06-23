@@ -150,13 +150,13 @@ test.describe("Queue", () => {
         await page.getByPlaceholder("New entry").fill("Solaris");
         await page.getByPlaceholder("New entry").press("Enter");
         await expect(page.getByText(/Queued Solaris for ranking on/)).toBeVisible();
-        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
         await expect(page.getByText("0 ready")).toBeVisible();
         await expect(page.getByRole("button", { name: "Rank Queue" })).toBeDisabled();
 
         // --- Queue state survives a reload (server-side persistence). ---
         await gotoApp(page);
-        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
         await expect(queueItem(page, "Solaris")).toBeVisible();
 
         // --- Rename the queued entry from its context menu. ---
@@ -189,7 +189,7 @@ test.describe("Queue", () => {
 
         await page.getByPlaceholder("New entry").fill("Klute");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText("2 queued")).toBeVisible();
+        await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
         await expect(page.getByText("2 ready")).toBeVisible();
         await expect(page.getByRole("button", { name: "Rank Queue" })).toBeEnabled();
 
@@ -197,7 +197,7 @@ test.describe("Queue", () => {
         await queueItem(page, "Klute").click({ button: "right" });
         await page.getByRole("menuitem", { name: "Remove" }).click();
         await expect(page.getByText("Removed Klute from the queue.")).toBeVisible();
-        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
 
         await page.getByRole("button", { name: "Undo" }).click();
         await expect(page.getByText("Restored Klute to the queue.")).toBeVisible();
@@ -267,6 +267,53 @@ test.describe("Queue", () => {
         await expect(page.getByText("#1 Klute")).toBeVisible();
     });
 
+    test("queue selection mode batch removes and restores queued entries", async ({
+        context,
+        page
+    }) => {
+        await seedUsers([{
+            email: "queue-batch@e2e.test",
+            name: "Queue Batch",
+            queueSettings: {
+                enabled: true,
+                delayDays: 0,
+                promptForMissingImages: false
+            },
+            categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
+            queuedEntries: [
+                { categoryName: "Movies", name: "Memento", availableAt: 1, createdAt: 1 },
+                { categoryName: "Movies", name: "Klute", availableAt: 2, createdAt: 2 },
+                { categoryName: "Movies", name: "Solaris", availableAt: 3, createdAt: 3 },
+                { categoryName: "Movies", name: "Stalker", availableAt: 4, createdAt: 4 }
+            ]
+        }]);
+        await signInViaApi(context, "queue-batch@e2e.test");
+        await gotoApp(page);
+        await expect(page.getByText("4 queued", { exact: true })).toBeVisible();
+
+        await page.getByRole("button", { name: "Select", exact: true }).click();
+        await expect(page.getByText("0 selected")).toBeVisible();
+        await page.getByRole("checkbox", { name: "Select queued Memento" }).click();
+        await page.getByRole("checkbox", { name: "Select queued Solaris" }).click({ modifiers: ["Shift"] });
+        await expect(page.getByText("3 selected")).toBeVisible();
+        await page.getByRole("checkbox", { name: "Select queued Klute" }).click({ modifiers: ["Meta"] });
+        await expect(page.getByText("2 selected")).toBeVisible();
+
+        await page.getByRole("button", { name: "Remove selected" }).click();
+        await expect(page.getByText("Removed 2 queued entries.")).toBeVisible();
+        await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
+        await expect(queueItem(page, "Memento")).toBeHidden();
+        await expect(queueItem(page, "Solaris")).toBeHidden();
+        await expect(queueItem(page, "Klute")).toBeVisible();
+        await expect(queueItem(page, "Stalker")).toBeVisible();
+
+        await page.getByRole("button", { name: "Undo" }).click();
+        await expect(page.getByText("Restored 2 queued entries.")).toBeVisible();
+        await expect(page.getByText("4 queued", { exact: true })).toBeVisible();
+        await expect(queueItem(page, "Memento")).toBeVisible();
+        await expect(queueItem(page, "Solaris")).toBeVisible();
+    });
+
     test("active add ranking actions can queue new adds or remove queued adds", async ({
         context,
         page
@@ -296,22 +343,26 @@ test.describe("Queue", () => {
         await page.getByPlaceholder("New entry").fill("Blade Runner");
         await page.getByPlaceholder("New entry").press("Enter");
         await expect(page.getByText(/Queued Blade Runner for ranking on/)).toBeVisible();
-        await expect(page.getByText("2 queued")).toBeVisible();
+        await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible();
 
         await queueItem(page, "Blade Runner").click({ button: "right" });
         await expect(page.getByRole("menuitem", { name: "Rank Now" })).toBeDisabled();
         await expect(page.getByRole("menuitem", { name: "Remove" })).toBeEnabled();
-        await page.getByRole("menuitem", { name: "Remove" }).click();
-        await expect(page.getByText("Removed Blade Runner from the queue.")).toBeVisible();
-        await expect(page.getByText("1 queued")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Select", exact: true }).click();
+        await page.getByRole("checkbox", { name: "Select queued Blade Runner" }).click();
+        await expect(page.getByText("1 selected")).toBeVisible();
+        await page.getByRole("button", { name: "Remove selected" }).click();
+        await expect(page.getByText("Removed 1 queued entry.")).toBeVisible();
+        await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible();
 
         await page.getByRole("button", { name: "Ranking actions" }).click();
         await page.getByRole("menuitem", { name: "Cancel Add and Add to Queue" }).click();
         await expect(page.getByText("Cancelled adding Zeta and moved it to the queue.")).toBeVisible();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeHidden();
-        await expect(page.getByText("2 queued")).toBeVisible();
+        await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
         await expect(queueItem(page, "Zeta")).toBeVisible();
         await expect(queueItem(page, "Blade Runner")).toBeHidden();
 
@@ -322,7 +373,7 @@ test.describe("Queue", () => {
         await page.getByRole("button", { name: "Ranking actions" }).click();
         await page.getByRole("menuitem", { name: "Cancel Add and Delete from Queue" }).click();
         await expect(page.getByText("Cancelled ranking Solaris and removed it from the queue.")).toBeVisible();
-        await expect(page.getByText("1 queued")).toBeVisible();
+        await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
         await expect(queueItem(page, "Zeta")).toBeVisible();
         await expect(queueItem(page, "Solaris")).toBeHidden();
     });

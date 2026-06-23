@@ -61,8 +61,15 @@ test.describe("Profiles", () => {
         context: aliceContext,
         browser
     }) => {
+        const aliceWithLongMovieList = {
+            ...ALICE,
+            categories: [
+                { name: "Movies", entries: ["Arrival", "Dune", "Heat", "Solaris"] },
+                { name: "Books", entries: ["Hyperion"] }
+            ]
+        };
         await seedUsers([
-            ALICE,
+            aliceWithLongMovieList,
             { ...BOB, categories: [{ name: "Movies", entries: [] }] }
         ]);
         await signInViaApi(aliceContext, ALICE.email);
@@ -85,16 +92,29 @@ test.describe("Profiles", () => {
         await expect(dialog.getByText("You already have a category with that name.")).toBeVisible();
         await expect(dialog.getByRole("button", { name: "Copy List" })).toBeDisabled();
         await dialog.getByLabel("Category name").fill("Alice Movies");
+        await expect(dialog.getByText("4 of 4 selected")).toBeVisible();
+        await dialog.getByRole("button", { name: "Deselect visible" }).click();
+        await expect(dialog.getByText("0 of 4 selected")).toBeVisible();
+        await dialog.getByRole("checkbox", { name: "Select Arrival" }).click();
+        await dialog.getByRole("checkbox", { name: "Select Heat" }).click({ modifiers: ["Shift"] });
+        await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
+        await dialog.getByRole("checkbox", { name: "Select Dune" }).click({ modifiers: ["Meta"] });
+        await expect(dialog.getByText("2 of 4 selected")).toBeVisible();
+        await dialog.getByLabel("Search entries to copy").fill("Sol");
+        await dialog.getByRole("button", { name: "Select visible", exact: true }).click();
+        await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
         await dialog.getByRole("button", { name: "Copy List" }).click();
-        await expect(bobPage.getByText("Copied 2 entries to Alice Movies.")).toBeVisible({ timeout: 15_000 });
+        await expect(bobPage.getByText("Copied 3 entries to Alice Movies.")).toBeVisible({ timeout: 15_000 });
 
         await gotoApp(bobPage);
         await bobPage.getByRole("button", { name: "Alice Movies" }).click();
         await expect(bobPage.getByRole("heading", { name: "Alice Movies" })).toBeVisible();
-        await expect(bobPage.getByText("2 queued")).toBeVisible();
-        await expect(bobPage.getByText("2 ready")).toBeVisible();
+        await expect(bobPage.getByText("3 queued")).toBeVisible();
+        await expect(bobPage.getByText("3 ready")).toBeVisible();
         await expect(bobPage.getByText("Arrival").first()).toBeVisible();
-        await expect(bobPage.getByText("Dune").first()).toBeVisible();
+        await expect(bobPage.getByText("Heat").first()).toBeVisible();
+        await expect(bobPage.getByText("Solaris").first()).toBeVisible();
+        await expect(bobPage.getByText("Dune").first()).toBeHidden();
 
         await bobContext.close();
     });
@@ -135,17 +155,13 @@ test.describe("Profiles", () => {
         await dialog.getByLabel("Existing category").click();
         await bobPage.getByRole("option", { name: "Movies" }).click();
         await dialog.getByRole("button", { name: "Copy List" }).click();
-        await expect(bobPage.getByText("That entry already exists in this category")).toBeVisible();
-
-        await dialog.getByLabel("Existing category").click();
-        await bobPage.getByRole("option", { name: "Watchlist" }).click();
-        await dialog.getByRole("button", { name: "Copy List" }).click();
-        await expect(bobPage.getByText("Copied 2 entries to Watchlist.")).toBeVisible({ timeout: 15_000 });
+        await expect(bobPage.getByText("Copied 1 entry to Movies. Skipped 1 duplicate.")).toBeVisible({ timeout: 15_000 });
 
         await gotoApp(bobPage);
-        await bobPage.getByRole("button", { name: "Watchlist" }).click();
-        await expect(bobPage.getByRole("heading", { name: "Watchlist" })).toBeVisible();
-        await expect(bobPage.getByText("2 queued")).toBeVisible();
+        await bobPage.getByRole("button", { name: "Movies" }).click();
+        await expect(bobPage.getByRole("heading", { name: "Movies" })).toBeVisible();
+        await expect(bobPage.getByText("#1 Arrival")).toBeVisible();
+        await expect(bobPage.getByText("1 queued")).toBeVisible();
         await expect(bobPage.getByText("Arrival").first()).toBeVisible();
         await expect(bobPage.getByText("Dune").first()).toBeVisible();
 

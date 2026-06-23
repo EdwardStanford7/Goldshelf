@@ -18,7 +18,6 @@ import type {
 import { all, assertOwned, first, getDb, newId, now, runBatches } from "@/server/lib/db";
 import { authMiddleware, optionalAuthMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow, getOwnedCategory } from "./stores/categoryStore";
-import { assertEntryNameAvailable } from "./engine/entryCreation";
 import {
     MIN_PROFILE_SLUG_LENGTH,
     ensureUserProfile,
@@ -30,6 +29,7 @@ import {
 import { type EntryRow, mapEntry } from "./stores/entryStore";
 
 const MAX_USER_NAME_LENGTH = 80;
+const COPY_PUBLIC_CATEGORY_IMAGE_CONCURRENCY = 4;
 
 
 
@@ -77,8 +77,8 @@ interface CopyableCategoryRow {
 }
 
 type CopyPublicCategoryInput =
-    | { sourceCategoryId: string; mode: "new"; categoryName: string }
-    | { sourceCategoryId: string; mode: "merge"; targetCategoryId: string };
+    | { sourceCategoryId: string; mode: "new"; categoryName: string; sourceEntryIds?: string[] }
+    | { sourceCategoryId: string; mode: "merge"; targetCategoryId: string; sourceEntryIds?: string[] };
 
 export const updateUserProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
@@ -492,6 +492,8 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
         let targetCategoryId: string;
         let targetCategoryName: string;
         let categoryInsertStatement: D1PreparedStatement | null = null;
+        let entriesToQueue = selectedOrderedEntries(orderedEntries, data.sourceEntryIds);
+        let skippedCount = 0;
 
         if (data.mode === "new") {
             const cleanName = data.categoryName.trim();
@@ -527,61 +529,71 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             targetCategoryId = targetCategory.id;
             targetCategoryName = targetCategory.name;
 
-            for (const entry of orderedEntries) {
-                await assertEntryNameAvailable(userId, targetCategoryId, entry.name);
-            }
+            const existingRows = await all<{ name: string }>(
+                db
+                    .prepare(
+                        `SELECT name
+                 FROM entries
+                 WHERE user_id = ? AND category_id = ? AND status != 'deleted'
+                 UNION
+                 SELECT name
+                 FROM entry_queue
+                 WHERE user_id = ? AND category_id = ? AND status = 'queued'`
+                    )
+                    .bind(userId, targetCategoryId, userId, targetCategoryId)
+            );
+            const unavailableNames = new Set(existingRows.map((row) => row.name));
+            entriesToQueue = orderedEntries.filter((entry) => {
+                if (unavailableNames.has(entry.name)) {
+                    skippedCount += 1;
+                    return false;
+                }
+
+                unavailableNames.add(entry.name);
+                return true;
+            });
         } else {
             throw new Error("Copy mode is required");
         }
 
         const copiedImageKeys: string[] = [];
-        const queuedEntries: Array<{ id: string; name: string; imageKey: string | null; createdAt: number }> = [];
-
-        for (const [index, entry] of orderedEntries.entries()) {
-            const queueId = newId("queue");
-            const copiedImageKey = await copyEntryImageToQueueImage(
-                userId,
-                queueId,
-                entry.imageKey,
-                createdAt + index
-            );
-            if (hasStoredImage(copiedImageKey)) {
-                copiedImageKeys.push(copiedImageKey);
-            }
-
-            queuedEntries.push({
-                id: queueId,
-                name: entry.name,
-                imageKey: copiedImageKey,
-                createdAt: createdAt + index
-            });
-        }
-
-        const statements: D1PreparedStatement[] = [
-            ...(categoryInsertStatement ? [categoryInsertStatement] : []),
-            ...queuedEntries.map((entry) =>
-                db
-                    .prepare(
-                        `INSERT INTO entry_queue (
-                   id, user_id, category_id, name, image_key, available_at,
-                   status, created_at, updated_at
-                 )
-                 VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
-                    )
-                    .bind(
-                        entry.id,
-                        userId,
-                        targetCategoryId,
-                        entry.name,
-                        entry.imageKey,
-                        entry.createdAt,
-                        entry.createdAt,
-                        entry.createdAt
-                    )
-            )
-        ];
+        let queuedEntries: QueuedPublicCategoryCopyEntry[] = [];
 
         try {
+            queuedEntries = await copyPublicCategoryEntriesToQueueImages(
+                userId,
+                entriesToQueue.map((entry, index) => ({
+                    entry,
+                    queueId: newId("queue"),
+                    createdAt: createdAt + index
+                })),
+                copiedImageKeys
+            );
+
+            const statements: D1PreparedStatement[] = [
+                ...(categoryInsertStatement ? [categoryInsertStatement] : []),
+                ...queuedEntries.map((entry) =>
+                    db
+                        .prepare(
+                            `INSERT INTO entry_queue (
+                       id, user_id, category_id, name, image_key, available_at,
+                       status, created_at, updated_at
+                     )
+                     VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+                        )
+                        .bind(
+                            entry.id,
+                            userId,
+                            targetCategoryId,
+                            entry.name,
+                            entry.imageKey,
+                            entry.createdAt,
+                            entry.createdAt,
+                            entry.createdAt
+                        )
+                )
+            ];
+
             await runBatches(db, statements);
         } catch (error) {
             await Promise.all(copiedImageKeys.map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined)));
@@ -593,13 +605,100 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             categoryName: targetCategoryName,
             copiedCount: queuedEntries.length,
             mode: data.mode,
-            ownerName: sourceCategory.owner_name
+            ownerName: sourceCategory.owner_name,
+            skippedCount
         };
     });
 
+interface QueuedPublicCategoryCopyEntry {
+    id: string;
+    name: string;
+    imageKey: string | null;
+    createdAt: number;
+}
 
+interface PublicCategoryImageCopyInput {
+    entry: Entry;
+    queueId: string;
+    createdAt: number;
+}
 
+function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[] | undefined) {
+    if (sourceEntryIds === undefined) {
+        return orderedEntries;
+    }
 
+    if (!Array.isArray(sourceEntryIds)) {
+        throw new Error("Selected entries are required");
+    }
+
+    const selectedEntryIds = Array.from(new Set(sourceEntryIds.map((id) => id.trim()).filter(Boolean)));
+    if (selectedEntryIds.length === 0) {
+        throw new Error("Select at least one entry to copy");
+    }
+
+    const selectedEntryIdSet = new Set(selectedEntryIds);
+    const entries = orderedEntries.filter((entry) => selectedEntryIdSet.has(entry.id));
+    if (entries.length !== selectedEntryIdSet.size) {
+        throw new Error("Selected entries are no longer available");
+    }
+
+    return entries;
+}
+
+async function copyPublicCategoryEntriesToQueueImages(
+    userId: string,
+    inputs: PublicCategoryImageCopyInput[],
+    copiedImageKeys: string[]
+) {
+    if (inputs.length === 0) {
+        return [];
+    }
+
+    const queuedEntries: Array<QueuedPublicCategoryCopyEntry | undefined> = new Array(inputs.length);
+    let nextIndex = 0;
+    const workerCount = Math.min(COPY_PUBLIC_CATEGORY_IMAGE_CONCURRENCY, inputs.length);
+
+    const workerResults = await Promise.allSettled(Array.from({ length: workerCount }, async () => {
+        while (nextIndex < inputs.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            const input = inputs[index];
+            if (!input) {
+                continue;
+            }
+
+            const copiedImageKey = await copyEntryImageToQueueImage(
+                userId,
+                input.queueId,
+                input.entry.imageKey,
+                input.createdAt
+            );
+            if (hasStoredImage(copiedImageKey)) {
+                copiedImageKeys.push(copiedImageKey);
+            }
+
+            queuedEntries[index] = {
+                id: input.queueId,
+                name: input.entry.name,
+                imageKey: copiedImageKey,
+                createdAt: input.createdAt
+            };
+        }
+    }));
+    const failedWorker = workerResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failedWorker) {
+        throw failedWorker.reason;
+    }
+
+    return queuedEntries.map((entry) => {
+        if (!entry) {
+            throw new Error("Failed to prepare copied entry");
+        }
+
+        return entry;
+    });
+}
 
 async function assertProfileSlugAvailable(userId: string, profileSlug: string) {
     const existing = await first<{ user_id: string }>(

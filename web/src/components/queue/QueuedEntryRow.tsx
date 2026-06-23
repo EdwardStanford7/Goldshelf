@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { Image as ImageIcon, MoreVertical, Pencil, Swords, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,9 @@ export function QueuedEntryRow({
     onPickImage,
     onRename,
     rankLocked,
+    selected = false,
+    selectionMode = false,
+    onSelect,
     onStart
 }: {
     entry: QueuedEntry;
@@ -38,6 +41,9 @@ export function QueuedEntryRow({
     onPickImage: (entry: QueuedEntry) => void;
     onRename: (entry: QueuedEntry, name: string) => Promise<void>;
     rankLocked: boolean;
+    selected?: boolean;
+    selectionMode?: boolean;
+    onSelect?: (event: MouseEvent<HTMLDivElement>) => void;
     onStart: (entry: QueuedEntry) => Promise<void>;
 }) {
     const [isRenaming, setIsRenaming] = useState(false);
@@ -69,12 +75,28 @@ export function QueuedEntryRow({
 
     return (
         <ContextMenu>
-            <ContextMenuTrigger asChild disabled={metadataDisabled}>
+            <ContextMenuTrigger asChild disabled={metadataDisabled || selectionMode}>
                 <div
-                    className={`relative grid min-w-0 grid-cols-[54px_minmax(0,1fr)] items-start gap-[0.55rem] rounded-sm border p-[0.65rem] max-[720px]:pr-10 ${isReady ? "border-primary bg-ready-panel" : "border-border bg-muted"
+                    className={`relative grid min-w-0 ${selectionMode ? "grid-cols-[auto_54px_minmax(0,1fr)] cursor-pointer" : "grid-cols-[54px_minmax(0,1fr)]"} items-start gap-[0.55rem] rounded-sm border p-[0.65rem] max-[720px]:pr-10 ${selected
+                        ? "border-primary bg-accent"
+                        : isReady ? "border-primary bg-ready-panel" : "border-border bg-muted"
                         }`}
+                    onClick={(event) => {
+                        if (selectionMode) {
+                            onSelect?.(event);
+                        }
+                    }}
                 >
-                    {!isRenaming ? (
+                    {selectionMode ? (
+                        <input
+                            aria-label={`Select queued ${entry.name}`}
+                            checked={selected}
+                            className="mt-1 w-auto"
+                            readOnly
+                            type="checkbox"
+                        />
+                    ) : null}
+                    {!isRenaming && !selectionMode ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
@@ -138,7 +160,7 @@ export function QueuedEntryRow({
                             <div
                                 title="Double-click to rename · Right-click for actions"
                                 onDoubleClick={() => {
-                                    if (!metadataDisabled) {
+                                    if (!metadataDisabled && !selectionMode) {
                                         startRename();
                                     }
                                 }}

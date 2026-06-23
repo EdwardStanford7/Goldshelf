@@ -90,8 +90,10 @@ import { importLegacyEntries } from "@/server/legacyImport";
 import {
     createQueuedEntry,
     deleteQueuedEntry,
+    deleteQueuedEntries,
     renameQueuedEntry,
     restoreQueuedEntry,
+    restoreQueuedEntries,
     startQueuedEntryRanking,
     updateQueueSettings
 } from "@/server/queue";
@@ -114,8 +116,8 @@ interface ReversibleAction {
     undoToastMessage: string;
     redoToastMessage: string;
     variant?: ToastVariant;
-    undo: () => Promise<void>;
-    redo: () => Promise<void>;
+    undo: () => Promise<string | void>;
+    redo: () => Promise<string | void>;
 }
 
 const UNDO_STACK_LIMIT = 20;
@@ -715,12 +717,12 @@ export function Dashboard({
         setMessage(null);
 
         try {
-            await action.undo();
+            const message = await action.undo();
             undoStackRef.current = nextStack;
             redoStackRef.current = addReversibleAction(redoStackRef.current, action);
             pushToast({
                 actionLabel: "Redo",
-                message: action.undoToastMessage,
+                message: message ?? action.undoToastMessage,
                 onAction: () => performRedo(action.id),
                 variant: "success"
             });
@@ -745,12 +747,12 @@ export function Dashboard({
         setMessage(null);
 
         try {
-            await action.redo();
+            const message = await action.redo();
             redoStackRef.current = nextStack;
             undoStackRef.current = addReversibleAction(undoStackRef.current, action);
             pushToast({
                 actionLabel: "Undo",
-                message: action.redoToastMessage,
+                message: message ?? action.redoToastMessage,
                 onAction: () => performUndo(action.id),
                 variant: action.variant
             });
@@ -1198,6 +1200,35 @@ export function Dashboard({
         await refreshAfterMutation();
     }
 
+    function queuedEntriesLabel(count: number) {
+        return `${count} queued ${count === 1 ? "entry" : "entries"}`;
+    }
+
+    function restoredQueuedEntriesMessage(restoredCount: number, skippedCount: number) {
+        const restoredMessage = restoredCount > 0
+            ? `Restored ${queuedEntriesLabel(restoredCount)}.`
+            : "No queued entries were restored.";
+        return skippedCount > 0
+            ? `${restoredMessage} Skipped ${skippedCount} ${skippedCount === 1 ? "entry" : "entries"} that could not be restored.`
+            : restoredMessage;
+    }
+
+    async function removeQueuedEntriesForHistory(entries: QueuedEntry[]) {
+        const result = await deleteQueuedEntries({
+            data: { queuedEntryIds: entries.map((entry) => entry.id) }
+        });
+        await refreshAfterMutation();
+        return result;
+    }
+
+    async function restoreQueuedEntriesForHistory(entries: QueuedEntry[]) {
+        const result = await restoreQueuedEntries({
+            data: { queuedEntryIds: entries.map((entry) => entry.id) }
+        });
+        await refreshAfterMutation();
+        return result;
+    }
+
     async function handleDeleteQueuedEntry(entry: QueuedEntry) {
         startBusy("Removing queued entry...");
         setMessage(null);
@@ -1209,6 +1240,36 @@ export function Dashboard({
                 redoToastMessage: `Removed ${entry.name} from the queue.`,
                 undo: () => restoreQueuedEntryForHistory(entry),
                 undoToastMessage: `Restored ${entry.name} to the queue.`,
+                variant: "danger"
+            });
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
+    async function handleDeleteQueuedEntries(entries: QueuedEntry[]) {
+        if (entries.length === 0) {
+            return;
+        }
+
+        startBusy(`Removing ${queuedEntriesLabel(entries.length)}...`);
+        setMessage(null);
+
+        try {
+            const result = await removeQueuedEntriesForHistory(entries);
+            registerReversibleAction({
+                redo: async () => {
+                    const redoResult = await removeQueuedEntriesForHistory(entries);
+                    return `Removed ${queuedEntriesLabel(redoResult.deletedCount)}.`;
+                },
+                redoToastMessage: `Removed ${queuedEntriesLabel(result.deletedCount)}.`,
+                undo: async () => {
+                    const undoResult = await restoreQueuedEntriesForHistory(entries);
+                    return restoredQueuedEntriesMessage(undoResult.restoredCount, undoResult.skippedCount);
+                },
+                undoToastMessage: `Restored ${queuedEntriesLabel(entries.length)}.`,
                 variant: "danger"
             });
         } catch (error) {
@@ -1874,6 +1935,7 @@ export function Dashboard({
                 queueRankMode={queueRankMode}
                 queuedEntries={dashboard.queuedEntries}
                 onDelete={handleDeleteQueuedEntry}
+                onDeleteSelected={handleDeleteQueuedEntries}
                 onPickImage={(entry) => setImagePickerTarget({
                     kind: "queue",
                     item: entry,
