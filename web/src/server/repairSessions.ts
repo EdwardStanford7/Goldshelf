@@ -5,7 +5,8 @@ import {
     getRepairSessionView,
     skipRepairMatchup as skipRepairMatchupForUser,
     startRepairSession as startRepairSessionForUser,
-    submitRepairWinner as submitRepairWinnerForUser
+    submitRepairWinner as submitRepairWinnerForUser,
+    undoRepairMatch as undoRepairMatchForUser
 } from "@/server/engine/repairSessions";
 
 export const startRepairSession = createServerFn({ method: "POST" })
@@ -32,3 +33,8 @@ export const cancelRepairSession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
     .inputValidator((data: { sessionId: string }) => data)
     .handler(({ context, data }) => cancelRepairSessionForUser(context.user.id, data));
+
+export const undoRepairMatch = createServerFn({ method: "POST" })
+    .middleware([authMiddleware])
+    .inputValidator((data: { sessionId: string }) => data)
+    .handler(({ context, data }) => undoRepairMatchForUser(context.user.id, data));

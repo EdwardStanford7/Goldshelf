@@ -97,8 +97,8 @@ import {
     startQueuedEntryRanking,
     updateQueueSettings
 } from "@/server/queue";
-import { cancelBinarySession } from "@/server/rankingSessions";
-import { cancelRepairSession, startRepairSession } from "@/server/repairSessions";
+import { cancelBinarySession, undoBinaryMatch } from "@/server/rankingSessions";
+import { cancelRepairSession, startRepairSession, undoRepairMatch } from "@/server/repairSessions";
 import { applyThemeMode, readInitialThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import type {
     BinarySessionView,
@@ -1524,6 +1524,29 @@ export function Dashboard({
         }
     }
 
+    async function handleUndoCompletedBinaryMatch(sessionId: string) {
+        if (busyRef.current) {
+            return;
+        }
+
+        startBusy("Undoing match...");
+        setMessage(null);
+        setQueueRankingActive(false);
+
+        try {
+            const result = await undoBinaryMatch({ data: { sessionId } });
+            closedBinarySessionIdsRef.current.delete(sessionId);
+            setActiveBinarySessionId(result.sessionId);
+            setSelectedCategoryId(result.categoryId);
+            await refreshAfterMutation();
+            scrollMainToTop();
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
     async function handleStartRepair(categoryId: string | null, closeDrawer = false) {
         setQueueRankingActive(false);
         startBusy(categoryId ? "Starting category repair..." : "Starting repair mode...");
@@ -1557,6 +1580,28 @@ export function Dashboard({
             setActiveRepairSessionId(null);
             setMessage("Repair mode exited.");
             await refreshAfterMutation();
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
+    async function handleUndoCompletedRepairMatch(sessionId: string) {
+        if (busyRef.current) {
+            return;
+        }
+
+        startBusy("Undoing match...");
+        setMessage(null);
+
+        try {
+            const result = await undoRepairMatch({ data: { sessionId } });
+            closedRepairSessionIdsRef.current.delete(sessionId);
+            setActiveRepairSessionId(result.sessionId);
+            setSelectedCategoryId(result.categoryId);
+            await refreshAfterMutation();
+            scrollMainToTop();
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -2136,15 +2181,23 @@ export function Dashboard({
                             sessionId={activeSessionId}
                             onCancel={handleCancelBinarySession}
                             onComplete={async (sessionId) => {
+                                const wasQueueRanking = queueRankModeRef.current;
                                 markBinarySessionClosed(sessionId);
                                 if (activeSessionIdRef.current === sessionId) {
                                     setActiveBinarySessionId(null);
                                 }
                                 const nextDashboard = await refreshAfterMutation();
-                                if (queueRankModeRef.current && nextDashboard) {
+                                if (wasQueueRanking && nextDashboard) {
                                     await startNextQueuedRank(nextDashboard.queuedEntries);
-                                } else if (queueRankModeRef.current) {
+                                } else if (wasQueueRanking) {
                                     setQueueRankingActive(false);
+                                } else {
+                                    pushToast({
+                                        actionLabel: "Undo",
+                                        message: "Ranking completed.",
+                                        onAction: () => handleUndoCompletedBinaryMatch(sessionId),
+                                        variant: "success"
+                                    });
                                 }
                             }}
                             onUnavailable={handleMissingBinarySession}
@@ -2170,7 +2223,12 @@ export function Dashboard({
                                     setActiveRepairSessionId(null);
                                 }
                                 await refreshAfterMutation();
-                                setMessage("Repair mode finished.");
+                                pushToast({
+                                    actionLabel: "Undo",
+                                    message: "Repair mode finished.",
+                                    onAction: () => handleUndoCompletedRepairMatch(sessionId),
+                                    variant: "success"
+                                });
                             }}
                             onUnavailable={handleMissingRepairSession}
                             onNeedImage={requestImageForMatch}

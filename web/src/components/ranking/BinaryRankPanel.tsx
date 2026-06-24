@@ -1,6 +1,6 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, ListPlus, MoreVertical, Pencil, SkipForward, Trash2, XCircle } from "lucide-react";
+import { Image as ImageIcon, ListPlus, MoreVertical, Pencil, SkipForward, Trash2, Undo2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     ContextMenu,
@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage, isNoImageKey, shouldPromptForImage } from "@/lib/images";
-import { getBinarySession, submitBinaryWinner } from "@/server/rankingSessions";
+import { getBinarySession, submitBinaryWinner, undoBinaryMatch } from "@/server/rankingSessions";
 import type { BinarySessionView, CancelBinarySessionMode, CategoryWithEntries, Entry } from "@/lib/types";
 
 const RANK_PANEL_CLASS =
@@ -241,6 +241,26 @@ export function BinaryRankPanel({
         }
     }
 
+    async function undoLastMatch() {
+        setError(null);
+        setSubmitting(true);
+        try {
+            await undoBinaryMatch({ data: { sessionId } });
+            await reloadCurrentSession();
+        } catch (undoError) {
+            if (!redirectIfUnauthorized(undoError)) {
+                if (isUnavailableSessionError(undoError)) {
+                    await onUnavailable(sessionId);
+                    return;
+                }
+
+                setError(errorMessage(undoError));
+            }
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
     async function reloadCurrentSession() {
         const nextSession = await getBinarySession({ data: { sessionId } });
         if (!nextSession) {
@@ -315,6 +335,18 @@ export function BinaryRankPanel({
                     </p>
                 </div>
                 <div className="flex flex-wrap justify-end gap-2">
+                    {session.canUndoLastMatch ? (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={submitting}
+                            type="button"
+                            onClick={() => void undoLastMatch()}
+                        >
+                            <Undo2 data-icon="inline-start" />
+                            <span>Undo Last Match</span>
+                        </Button>
+                    ) : null}
                     {sessionActionState.canSkipQueuedAdd ? (
                         <Button
                             size="sm"

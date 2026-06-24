@@ -160,6 +160,7 @@ export interface BinarySessionView {
     upperBound: number;
     comparisonCount: number;
     queuedEntryId: string | null;
+    canUndoLastMatch: boolean;
 }
 
 export interface RepairSessionView {
@@ -174,6 +175,7 @@ export interface RepairSessionView {
     opponent: Entry;
     comparisonCount: number;
     repairCount: number;
+    canUndoLastMatch: boolean;
 }
 
 export interface ParsedImportEntry {

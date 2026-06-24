@@ -332,6 +332,38 @@ test.describe("Ranking", () => {
         await expect(localRepairPanel).toBeHidden({ timeout: 15_000 });
     });
 
+    test("repair mode can undo the previous match", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([{
+            email: "repair-undo@e2e.test",
+            name: "Repair Undo",
+            queueSettings: {
+                enabled: false,
+                delayDays: 0,
+                promptForMissingImages: false
+            },
+            categories: [{ name: "Movies", entries: ["Alpha", "Beta", "Gamma", "Delta"] }]
+        }]);
+        await signInViaApi(context, "repair-undo@e2e.test");
+        await gotoApp(page);
+
+        await page.locator("[data-category-id]").filter({ hasText: "Movies" }).click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Repair This Category" }).click();
+        const panel = page.locator("section", { hasText: "Repair Check · Movies" }).first();
+        await expect(panel).toBeVisible({ timeout: 15_000 });
+        await expect(panel.getByText(/0 comparisons · 0 repairs/)).toBeVisible();
+
+        await panel.locator("article > button.block").nth(1).click();
+        await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeVisible({ timeout: 15_000 });
+        await page.getByRole("button", { name: "Undo Last Match" }).click();
+
+        await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
+        await expect(panel.getByText(/0 comparisons · 0 repairs/)).toBeVisible();
+        await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
+    });
+
     test("create a category and add the first entry", async ({ page, context }) => {
         await seedUsers([{ email: RANKER.email, name: RANKER.name }]);
         await signInViaApi(context, RANKER.email);
@@ -364,6 +396,31 @@ test.describe("Ranking", () => {
         await expect(page.getByText("#1 Zeta")).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("#2 Alpha")).toBeVisible();
         await expect(page.getByText("#4 Gamma")).toBeVisible();
+    });
+
+    test("ranking can undo the previous in-progress match", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([RANKER]);
+        await signInViaApi(context, RANKER.email);
+        await gotoApp(page);
+
+        await page.getByPlaceholder("New entry").fill("Zeta");
+        await page.getByPlaceholder("New entry").press("Enter");
+        const panel = page.locator("section", { hasText: ACTIVE_RANKING_LABEL }).first();
+        await expect(panel).toBeVisible({ timeout: 15_000 });
+        await expect(panel.getByText(/0 comparisons/)).toBeVisible();
+        await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
+
+        await page.getByRole("button", { name: "Zeta" }).click();
+        await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeVisible({ timeout: 15_000 });
+        await expect(panel.getByText(/1 comparisons/)).toBeVisible();
+
+        await page.getByRole("button", { name: "Undo Last Match" }).click();
+        await expect(panel.getByText(/0 comparisons/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
+        await expect(page.getByRole("button", { name: "Zeta" })).toBeVisible();
     });
 
     test("ranking panel labels placement checks before local repair", async ({

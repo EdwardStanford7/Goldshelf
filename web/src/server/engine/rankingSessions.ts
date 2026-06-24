@@ -56,6 +56,7 @@ export interface SessionRow {
     secondary_entry_id?: string | null;
     secondary_original_rank_position?: number | null;
     operation_state?: string | null;
+    undo_state?: string | null;
 }
 
 interface ActiveBinarySessionRow {

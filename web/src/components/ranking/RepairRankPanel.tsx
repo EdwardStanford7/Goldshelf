@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, MoreVertical, Pencil } from "lucide-react";
+import { Image as ImageIcon, MoreVertical, Pencil, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     ContextMenu,
@@ -22,7 +22,8 @@ import type { CategoryWithEntries, Entry, RepairSessionView } from "@/lib/types"
 import {
     getRepairSession,
     skipRepairMatchup,
-    submitRepairWinner
+    submitRepairWinner,
+    undoRepairMatch
 } from "@/server/repairSessions";
 
 const REPAIR_PANEL_CLASS =
@@ -228,6 +229,26 @@ export function RepairRankPanel({
         }
     }
 
+    async function undoLastMatch() {
+        setError(null);
+        setSubmitting(true);
+        try {
+            await undoRepairMatch({ data: { sessionId } });
+            await reloadCurrentSession();
+        } catch (undoError) {
+            if (!redirectIfUnauthorized(undoError)) {
+                if (isUnavailableRepairError(undoError)) {
+                    await onUnavailable(sessionId);
+                    return;
+                }
+
+                setError(errorMessage(undoError));
+            }
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
     async function reloadCurrentSession() {
         const nextSession = await getRepairSession({ data: { sessionId } });
         if (!nextSession) {
@@ -292,6 +313,18 @@ export function RepairRankPanel({
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    {session.canUndoLastMatch ? (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={submitting}
+                            type="button"
+                            onClick={() => void undoLastMatch()}
+                        >
+                            <Undo2 data-icon="inline-start" />
+                            <span>Undo Last Match</span>
+                        </Button>
+                    ) : null}
                     {session.phase === "checking" ? (
                         <Button
                             size="sm"

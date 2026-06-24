@@ -23,6 +23,10 @@ import {
     listActiveEntries,
     rewriteCategoryOrderStatements
 } from "@/server/stores/entryStore";
+import {
+    restoreRepairMatchUndoState,
+    saveRepairMatchUndoState
+} from "./sessionUndo";
 
 interface RepairSessionRow {
     id: string;
@@ -38,6 +42,7 @@ interface RepairSessionRow {
     comparison_count: number;
     repair_count: number;
     operation_state: string | null;
+    undo_state: string | null;
     created_at: number;
     updated_at: number;
     completed_at: number | null;
@@ -132,7 +137,8 @@ export async function getRepairSessionView(
         subject,
         opponent,
         comparisonCount: row.comparison_count,
-        repairCount: row.repair_count
+        repairCount: row.repair_count,
+        canUndoLastMatch: Boolean(row.undo_state)
     };
 }
 
@@ -214,6 +220,8 @@ export async function submitRepairWinner(
         throw new Error("Winner must be one of the active repair entries");
     }
 
+    await saveRepairMatchUndoState(db, userId, row);
+
     const loserId = input.winnerId === currentComparison.entryAId
         ? currentComparison.entryBId
         : currentComparison.entryAId;
@@ -271,6 +279,32 @@ export async function cancelRepairSession(
         )
         .bind(now(), now(), row.id, userId)
         .run();
+}
+
+export async function undoRepairMatch(
+    userId: string,
+    input: { sessionId: string }
+) {
+    const db = getDb();
+    const row = await first<{ id: string; status: string; undo_state: string | null }>(
+        db
+            .prepare(
+                `SELECT id, status, undo_state
+                 FROM repair_sessions
+                 WHERE id = ? AND user_id = ? AND status IN ('active', 'completed')`
+            )
+            .bind(input.sessionId, userId)
+    );
+    assertOwned(row, "Repair session");
+    if (!row.undo_state) {
+        throw new Error("No repair match is available to undo");
+    }
+
+    if (row.status === "completed") {
+        await assertNoOtherActiveFlowForRepairUndo(db, userId, row.id);
+    }
+
+    return restoreRepairMatchUndoState(db, userId, row.undo_state);
 }
 
 export async function repairInterruptedRepairState(userId: string) {
@@ -690,12 +724,46 @@ async function getActiveRepairRow(userId: string, sessionId: string) {
                 `SELECT id, user_id, scope, scope_category_id, active_category_id,
                         entry_a_id, entry_b_id, status, phase, strategy,
                         comparison_count, repair_count, operation_state,
-                        created_at, updated_at, completed_at
+                        undo_state, created_at, updated_at, completed_at
                  FROM repair_sessions
                  WHERE id = ? AND user_id = ? AND status = 'active'`
             )
             .bind(sessionId, userId)
     );
+}
+
+async function assertNoOtherActiveFlowForRepairUndo(
+    db: D1Database,
+    userId: string,
+    sessionId: string
+) {
+    const activeRepair = await first<{ id: string }>(
+        db
+            .prepare(
+                `SELECT id
+                 FROM repair_sessions
+                 WHERE user_id = ? AND status = 'active' AND id != ?
+                 LIMIT 1`
+            )
+            .bind(userId, sessionId)
+    );
+    if (activeRepair) {
+        throw new Error("Finish repair mode before undoing that match");
+    }
+
+    const activeRanking = await first<{ id: string }>(
+        db
+            .prepare(
+                `SELECT id
+                 FROM ranking_sessions
+                 WHERE user_id = ? AND status = 'active'
+                 LIMIT 1`
+            )
+            .bind(userId)
+    );
+    if (activeRanking) {
+        throw new Error("Finish the active ranking before undoing that match");
+    }
 }
 
 async function assertNoActiveBinaryRankingSession(userId: string) {

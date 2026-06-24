@@ -39,6 +39,10 @@ import {
     serializeRankingOperationState
 } from "./engine/rankingState";
 import {
+    restoreRankingMatchUndoState,
+    saveRankingMatchUndoState
+} from "./engine/sessionUndo";
+import {
     type SessionRow,
     repairInterruptedRankingState,
     startBubbleRepairOrCommit,
@@ -63,7 +67,7 @@ export const getBinarySession = createServerFn({ method: "GET" })
                     upper_bound, pivot_entry_id, pivot_rank_position, from_category_id,
                     final_rank_position, created_at, comparison_count, phase,
                     operation_kind, secondary_entry_id, secondary_original_rank_position,
-                    operation_state
+                    operation_state, undo_state
              FROM ranking_sessions
              WHERE id = ? AND user_id = ? AND status = 'active'`
                 )
@@ -105,7 +109,8 @@ export const getBinarySession = createServerFn({ method: "GET" })
             lowerBound: session.lower_bound,
             upperBound: session.upper_bound,
             comparisonCount: session.comparison_count ?? 0,
-            queuedEntryId: operationState.queuedEntryId
+            queuedEntryId: operationState.queuedEntryId,
+            canUndoLastMatch: Boolean(session.undo_state)
         };
     });
 
@@ -280,7 +285,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
                     upper_bound, pivot_entry_id, pivot_rank_position, from_category_id,
                     final_rank_position, original_rank_position, created_at, phase,
                     operation_kind, secondary_entry_id, secondary_original_rank_position,
-                    operation_state
+                    operation_state, comparison_count, undo_state
              FROM ranking_sessions
              WHERE id = ? AND user_id = ? AND status = 'active'`
                 )
@@ -296,6 +301,18 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
         const operationState = parseRankingOperationState(session.operation_state);
 
         if (session.phase === "bubble_repair") {
+            const currentComparison = operationState.bubbleRepair?.currentComparison;
+            if (
+                !currentComparison ||
+                (
+                    input.winnerId !== currentComparison.entryAId &&
+                    input.winnerId !== currentComparison.entryBId
+                )
+            ) {
+                throw new Error("Winner must be one of the active matchup entries");
+            }
+
+            await saveRankingMatchUndoState(db, userId, session);
             return submitBubbleRepairWinner(db, userId, session, input.winnerId, createdAt);
         }
 
@@ -305,6 +322,8 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
         ) {
             throw new Error("Winner must be one of the active matchup entries");
         }
+
+        await saveRankingMatchUndoState(db, userId, session);
 
         if (session.phase === "repair_up" || session.phase === "repair_down") {
             return submitLocalRepairWinner(db, userId, session, input.winnerId, createdAt);
@@ -359,3 +378,64 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
             true
         );
     });
+
+export const undoBinaryMatch = createServerFn({ method: "POST" })
+    .middleware([authMiddleware])
+    .inputValidator((data: { sessionId: string }) => data)
+    .handler(async ({ context, data }) => {
+        const userId = context.user.id;
+        const db = getDb();
+        const session = await first<{ id: string; status: string; undo_state: string | null }>(
+            db
+                .prepare(
+                    `SELECT id, status, undo_state
+                     FROM ranking_sessions
+                     WHERE id = ? AND user_id = ? AND status IN ('active', 'completed')`
+                )
+                .bind(data.sessionId, userId)
+        );
+        assertOwned(session, "Ranking session");
+        if (!session.undo_state) {
+            throw new Error("No ranking match is available to undo");
+        }
+
+        if (session.status === "completed") {
+            await assertNoOtherActiveFlowForUndo(db, userId, session.id);
+        }
+
+        return restoreRankingMatchUndoState(db, userId, session.undo_state);
+    });
+
+async function assertNoOtherActiveFlowForUndo(
+    db: D1Database,
+    userId: string,
+    sessionId: string
+) {
+    const activeRanking = await first<{ id: string }>(
+        db
+            .prepare(
+                `SELECT id
+                 FROM ranking_sessions
+                 WHERE user_id = ? AND status = 'active' AND id != ?
+                 LIMIT 1`
+            )
+            .bind(userId, sessionId)
+    );
+    if (activeRanking) {
+        throw new Error("Finish the active ranking before undoing that match");
+    }
+
+    const activeRepair = await first<{ id: string }>(
+        db
+            .prepare(
+                `SELECT id
+                 FROM repair_sessions
+                 WHERE user_id = ? AND status = 'active'
+                 LIMIT 1`
+            )
+            .bind(userId)
+    );
+    if (activeRepair) {
+        throw new Error("Finish repair mode before undoing that match");
+    }
+}
