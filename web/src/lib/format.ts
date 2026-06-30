@@ -36,11 +36,12 @@ export function formatDateTime(timestamp: number, timeZone?: "UTC") {
 export const REQUEST_LOAD_FAILURE_MESSAGE = "Could not reach the server. Please try again.";
 
 export function isRequestLoadFailure(error: unknown) {
-    if (!(error instanceof TypeError)) {
+    if (!(error instanceof Error)) {
         return false;
     }
 
-    return /^(load failed|failed to fetch|networkerror|fetch failed)$/i.test(error.message.trim());
+    return /^(load failed|failed to fetch|networkerror|fetch failed|network request failed|the internet connection appears to be offline\.?|the network connection was lost\.?|request timed out)$/i
+        .test(error.message.trim());
 }
 
 export function isTransientRequestFailure(error: unknown) {

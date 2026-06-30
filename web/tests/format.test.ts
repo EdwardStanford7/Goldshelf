@@ -11,9 +11,13 @@ describe("transient request failures", () => {
         "Load failed",
         "Failed to fetch",
         "NetworkError",
-        "fetch failed"
+        "fetch failed",
+        "Network request failed",
+        "The Internet connection appears to be offline.",
+        "The network connection was lost.",
+        "request timed out"
     ])("classifies %s as transient", (message) => {
-        const error = new TypeError(message);
+        const error = new Error(message);
 
         expect(isTransientRequestFailure(error)).toBe(true);
         expect(errorMessage(error)).toBe(REQUEST_LOAD_FAILURE_MESSAGE);

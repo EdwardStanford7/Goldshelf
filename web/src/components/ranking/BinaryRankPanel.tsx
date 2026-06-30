@@ -29,6 +29,7 @@ const STATUS_CLASS =
     "rounded-sm border-l-4 border-l-gold bg-status px-3 py-[0.6rem] whitespace-pre-line";
 const POSTER_CLASS =
     "aspect-[4/5] bg-[image:linear-gradient(135deg,var(--poster-start),var(--poster-end))] text-center text-muted-foreground";
+const TRANSIENT_SESSION_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 
 export function BinaryRankPanel({
     sessionId,
@@ -56,8 +57,57 @@ export function BinaryRankPanel({
     const [submitting, setSubmitting] = useState(false);
     const [renamingEntryId, setRenamingEntryId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
+    const [recovering, setRecovering] = useState(false);
     const pendingTransientLoadRef = useRef(false);
+    const transientLoadRetryTimerRef = useRef<number | null>(null);
+    const transientLoadRetryAttemptRef = useRef(0);
     const [transientLoadRetryToken, setTransientLoadRetryToken] = useState(0);
+
+    function clearTransientLoadRetryTimer() {
+        if (transientLoadRetryTimerRef.current !== null) {
+            window.clearTimeout(transientLoadRetryTimerRef.current);
+            transientLoadRetryTimerRef.current = null;
+        }
+    }
+
+    function resetTransientLoadRetry() {
+        pendingTransientLoadRef.current = false;
+        setRecovering(false);
+        transientLoadRetryAttemptRef.current = 0;
+        clearTransientLoadRetryTimer();
+    }
+
+    function retryPendingTransientLoad() {
+        if (!pendingTransientLoadRef.current) {
+            return;
+        }
+
+        clearTransientLoadRetryTimer();
+        pendingTransientLoadRef.current = false;
+        setTransientLoadRetryToken((token) => token + 1);
+    }
+
+    function scheduleTransientLoadRetry() {
+        pendingTransientLoadRef.current = true;
+        setRecovering(true);
+        if (transientLoadRetryTimerRef.current !== null) {
+            return;
+        }
+
+        const retryIndex = Math.min(
+            transientLoadRetryAttemptRef.current,
+            TRANSIENT_SESSION_RETRY_DELAYS_MS.length - 1
+        );
+        const retryDelay = TRANSIENT_SESSION_RETRY_DELAYS_MS[retryIndex];
+        transientLoadRetryAttemptRef.current = Math.min(
+            transientLoadRetryAttemptRef.current + 1,
+            TRANSIENT_SESSION_RETRY_DELAYS_MS.length - 1
+        );
+        transientLoadRetryTimerRef.current = window.setTimeout(() => {
+            transientLoadRetryTimerRef.current = null;
+            retryPendingTransientLoad();
+        }, retryDelay);
+    }
 
     useEffect(() => {
         let isCurrent = true;
@@ -74,7 +124,7 @@ export function BinaryRankPanel({
                     return;
                 }
 
-                pendingTransientLoadRef.current = false;
+                resetTransientLoadRetry();
                 setSession(nextSession);
             })
             .catch((loadError) => {
@@ -86,12 +136,12 @@ export function BinaryRankPanel({
                     }
 
                     if (isTransientRequestFailure(loadError)) {
-                        pendingTransientLoadRef.current = true;
+                        scheduleTransientLoadRetry();
                         setError(null);
                         return;
                     }
 
-                    pendingTransientLoadRef.current = false;
+                    resetTransientLoadRetry();
                     setError(errorMessage(loadError));
                 }
             });
@@ -102,15 +152,6 @@ export function BinaryRankPanel({
     }, [sessionId, imageRefreshVersion, transientLoadRetryToken]);
 
     useEffect(() => {
-        function retryPendingTransientLoad() {
-            if (!pendingTransientLoadRef.current) {
-                return;
-            }
-
-            pendingTransientLoadRef.current = false;
-            setTransientLoadRetryToken((token) => token + 1);
-        }
-
         function handleVisibilityChange() {
             if (document.visibilityState === "visible") {
                 retryPendingTransientLoad();
@@ -127,6 +168,7 @@ export function BinaryRankPanel({
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
         return () => {
+            clearTransientLoadRetryTimer();
             window.removeEventListener("focus", retryPendingTransientLoad);
             window.removeEventListener("online", retryPendingTransientLoad);
             window.removeEventListener("pageshow", handlePageShow);
@@ -174,9 +216,8 @@ export function BinaryRankPanel({
                 return;
             }
 
-            const nextSession = await getBinarySession({ data: { sessionId } });
+            const nextSession = await reloadCurrentSession({ retryTransient: true });
             if (!nextSession) {
-                await onUnavailable(sessionId);
                 return;
             }
 
@@ -185,6 +226,12 @@ export function BinaryRankPanel({
             if (!redirectIfUnauthorized(submitError)) {
                 if (isUnavailableSessionError(submitError)) {
                     await onUnavailable(sessionId);
+                    return;
+                }
+
+                if (isTransientRequestFailure(submitError)) {
+                    scheduleTransientLoadRetry();
+                    setError(null);
                     return;
                 }
 
@@ -234,6 +281,12 @@ export function BinaryRankPanel({
                     return;
                 }
 
+                if (isTransientRequestFailure(skipError)) {
+                    scheduleTransientLoadRetry();
+                    setError(null);
+                    return;
+                }
+
                 setError(errorMessage(skipError));
             }
         } finally {
@@ -246,7 +299,7 @@ export function BinaryRankPanel({
         setSubmitting(true);
         try {
             await undoBinaryMatch({ data: { sessionId } });
-            await reloadCurrentSession();
+            await reloadCurrentSession({ retryTransient: true });
         } catch (undoError) {
             if (!redirectIfUnauthorized(undoError)) {
                 if (isUnavailableSessionError(undoError)) {
@@ -261,15 +314,26 @@ export function BinaryRankPanel({
         }
     }
 
-    async function reloadCurrentSession() {
-        const nextSession = await getBinarySession({ data: { sessionId } });
-        if (!nextSession) {
-            await onUnavailable(sessionId);
-            return null;
-        }
+    async function reloadCurrentSession(options: { retryTransient?: boolean } = {}) {
+        try {
+            const nextSession = await getBinarySession({ data: { sessionId } });
+            if (!nextSession) {
+                await onUnavailable(sessionId);
+                return null;
+            }
 
-        setSession(nextSession);
-        return nextSession;
+            resetTransientLoadRetry();
+            setSession(nextSession);
+            return nextSession;
+        } catch (loadError) {
+            if (options.retryTransient && isTransientRequestFailure(loadError)) {
+                scheduleTransientLoadRetry();
+                setError(null);
+                return null;
+            }
+
+            throw loadError;
+        }
     }
 
     async function submitRename(entry: Entry) {
@@ -284,7 +348,7 @@ export function BinaryRankPanel({
         setSubmitting(true);
         try {
             await onRename(entry, cleanName);
-            await reloadCurrentSession();
+            await reloadCurrentSession({ retryTransient: true });
             setRenamingEntryId(null);
         } catch (renameError) {
             if (!redirectIfUnauthorized(renameError)) {
@@ -313,6 +377,8 @@ export function BinaryRankPanel({
         return <section className={RANK_PANEL_CLASS}>Loading ranking...</section>;
     }
 
+    const controlsDisabled = submitting || recovering;
+
     const sessionActionState = {
         canCancelAdd: session.source === "new_entry",
         canQueueNewAdd: session.source === "new_entry" && !session.queuedEntryId,
@@ -339,7 +405,7 @@ export function BinaryRankPanel({
                         <Button
                             size="sm"
                             variant="outline"
-                            disabled={submitting}
+                            disabled={controlsDisabled}
                             type="button"
                             onClick={() => void undoLastMatch()}
                         >
@@ -351,7 +417,7 @@ export function BinaryRankPanel({
                         <Button
                             size="sm"
                             variant="outline"
-                            disabled={submitting}
+                            disabled={controlsDisabled}
                             type="button"
                             onClick={() => void skipQueuedRank()}
                         >
@@ -364,7 +430,7 @@ export function BinaryRankPanel({
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     aria-label="Ranking actions"
-                                    disabled={submitting}
+                                    disabled={controlsDisabled}
                                     size="icon-sm"
                                     type="button"
                                     variant="outline"
@@ -374,7 +440,7 @@ export function BinaryRankPanel({
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-60">
                                 <SessionDropdownActions
-                                    disabled={submitting}
+                                    disabled={controlsDisabled}
                                     state={sessionActionState}
                                     onCancel={() => void cancelRanking()}
                                     onDeleteQueued={() => void cancelRanking("delete_queue")}
@@ -386,10 +452,13 @@ export function BinaryRankPanel({
                     ) : null}
                 </div>
             </div>
+            {recovering ? (
+                <div className={STATUS_CLASS}>Reconnecting...</div>
+            ) : null}
             <div className="grid min-w-0 grid-cols-2 gap-4 max-[720px]:grid-cols-1">
                 {[session.subject, session.opponent].map((entry) => (
                     <MatchCard
-                        disabled={submitting}
+                        disabled={controlsDisabled}
                         entry={entry}
                         isRenaming={renamingEntryId === entry.id}
                         key={entry.id}
@@ -410,7 +479,7 @@ export function BinaryRankPanel({
                             <>
                                 <ContextMenuSeparator />
                                 <SessionContextActions
-                                    disabled={submitting}
+                                    disabled={controlsDisabled}
                                     state={sessionActionState}
                                     onCancel={() => void cancelRanking()}
                                     onDeleteQueued={() => void cancelRanking("delete_queue")}
@@ -423,7 +492,7 @@ export function BinaryRankPanel({
                             <>
                                 <DropdownMenuSeparator />
                                 <SessionDropdownActions
-                                    disabled={submitting}
+                                    disabled={controlsDisabled}
                                     state={sessionActionState}
                                     onCancel={() => void cancelRanking()}
                                     onDeleteQueued={() => void cancelRanking("delete_queue")}

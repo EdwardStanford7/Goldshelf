@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 import { BASE_URL } from "./e2e/constants";
 
 const isRemote = Boolean(process.env.PLAYWRIGHT_BASE_URL);
+const reuseLocalServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1";
 
 export default defineConfig({
     testDir: "./e2e",
@@ -26,7 +27,7 @@ export default defineConfig({
         webServer: {
             command: "pnpm test:dev",
             url: `${BASE_URL}/api/test/health`,
-            reuseExistingServer: true,
+            reuseExistingServer: reuseLocalServer,
             timeout: 120_000
         }
     })

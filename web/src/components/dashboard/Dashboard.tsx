@@ -66,7 +66,6 @@ import {
     isTransientRequestFailure
 } from "@/lib/format";
 import { shouldPromptForImage } from "@/lib/images";
-import { parseLegacyWorkbook, writeExportWorkbook } from "@/lib/importExport";
 import type { ImagePickerTarget } from "@/lib/posterImage";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
 import { orderEntries } from "@/lib/ranking";
@@ -121,7 +120,8 @@ interface ReversibleAction {
 }
 
 const UNDO_STACK_LIMIT = 20;
-const RESUME_REFRESH_AFTER_MS = 5 * 60 * 1000;
+const IDLE_RESUME_REFRESH_AFTER_MS = 15_000;
+const ACTIVE_FLOW_RESUME_REFRESH_AFTER_MS = 2_000;
 const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 const SIDEBAR_PANEL_CLASS =
     "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
@@ -548,10 +548,13 @@ export function Dashboard({
     }
 
     async function refreshAfterResume(force = false) {
+        const resumeThrottleMs = activeSessionIdRef.current || activeRepairSessionIdRef.current
+            ? ACTIVE_FLOW_RESUME_REFRESH_AFTER_MS
+            : IDLE_RESUME_REFRESH_AFTER_MS;
         if (
             busyRef.current ||
             resumeRefreshInFlightRef.current ||
-            (!force && Date.now() - lastResumeRefreshAtRef.current < RESUME_REFRESH_AFTER_MS)
+            (!force && Date.now() - lastResumeRefreshAtRef.current < resumeThrottleMs)
         ) {
             return;
         }
@@ -1691,6 +1694,7 @@ export function Dashboard({
             const buffer = await file.arrayBuffer();
             setBusyLabel("Parsing spreadsheet...");
             await nextPaint();
+            const { parseLegacyWorkbook } = await import("@/lib/importExport");
             const parsed = await parseLegacyWorkbook(buffer, addedAt);
             const parsedCount = parsed.entries.length + parsed.queuedEntries.length;
             if (parsedCount === 0) {
@@ -1734,6 +1738,7 @@ export function Dashboard({
                 });
                 return;
             }
+            const { writeExportWorkbook } = await import("@/lib/importExport");
             const blob = await writeExportWorkbook(dashboard.categories, dashboard.queuedEntries);
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement("a");
