@@ -150,7 +150,7 @@ export function AccountMenu({
                     <DropdownMenuSubTrigger>
                         <Settings />Settings
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-64">
+                    <DropdownMenuSubContent className="w-64 max-[720px]:w-[min(14rem,calc(100vw-1rem))] max-[720px]:data-[side=right]:-translate-x-[calc(100%-0.5rem)]">
                         <DropdownMenuCheckboxItem
                             checked={promptForMissingImages}
                             disabled={busy || quickSaving}
@@ -193,7 +193,7 @@ export function AccountMenu({
                     <DropdownMenuSubTrigger>
                         <Palette />Appearance
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
+                    <DropdownMenuSubContent className="w-56 max-[720px]:w-[min(14rem,calc(100vw-1rem))] max-[720px]:data-[side=right]:-translate-x-[calc(100%-0.5rem)]">
                         <DropdownMenuRadioGroup
                             value={themeMode}
                             onValueChange={(value) => onThemeChange(value as ThemeMode)}

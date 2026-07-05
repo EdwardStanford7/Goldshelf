@@ -61,6 +61,19 @@ test.describe("Ranking", () => {
         expect(avatarBox?.y).toBeLessThan(80);
         expect(headerBox?.height).toBeLessThan(140);
 
+        const accountMenu = await openAccountMenu(page);
+        await accountMenu.getByRole("menuitem", { name: "Settings", exact: true }).hover();
+        const settingsSubmenu = page
+            .locator("[data-slot='dropdown-menu-sub-content'][data-state='open']", { hasText: "Randomize ready queue" })
+            .first();
+        await expect(settingsSubmenu).toBeVisible();
+        const submenuBox = await settingsSubmenu.boundingBox();
+        expect(submenuBox?.x).toBeGreaterThanOrEqual(0);
+        expect((submenuBox?.x ?? 0) + (submenuBox?.width ?? 0)).toBeLessThanOrEqual(390);
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+        await expect(settingsSubmenu).toBeHidden();
+
         const firstCardWidth = await page.locator("[data-entry-id]").first().evaluate((element) => element.getBoundingClientRect().width);
         await mobileHeader.getByLabel("Search entries").fill("Dune");
         await expect(page.getByText("#1 Dune")).toBeVisible();
