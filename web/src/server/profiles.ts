@@ -167,6 +167,7 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
             })),
             following: await listFollowProfiles(userId, "following"),
             followers: await listFollowProfiles(userId, "followers"),
+            suggestedProfiles: await listSuggestedProfiles(userId),
             incomingFollowRequests: await listFollowProfiles(userId, "incoming_requests"),
             outgoingFollowRequests: await listFollowProfiles(userId, "outgoing_requests")
         };
@@ -935,6 +936,74 @@ async function listFollowProfiles(
             )
             .bind(userId)
     );
+    return rows.map(mapFollowProfile);
+}
+
+async function listSuggestedProfiles(userId: string): Promise<FollowProfileSummary[]> {
+    const rows = await all<FollowProfileRow>(
+        getDb()
+            .prepare(
+                `WITH direct_connections AS (
+                   SELECT followed_user_id AS user_id
+                   FROM user_follows
+                   WHERE follower_user_id = ? AND status = 'accepted'
+                   UNION
+                   SELECT follower_user_id AS user_id
+                   FROM user_follows
+                   WHERE followed_user_id = ? AND status = 'accepted'
+                 ),
+                 candidate_links AS (
+                   SELECT user_follows.followed_user_id AS user_id,
+                          user_follows.follower_user_id AS through_user_id
+                   FROM user_follows
+                   INNER JOIN direct_connections
+                     ON direct_connections.user_id = user_follows.follower_user_id
+                   WHERE user_follows.status = 'accepted'
+                   UNION ALL
+                   SELECT user_follows.follower_user_id AS user_id,
+                          user_follows.followed_user_id AS through_user_id
+                   FROM user_follows
+                   INNER JOIN direct_connections
+                     ON direct_connections.user_id = user_follows.followed_user_id
+                   WHERE user_follows.status = 'accepted'
+                 ),
+                 candidates AS (
+                   SELECT candidate_links.user_id,
+                          COUNT(DISTINCT candidate_links.through_user_id) AS shared_connection_count
+                   FROM candidate_links
+                   WHERE candidate_links.user_id != ?
+                     AND candidate_links.user_id NOT IN (SELECT user_id FROM direct_connections)
+                   GROUP BY candidate_links.user_id
+                 )
+                 SELECT "user".id AS user_id, "user".name, "user".image,
+                        user_profiles.slug, user_profiles.is_public,
+                        COUNT(categories.id) AS public_category_count,
+                        'none' AS relation_state,
+                        0 AS created_at,
+                        NULL AS accepted_at
+                 FROM candidates
+                 INNER JOIN user_profiles ON user_profiles.user_id = candidates.user_id
+                 INNER JOIN "user" ON "user".id = candidates.user_id
+                 LEFT JOIN categories ON categories.user_id = candidates.user_id
+                   AND categories.is_public = 1
+                 WHERE user_profiles.is_public = 1
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM user_follows direct
+                     WHERE (direct.follower_user_id = ? AND direct.followed_user_id = candidates.user_id)
+                        OR (direct.follower_user_id = candidates.user_id AND direct.followed_user_id = ?)
+                   )
+                 GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
+                          user_profiles.is_public, candidates.shared_connection_count
+                 ORDER BY candidates.shared_connection_count DESC,
+                          COUNT(categories.id) DESC,
+                          lower("user".name) ASC,
+                          user_profiles.slug ASC
+                 LIMIT 8`
+            )
+            .bind(userId, userId, userId, userId, userId)
+    );
+
     return rows.map(mapFollowProfile);
 }
 

@@ -1496,21 +1496,33 @@ export function Dashboard({
         session: BinarySessionView,
         mode: CancelBinarySessionMode = "default"
     ) {
+        const shouldContinueQueueRanking = queueRankModeRef.current &&
+            Boolean(session.queuedEntryId) &&
+            mode === "delete_queue";
         startBusy(
             session.source === "rerank_entry"
                 ? "Cancelling rerank..."
                 : "Cancelling add..."
         );
         setMessage(null);
-        setQueueRankingActive(false);
+        if (!shouldContinueQueueRanking) {
+            setQueueRankingActive(false);
+        }
 
         try {
             await cancelBinarySession({ data: { sessionId: session.id, mode } });
             markBinarySessionClosed(session.id);
             setActiveBinarySessionId(null);
-            setMessage(cancelBinarySessionMessage(session, mode));
-            await refreshAfterMutation();
+            const nextDashboard = await refreshAfterMutation();
+            if (shouldContinueQueueRanking && nextDashboard) {
+                await startNextQueuedRank(nextDashboard.queuedEntries);
+            } else {
+                setMessage(cancelBinarySessionMessage(session, mode));
+            }
         } catch (error) {
+            if (shouldContinueQueueRanking) {
+                setQueueRankingActive(false);
+            }
             setErrorMessage(error);
         } finally {
             finishBusy();

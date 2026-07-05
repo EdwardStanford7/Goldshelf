@@ -173,11 +173,11 @@ export async function signInViaApi(
  * also makes it safe for chained sessions (queue ranking) where the next
  * session's matchups use different entry names.
  *
- * Entry names in a test must not be substrings of each other (role-name
- * matching is substring-based).
+ * Entry names in a test must not be prefixes of each other.
  */
 export async function winMatchups(page: Page, winnerName: string, maxRounds = 15) {
-    const choice = page.getByRole("button", { name: winnerName });
+    const escapedWinnerName = winnerName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const choice = page.getByRole("button", { name: new RegExp(`^${escapedWinnerName}\\b`) });
 
     for (let round = 0; round < maxRounds; round += 1) {
         try {

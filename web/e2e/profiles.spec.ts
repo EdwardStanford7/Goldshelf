@@ -17,6 +17,12 @@ const BOB = {
     categories: [] as Array<{ name: string; entries: string[] }>
 };
 
+const CHARLIE = {
+    email: "charlie@e2e.test",
+    name: "Charlie Day",
+    categories: [{ name: "Music", entries: ["Kind of Blue"] }]
+};
+
 /** Reads the @handle shown in the profile settings header. */
 async function readOwnSlug(page: Page) {
     const handleText = await page.getByText(/^@[a-z0-9-]+$/).first().textContent();
@@ -204,15 +210,25 @@ test.describe("Profiles", () => {
         browser
     }) => {
         test.setTimeout(120_000);
-        await seedUsers([ALICE, BOB]);
+        await seedUsers([ALICE, BOB, CHARLIE]);
         await signInViaApi(aliceContext, ALICE.email);
 
         const bobContext = await browser.newContext();
         const bobPage = await bobContext.newPage();
         await signInViaApi(bobContext, BOB.email);
 
+        const charlieContext = await browser.newContext();
+        const charliePage = await charlieContext.newPage();
+        await signInViaApi(charlieContext, CHARLIE.email);
+
         const anonContext = await browser.newContext();
         const anonPage = await anonContext.newPage();
+
+        await gotoApp(charliePage, "/profile");
+        const charlieSlug = await readOwnSlug(charliePage);
+        await charliePage.getByLabel("Public profile").check();
+        await charliePage.getByRole("button", { name: "Save Profile" }).click();
+        await expect(charliePage.getByText("Profile saved.")).toBeVisible();
 
         // --- Alice publishes her profile and her Movies ranking. ---
         await gotoApp(alicePage, "/profile");
@@ -262,6 +278,13 @@ test.describe("Profiles", () => {
         await bobPage.getByRole("button", { name: "Follow", exact: true }).click();
         await expect(bobPage.getByText("Profile followed.")).toBeVisible();
         await expect(bobPage.getByRole("button", { name: "Following" })).toBeVisible();
+        await gotoApp(bobPage, `/u/${charlieSlug}`);
+        await bobPage.getByRole("button", { name: "Follow", exact: true }).click();
+        await expect(bobPage.getByText("Profile followed.")).toBeVisible();
+
+        await gotoApp(alicePage, "/profile");
+        await expect(alicePage.getByText("People You May Know")).toBeVisible();
+        await expect(alicePage.getByText("Charlie Day")).toBeVisible();
 
         // --- Alice requests to follow Bob's private profile by exact handle. ---
         await gotoApp(alicePage, "/profile");

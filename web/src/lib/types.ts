@@ -98,6 +98,7 @@ export interface ProfileSettingsData {
     categories: ProfileSettingsCategory[];
     following: FollowProfileSummary[];
     followers: FollowProfileSummary[];
+    suggestedProfiles: FollowProfileSummary[];
     incomingFollowRequests: FollowProfileSummary[];
     outgoingFollowRequests: FollowProfileSummary[];
 }

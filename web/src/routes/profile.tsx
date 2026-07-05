@@ -296,7 +296,7 @@ function ProfileRoute() {
         }
     }
 
-    async function handleFollowSearchResult(profile: FollowSearchResult) {
+    async function handleFollowProfile(profile: FollowProfileSummary) {
         setSavingFollowId(profile.userId);
         setStatus(null);
         setError(null);
@@ -386,7 +386,7 @@ function ProfileRoute() {
         setStatus("Profile link copied.");
     }
 
-    function renderSearchAction(profile: FollowSearchResult) {
+    function renderSearchAction(profile: FollowProfileSummary) {
         const disabled = savingFollowId === profile.userId
             || profile.relationState === "requested"
             || profile.relationState === "following"
@@ -410,7 +410,7 @@ function ProfileRoute() {
                 variant="outline"
                 disabled={disabled}
                 type="button"
-                onClick={() => void handleFollowSearchResult(profile)}
+                onClick={() => void handleFollowProfile(profile)}
             >
                 {savingFollowId === profile.userId
                     ? "Saving..."
@@ -441,7 +441,7 @@ function ProfileRoute() {
                 size="sm"
                 disabled={savingFollowId === profile.userId}
                 type="button"
-                onClick={() => void handleFollowSearchResult({ ...profile, matchKind: "public_profile" })}
+                onClick={() => void handleFollowProfile(profile)}
             >
                 {savingFollowId === profile.userId ? "Saving..." : "Follow"}
             </Button>
@@ -585,6 +585,23 @@ function ProfileRoute() {
                             <p className="m-0 text-muted-foreground">
                                 Public profiles appear as you type. Exact private handles can still receive follow requests.
                             </p>
+                        )}
+                    </Card>
+
+                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="text-lg font-semibold">People You May Know</h2>
+                            <span className="text-muted-foreground">{settings.suggestedProfiles.length}</span>
+                        </div>
+                        {settings.suggestedProfiles.length > 0 ? (
+                            <FollowProfileList
+                                profiles={settings.suggestedProfiles}
+                                renderActions={renderSearchAction}
+                            />
+                        ) : (
+                            <EmptyState compact icon={Users} title="No Suggestions">
+                                Public profiles connected through people you follow will appear here.
+                            </EmptyState>
                         )}
                     </Card>
 

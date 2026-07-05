@@ -422,7 +422,7 @@ export function BinaryRankPanel({
                             onClick={() => void skipQueuedRank()}
                         >
                             <SkipForward data-icon="inline-start" />
-                            <span>Skip Queued Rank</span>
+                            <span>Skip {session.subject.name}</span>
                         </Button>
                     ) : null}
                     {hasSessionActionMenu(sessionActionState) ? (
@@ -441,6 +441,7 @@ export function BinaryRankPanel({
                             <DropdownMenuContent align="end" className="w-60">
                                 <SessionDropdownActions
                                     disabled={controlsDisabled}
+                                    entryName={session.subject.name}
                                     state={sessionActionState}
                                     onCancel={() => void cancelRanking()}
                                     onDeleteQueued={() => void cancelRanking("delete_queue")}
@@ -480,6 +481,7 @@ export function BinaryRankPanel({
                                 <ContextMenuSeparator />
                                 <SessionContextActions
                                     disabled={controlsDisabled}
+                                    entryName={session.subject.name}
                                     state={sessionActionState}
                                     onCancel={() => void cancelRanking()}
                                     onDeleteQueued={() => void cancelRanking("delete_queue")}
@@ -493,6 +495,7 @@ export function BinaryRankPanel({
                                 <DropdownMenuSeparator />
                                 <SessionDropdownActions
                                     disabled={controlsDisabled}
+                                    entryName={session.subject.name}
                                     state={sessionActionState}
                                     onCancel={() => void cancelRanking()}
                                     onDeleteQueued={() => void cancelRanking("delete_queue")}
@@ -526,6 +529,7 @@ interface SessionActionState {
 
 function SessionDropdownActions({
     disabled,
+    entryName,
     state,
     onCancel,
     onDeleteQueued,
@@ -533,6 +537,7 @@ function SessionDropdownActions({
     onSkipQueued
 }: {
     disabled: boolean;
+    entryName: string;
     state: SessionActionState;
     onCancel: () => void;
     onDeleteQueued: () => void;
@@ -543,22 +548,22 @@ function SessionDropdownActions({
         <>
             {state.canSkipQueuedAdd ? (
                 <DropdownMenuItem disabled={disabled} onSelect={onSkipQueued}>
-                    <SkipForward />Skip Queued Rank
+                    <SkipForward />Skip {entryName}
                 </DropdownMenuItem>
             ) : null}
             {state.canQueueNewAdd ? (
                 <DropdownMenuItem disabled={disabled} onSelect={onQueueNew}>
-                    <ListPlus />Cancel Add and Add to Queue
+                    <ListPlus />Cancel and Queue {entryName}
                 </DropdownMenuItem>
             ) : null}
             {state.canDeleteQueuedAdd ? (
                 <DropdownMenuItem disabled={disabled} variant="destructive" onSelect={onDeleteQueued}>
-                    <Trash2 />Cancel Add and Delete from Queue
+                    <Trash2 />Delete {entryName} from Queue
                 </DropdownMenuItem>
             ) : null}
             {state.canCancelAdd || state.canCancelRerank ? (
                 <DropdownMenuItem disabled={disabled} onSelect={onCancel}>
-                    <XCircle />{state.canCancelRerank ? "Cancel Rerank" : "Cancel Add"}
+                    <XCircle />{state.canCancelRerank ? `Cancel Reranking ${entryName}` : `Cancel Adding ${entryName}`}
                 </DropdownMenuItem>
             ) : null}
         </>
@@ -567,6 +572,7 @@ function SessionDropdownActions({
 
 function SessionContextActions({
     disabled,
+    entryName,
     state,
     onCancel,
     onDeleteQueued,
@@ -574,6 +580,7 @@ function SessionContextActions({
     onSkipQueued
 }: {
     disabled: boolean;
+    entryName: string;
     state: SessionActionState;
     onCancel: () => void;
     onDeleteQueued: () => void;
@@ -584,22 +591,22 @@ function SessionContextActions({
         <>
             {state.canSkipQueuedAdd ? (
                 <ContextMenuItem disabled={disabled} onSelect={onSkipQueued}>
-                    <SkipForward />Skip Queued Rank
+                    <SkipForward />Skip {entryName}
                 </ContextMenuItem>
             ) : null}
             {state.canQueueNewAdd ? (
                 <ContextMenuItem disabled={disabled} onSelect={onQueueNew}>
-                    <ListPlus />Cancel Add and Add to Queue
+                    <ListPlus />Cancel and Queue {entryName}
                 </ContextMenuItem>
             ) : null}
             {state.canDeleteQueuedAdd ? (
                 <ContextMenuItem disabled={disabled} variant="destructive" onSelect={onDeleteQueued}>
-                    <Trash2 />Cancel Add and Delete from Queue
+                    <Trash2 />Delete {entryName} from Queue
                 </ContextMenuItem>
             ) : null}
             {state.canCancelAdd || state.canCancelRerank ? (
                 <ContextMenuItem disabled={disabled} onSelect={onCancel}>
-                    <XCircle />{state.canCancelRerank ? "Cancel Rerank" : "Cancel Add"}
+                    <XCircle />{state.canCancelRerank ? `Cancel Reranking ${entryName}` : `Cancel Adding ${entryName}`}
                 </ContextMenuItem>
             ) : null}
         </>
