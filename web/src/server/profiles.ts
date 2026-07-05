@@ -169,7 +169,8 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
             followers: await listFollowProfiles(userId, "followers"),
             suggestedProfiles: await listSuggestedProfiles(userId),
             incomingFollowRequests: await listFollowProfiles(userId, "incoming_requests"),
-            outgoingFollowRequests: await listFollowProfiles(userId, "outgoing_requests")
+            outgoingFollowRequests: await listFollowProfiles(userId, "outgoing_requests"),
+            blockedProfiles: await listBlockedProfiles(userId)
         };
     });
 
@@ -209,6 +210,12 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
               AND incoming.followed_user_id = ?
              WHERE user_profiles.is_public = 1
                AND user_profiles.user_id != ?
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM user_blocks blocks
+                 WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id)
+                    OR (blocks.blocker_user_id = user_profiles.user_id AND blocks.blocked_user_id = ?)
+               )
                AND (lower(user_profiles.slug) LIKE ? OR lower("user".name) LIKE ?)
              GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
                user_profiles.is_public, outgoing.status, outgoing.created_at,
@@ -224,7 +231,7 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
                user_profiles.slug ASC
              LIMIT 12`
                 )
-                .bind(userId, userId, userId, searchPattern, searchPattern, cleanQuery, `${cleanQuery}%`)
+                .bind(userId, userId, userId, userId, userId, searchPattern, searchPattern, cleanQuery, `${cleanQuery}%`)
         );
 
         return rows.map((row): FollowSearchResult => ({
@@ -258,8 +265,17 @@ async function followProfileForUser(userId: string, profileUserId: string) {
         throw new Error("You cannot follow yourself");
     }
 
+    await ensureUserProfile(userId);
     const profile = await getProfileByUserId(profileUserId);
     assertOwned(profile, "Profile");
+
+    const blockRelation = await getBlockRelation(userId, profileUserId);
+    if (blockRelation.viewerBlockedTarget) {
+        throw new Error("Unblock this profile before following");
+    }
+    if (blockRelation.targetBlockedViewer) {
+        throw new Error("This profile is not available");
+    }
 
     const existing = await getFollowRelationRows(userId, profileUserId);
     if (existing.outgoingStatus === "accepted") {
@@ -333,6 +349,11 @@ export const approveFollowRequest = createServerFn({ method: "POST" })
             throw new Error("Follow request not found");
         }
 
+        const blockRelation = await getBlockRelation(userId, followerUserId);
+        if (blockRelation.viewerBlockedTarget || blockRelation.targetBlockedViewer) {
+            throw new Error("This follow request is no longer available");
+        }
+
         const acceptedAt = now();
         await getDb()
             .prepare(
@@ -396,6 +417,56 @@ export const removeFollow = createServerFn({ method: "POST" })
             .run();
 
         return { followedUserId };
+    });
+
+export const blockProfile = createServerFn({ method: "POST" })
+    .middleware([authMiddleware])
+    .inputValidator((data: { profileUserId: string }) => data)
+    .handler(async ({ context, data }) => {
+        const userId = context.user.id;
+        const { profileUserId } = data;
+        if (userId === profileUserId) {
+            throw new Error("You cannot block yourself");
+        }
+
+        const profile = await getProfileByUserId(profileUserId);
+        assertOwned(profile, "Profile");
+
+        const db = getDb();
+        await db.batch([
+            db
+                .prepare(
+                    `INSERT OR IGNORE INTO user_blocks (blocker_user_id, blocked_user_id, created_at)
+             VALUES (?, ?, ?)`
+                )
+                .bind(userId, profileUserId, now()),
+            db
+                .prepare(
+                    `DELETE FROM user_follows
+             WHERE (follower_user_id = ? AND followed_user_id = ?)
+                OR (follower_user_id = ? AND followed_user_id = ?)`
+                )
+                .bind(userId, profileUserId, profileUserId, userId)
+        ]);
+
+        return { profileUserId };
+    });
+
+export const unblockProfile = createServerFn({ method: "POST" })
+    .middleware([authMiddleware])
+    .inputValidator((data: { profileUserId: string }) => data)
+    .handler(async ({ context, data }) => {
+        const userId = context.user.id;
+        const { profileUserId } = data;
+        await getDb()
+            .prepare(
+                `DELETE FROM user_blocks
+           WHERE blocker_user_id = ? AND blocked_user_id = ?`
+            )
+            .bind(userId, profileUserId)
+            .run();
+
+        return { profileUserId };
     });
 
 export const loadPublicProfile = createServerFn({ method: "GET" })
@@ -939,6 +1010,31 @@ async function listFollowProfiles(
     return rows.map(mapFollowProfile);
 }
 
+async function listBlockedProfiles(userId: string): Promise<FollowProfileSummary[]> {
+    const rows = await all<FollowProfileRow>(
+        getDb()
+            .prepare(
+                `SELECT "user".id AS user_id, "user".name, "user".image,
+                user_profiles.slug, user_profiles.is_public,
+                user_blocks.created_at, NULL AS accepted_at,
+                COUNT(categories.id) AS public_category_count,
+                'none' AS relation_state
+         FROM user_blocks
+         INNER JOIN "user" ON "user".id = user_blocks.blocked_user_id
+         INNER JOIN user_profiles ON user_profiles.user_id = user_blocks.blocked_user_id
+         LEFT JOIN categories ON categories.user_id = user_blocks.blocked_user_id
+           AND categories.is_public = 1
+         WHERE user_blocks.blocker_user_id = ?
+         GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
+           user_profiles.is_public, user_blocks.created_at
+         ORDER BY user_blocks.created_at DESC, lower("user".name) ASC`
+            )
+            .bind(userId)
+    );
+
+    return rows.map(mapFollowProfile);
+}
+
 async function listSuggestedProfiles(userId: string): Promise<FollowProfileSummary[]> {
     const rows = await all<FollowProfileRow>(
         getDb()
@@ -993,6 +1089,12 @@ async function listSuggestedProfiles(userId: string): Promise<FollowProfileSumma
                      WHERE (direct.follower_user_id = ? AND direct.followed_user_id = candidates.user_id)
                         OR (direct.follower_user_id = candidates.user_id AND direct.followed_user_id = ?)
                    )
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM user_blocks blocks
+                     WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = candidates.user_id)
+                        OR (blocks.blocker_user_id = candidates.user_id AND blocks.blocked_user_id = ?)
+                   )
                  GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
                           user_profiles.is_public, candidates.shared_connection_count
                  ORDER BY candidates.shared_connection_count DESC,
@@ -1001,7 +1103,7 @@ async function listSuggestedProfiles(userId: string): Promise<FollowProfileSumma
                           user_profiles.slug ASC
                  LIMIT 8`
             )
-            .bind(userId, userId, userId, userId, userId)
+            .bind(userId, userId, userId, userId, userId, userId, userId)
     );
 
     return rows.map(mapFollowProfile);
@@ -1081,6 +1183,41 @@ async function getFollowRelationRows(
     }
 
     return { outgoingStatus, incomingStatus };
+}
+
+async function getBlockRelation(
+    viewerUserId: string,
+    profileUserId: string
+): Promise<{ viewerBlockedTarget: boolean; targetBlockedViewer: boolean }> {
+    if (viewerUserId === profileUserId) {
+        return { viewerBlockedTarget: false, targetBlockedViewer: false };
+    }
+
+    const rows = await all<{
+        blocker_user_id: string;
+        blocked_user_id: string;
+    }>(
+        getDb()
+            .prepare(
+                `SELECT blocker_user_id, blocked_user_id
+         FROM user_blocks
+         WHERE (blocker_user_id = ? AND blocked_user_id = ?)
+            OR (blocker_user_id = ? AND blocked_user_id = ?)`
+            )
+            .bind(viewerUserId, profileUserId, profileUserId, viewerUserId)
+    );
+
+    let viewerBlockedTarget = false;
+    let targetBlockedViewer = false;
+    for (const row of rows) {
+        if (row.blocker_user_id === viewerUserId && row.blocked_user_id === profileUserId) {
+            viewerBlockedTarget = true;
+        } else if (row.blocker_user_id === profileUserId && row.blocked_user_id === viewerUserId) {
+            targetBlockedViewer = true;
+        }
+    }
+
+    return { viewerBlockedTarget, targetBlockedViewer };
 }
 
 function normalizeProfileSlug(value: string) {

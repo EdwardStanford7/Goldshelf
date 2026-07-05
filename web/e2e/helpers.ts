@@ -9,7 +9,12 @@ export const TEST_PASSWORD = "goldshelf-e2e-password";
  * route) so clicks are never swallowed by not-yet-attached handlers.
  */
 export async function gotoApp(page: Page, path = "/") {
-    await page.goto(path);
+    const targetUrl = new URL(path, `${BASE_URL}/`).toString();
+    if (page.url() === targetUrl) {
+        await page.reload();
+    } else {
+        await page.goto(targetUrl);
+    }
     await page.waitForSelector("html[data-hydrated]", { timeout: 15_000 });
 }
 

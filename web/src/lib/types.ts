@@ -101,6 +101,7 @@ export interface ProfileSettingsData {
     suggestedProfiles: FollowProfileSummary[];
     incomingFollowRequests: FollowProfileSummary[];
     outgoingFollowRequests: FollowProfileSummary[];
+    blockedProfiles: FollowProfileSummary[];
 }
 
 export interface PublicProfileSummary {

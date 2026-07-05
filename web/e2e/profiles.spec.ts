@@ -204,6 +204,53 @@ test.describe("Profiles", () => {
         await expect(page.getByText("Private Shelf")).toBeHidden();
     });
 
+    test("profile owner can block and unblock a follower", async ({
+        page: alicePage,
+        context: aliceContext,
+        browser
+    }) => {
+        await seedUsers([ALICE, BOB]);
+        await signInViaApi(aliceContext, ALICE.email);
+
+        const bobContext = await browser.newContext();
+        const bobPage = await bobContext.newPage();
+        await signInViaApi(bobContext, BOB.email);
+
+        await gotoApp(alicePage, "/profile");
+        const aliceSlug = await readOwnSlug(alicePage);
+        await alicePage.getByLabel("Public profile").check();
+        await alicePage.getByRole("button", { name: "Save Profile" }).click();
+        await expect(alicePage.getByText("Profile saved.")).toBeVisible();
+
+        await gotoApp(bobPage, `/u/${aliceSlug}`);
+        await bobPage.getByRole("button", { name: "Follow", exact: true }).click();
+        await expect(bobPage.getByText("Profile followed.")).toBeVisible();
+
+        await gotoApp(alicePage, "/profile");
+        await expect(alicePage.getByRole("heading", { name: "Followers" })).toBeVisible();
+        await expect(alicePage.getByText("Bob Stone").first()).toBeVisible();
+        await alicePage.getByRole("button", { name: "Block", exact: true }).click();
+        await expect(alicePage.getByText("Blocked Bob Stone.")).toBeVisible();
+        await expect(alicePage.getByText("No Followers")).toBeVisible();
+        await expect(alicePage.getByText("Bob Stone").first()).toBeVisible();
+        await expect(alicePage.getByRole("button", { name: "Unblock", exact: true })).toBeVisible();
+
+        await gotoApp(bobPage, `/u/${aliceSlug}`);
+        await bobPage.getByRole("button", { name: "Follow", exact: true }).click();
+        await expect(bobPage.getByText("This profile is not available")).toBeVisible();
+
+        await gotoApp(alicePage, "/profile");
+        await alicePage.getByRole("button", { name: "Unblock", exact: true }).click();
+        await expect(alicePage.getByText("Unblocked Bob Stone.")).toBeVisible();
+        await expect(alicePage.getByText("No Blocked Profiles")).toBeVisible();
+
+        await gotoApp(bobPage, `/u/${aliceSlug}`);
+        await bobPage.getByRole("button", { name: "Follow", exact: true }).click();
+        await expect(bobPage.getByText("Profile followed.")).toBeVisible();
+
+        await bobContext.close();
+    });
+
     test("publish profile, share rankings, full follow round-trip, revoke access", async ({
         page: alicePage,
         context: aliceContext,
