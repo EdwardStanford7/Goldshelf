@@ -13,8 +13,8 @@ import {
   STATUS_CLASS,
   SUBMIT_CLASS,
   formatSignUpError,
-  passwordLengthMessage,
   signUpWithEmail,
+  validateNewPasswordLength,
 } from './auth-shared';
 
 export function SignUpForm({ authOptions }: { authOptions: AuthOptions }) {
@@ -31,8 +31,9 @@ export function SignUpForm({ authOptions }: { authOptions: AuthOptions }) {
     const name = String(form.get('name') ?? email);
 
     try {
-      if (password.length < authOptions.minPasswordLength) {
-        setError(passwordLengthMessage(authOptions.minPasswordLength));
+      const passwordLengthError = validateNewPasswordLength(password, authOptions.minPasswordLength);
+      if (passwordLengthError) {
+        setError(passwordLengthError);
         return;
       }
       await signUpWithEmail({ email, password, name });
@@ -73,8 +74,9 @@ export function SignUpForm({ authOptions }: { authOptions: AuthOptions }) {
         <PasswordField
           label="Password"
           name="password"
-          placeholder="At least 12 characters"
+          placeholder={`At least ${authOptions.minPasswordLength} characters`}
           autoComplete="new-password"
+          minLength={authOptions.minPasswordLength}
         />
         <Button size="lg" className={SUBMIT_CLASS} disabled={submitting} type="submit">
           {submitting ? 'Creating account...' : 'Create account'}

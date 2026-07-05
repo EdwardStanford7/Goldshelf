@@ -428,6 +428,14 @@ function ProfileRoute() {
             return <span className="inline-flex min-h-[2.35rem] items-center rounded-full border border-border px-3 text-muted-foreground">Mutual</span>;
         }
 
+        if (profile.relationState === "requested") {
+            return <span className="inline-flex min-h-[2.35rem] items-center rounded-full border border-border px-3 text-muted-foreground">Requested</span>;
+        }
+
+        if (profile.relationState === "following") {
+            return <span className="inline-flex min-h-[2.35rem] items-center rounded-full border border-border px-3 text-muted-foreground">Following</span>;
+        }
+
         return (
             <Button
                 size="sm"

@@ -150,7 +150,7 @@ export function AccountMenu({
                     <DropdownMenuSubTrigger>
                         <Settings />Settings
                     </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-52">
+                    <DropdownMenuSubContent className="w-64">
                         <DropdownMenuCheckboxItem
                             checked={promptForMissingImages}
                             disabled={busy || quickSaving}

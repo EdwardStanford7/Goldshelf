@@ -8,6 +8,20 @@ const QUINN = {
     categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }]
 };
 
+const QUEUE_SCOPE_USER = {
+    email: "queue-scope@e2e.test",
+    name: "Queue Scope",
+    categories: [
+        { name: "Movies", entries: ["Arrival"] },
+        { name: "Books", entries: [] }
+    ],
+    queueSettings: { enabled: true, delayDays: 0 },
+    queuedEntries: [
+        { categoryName: "Movies", name: "Memento" },
+        { categoryName: "Books", name: "Hyperion" }
+    ]
+};
+
 /** Opens the account menu's Settings flyout (queue toggles + delay days). */
 async function openQueueSettings(page: Page) {
     const queueToggle = page.getByRole("menuitemcheckbox", { name: "Queue entries" });
@@ -61,6 +75,14 @@ async function withSettingsSaved(page: Page, change: () => Promise<void>) {
  */
 function queueItem(page: Page, name: string) {
     return page.getByText(name, { exact: true }).first();
+}
+
+async function clickUndoToast(page: Page, message: string) {
+    await page
+        .getByRole("listitem")
+        .filter({ hasText: message })
+        .getByRole("button", { name: "Undo" })
+        .click();
 }
 
 async function downloadExport(page: Page) {
@@ -199,7 +221,7 @@ test.describe("Queue", () => {
         await expect(page.getByText("Removed Klute from the queue.")).toBeVisible();
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
 
-        await page.getByRole("button", { name: "Undo" }).click();
+        await clickUndoToast(page, "Removed Klute from the queue.");
         await expect(page.getByText("Restored Klute to the queue.")).toBeVisible();
         await expect(page.getByText("2 queued")).toBeVisible();
 
@@ -230,6 +252,31 @@ test.describe("Queue", () => {
         await winMatchups(page, "Tron");
         await expect(page.getByText("#1 Tron")).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("#6 Dune")).toBeVisible();
+    });
+
+    test("queue search filters rows and category filter scopes rank queue", async ({ page, context }) => {
+        await seedUsers([QUEUE_SCOPE_USER]);
+        await signInViaApi(context, QUEUE_SCOPE_USER.email);
+        await gotoApp(page);
+        await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
+        await expect(page.getByText("2 ready")).toBeVisible();
+
+        await page.getByPlaceholder("Search queue").fill("meme");
+        await expect(queueItem(page, "Memento")).toBeVisible();
+        await expect(queueItem(page, "Hyperion")).toBeHidden();
+        await page.getByPlaceholder("Search queue").clear();
+
+        await page.getByLabel("Queue category filter").click();
+        await page.getByRole("option", { name: "Books" }).click();
+        await expect(queueItem(page, "Hyperion")).toBeVisible();
+        await expect(queueItem(page, "Memento")).toBeHidden();
+        await expect(page.getByRole("button", { name: "Rank Books" })).toBeEnabled();
+
+        await page.getByRole("button", { name: "Rank Books" }).click();
+        await expect(page.getByText("No ready queued entries remain in that category.")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
+        await expect(page.getByText("#1 Hyperion")).toBeVisible();
+        await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
     });
 
     test("queue ranking can skip the current queued entry for the current run", async ({
@@ -298,6 +345,10 @@ test.describe("Queue", () => {
         await expect(page.getByText("3 selected")).toBeVisible();
         await page.getByRole("checkbox", { name: "Select queued Klute" }).click({ modifiers: ["Meta"] });
         await expect(page.getByText("2 selected")).toBeVisible();
+        await page.getByRole("checkbox", { name: "Select queued Stalker" }).click();
+        await expect(page.getByText("3 selected")).toBeVisible();
+        await page.getByRole("checkbox", { name: "Select queued Stalker" }).click();
+        await expect(page.getByText("2 selected")).toBeVisible();
 
         await page.getByRole("button", { name: "Remove selected" }).click();
         await expect(page.getByText("Removed 2 queued entries.")).toBeVisible();
@@ -307,7 +358,7 @@ test.describe("Queue", () => {
         await expect(queueItem(page, "Klute")).toBeVisible();
         await expect(queueItem(page, "Stalker")).toBeVisible();
 
-        await page.getByRole("button", { name: "Undo" }).click();
+        await clickUndoToast(page, "Removed 2 queued entries.");
         await expect(page.getByText("Restored 2 queued entries.")).toBeVisible();
         await expect(page.getByText("4 queued", { exact: true })).toBeVisible();
         await expect(queueItem(page, "Memento")).toBeVisible();

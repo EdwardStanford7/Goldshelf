@@ -13,10 +13,10 @@ import {
   STATUS_CLASS,
   SUBMIT_CLASS,
   formatSignInError,
-  passwordLengthMessage,
   requestPasswordResetEmail,
   resetPasswordWithToken,
   signInWithEmail,
+  validateNewPasswordLength,
 } from './auth-shared';
 
 // The sign-in page also hosts password recovery: "Forgot password?" switches to
@@ -102,8 +102,9 @@ export function SignInForm({ authOptions }: { authOptions: AuthOptions }) {
     const form = new FormData(event.currentTarget);
     const newPassword = String(form.get('newPassword') ?? '');
     const confirmPassword = String(form.get('confirmPassword') ?? '');
-    if (newPassword.length < authOptions.minPasswordLength) {
-      setError(passwordLengthMessage(authOptions.minPasswordLength));
+    const passwordLengthError = validateNewPasswordLength(newPassword, authOptions.minPasswordLength);
+    if (passwordLengthError) {
+      setError(passwordLengthError);
       setSubmitting(false);
       return;
     }
@@ -161,14 +162,16 @@ export function SignInForm({ authOptions }: { authOptions: AuthOptions }) {
           <PasswordField
             label="New password"
             name="newPassword"
-            placeholder="New password"
+            placeholder={`At least ${authOptions.minPasswordLength} characters`}
             autoComplete="new-password"
+            minLength={authOptions.minPasswordLength}
           />
           <PasswordField
             label="Confirm password"
             name="confirmPassword"
             placeholder="Confirm new password"
             autoComplete="new-password"
+            minLength={authOptions.minPasswordLength}
           />
           <Button size="lg" className={SUBMIT_CLASS} disabled={submitting} type="submit">
             {submitting ? 'Updating...' : 'Update password'}

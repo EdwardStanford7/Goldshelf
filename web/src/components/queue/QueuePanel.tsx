@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { ListChecks, Square, Swords, Trash2, X } from "lucide-react";
+import { ListChecks, Search, Square, Swords, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/input";
 import { QueuedEntryRow } from "@/components/queue/QueuedEntryRow";
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from "@/components/ui/select";
 import { nextMultiSelection } from "@/lib/multiSelect";
 import type { QueuedEntry } from "@/lib/types";
 
@@ -12,6 +21,7 @@ const METRIC_CLASS =
 export function QueuePanel({
     activeSessionId,
     busy,
+    queueRankCategoryId,
     queueRankMode,
     queuedEntries,
     onDelete,
@@ -24,6 +34,7 @@ export function QueuePanel({
 }: {
     activeSessionId: string | null;
     busy: boolean;
+    queueRankCategoryId: string | null;
     queueRankMode: boolean;
     queuedEntries: QueuedEntry[];
     onDelete: (entry: QueuedEntry) => Promise<void>;
@@ -31,13 +42,15 @@ export function QueuePanel({
     onPickImage: (entry: QueuedEntry) => void;
     onRename: (entry: QueuedEntry, name: string) => Promise<void>;
     onStart: (entry: QueuedEntry) => Promise<void>;
-    onStartQueue: () => Promise<void>;
+    onStartQueue: (categoryId?: string) => Promise<void>;
     onStopQueue: () => void;
 }) {
     const [currentTime, setCurrentTime] = useState(Date.now());
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
     const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [categoryFilterId, setCategoryFilterId] = useState("all");
 
     useEffect(() => {
         const interval = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -48,11 +61,41 @@ export function QueuePanel({
         setCurrentTime(Date.now());
     }, [queuedEntries]);
 
+    const categoryOptions = useMemo(() => {
+        const categories = new Map<string, string>();
+        for (const entry of queuedEntries) {
+            categories.set(entry.categoryId, entry.categoryName);
+        }
+
+        return [...categories.entries()]
+            .map(([id, name]) => ({ id, name }))
+            .sort((left, right) => left.name.localeCompare(right.name));
+    }, [queuedEntries]);
+    const selectedCategoryId = categoryFilterId === "all" ? null : categoryFilterId;
+    const selectedCategoryName = selectedCategoryId
+        ? categoryOptions.find((category) => category.id === selectedCategoryId)?.name ?? "Category"
+        : null;
+    const activeQueueRankCategoryName = queueRankCategoryId
+        ? categoryOptions.find((category) => category.id === queueRankCategoryId)?.name ?? "Category"
+        : null;
     const readyEntries = queuedEntries.filter((entry) => entry.availableAt <= currentTime);
     const pendingEntries = queuedEntries.filter((entry) => entry.availableAt > currentTime);
+    const scopedReadyEntries = selectedCategoryId
+        ? readyEntries.filter((entry) => entry.categoryId === selectedCategoryId)
+        : readyEntries;
+    const searchTerm = searchQuery.trim().toLowerCase();
+    const entryMatchesFilters = (entry: QueuedEntry) => {
+        const matchesCategory = !selectedCategoryId || entry.categoryId === selectedCategoryId;
+        const matchesSearch = !searchTerm ||
+            entry.name.toLowerCase().includes(searchTerm) ||
+            entry.categoryName.toLowerCase().includes(searchTerm);
+        return matchesCategory && matchesSearch;
+    };
+    const visibleReadyEntries = readyEntries.filter(entryMatchesFilters);
+    const visiblePendingEntries = pendingEntries.filter(entryMatchesFilters);
     const displayedEntries = useMemo(
-        () => [...readyEntries, ...pendingEntries],
-        [pendingEntries, readyEntries]
+        () => [...visibleReadyEntries, ...visiblePendingEntries],
+        [visiblePendingEntries, visibleReadyEntries]
     );
     const displayedEntryIds = displayedEntries.map((entry) => entry.id);
     const selectedEntries = displayedEntries.filter((entry) => selectedEntryIds.has(entry.id));
@@ -76,7 +119,13 @@ export function QueuePanel({
         }
     }, [queuedEntries, selectionAnchorId]);
 
-    function handleSelection(entry: QueuedEntry, event: MouseEvent) {
+    useEffect(() => {
+        if (categoryFilterId !== "all" && !categoryOptions.some((category) => category.id === categoryFilterId)) {
+            setCategoryFilterId("all");
+        }
+    }, [categoryFilterId, categoryOptions]);
+
+    function handleSelection(entry: QueuedEntry, event: MouseEvent<HTMLElement>, options: { forceAdditive?: boolean } = {}) {
         if (!selectionMode || busy) {
             return;
         }
@@ -84,7 +133,7 @@ export function QueuePanel({
         const nextSelection = nextMultiSelection({
             anchorId: selectionAnchorId,
             clickedId: entry.id,
-            ctrlKey: event.ctrlKey,
+            ctrlKey: options.forceAdditive ? true : event.ctrlKey,
             metaKey: event.metaKey,
             orderedIds: displayedEntryIds,
             plainBehavior: "focus-or-toggle",
@@ -119,8 +168,42 @@ export function QueuePanel({
                 <div className="flex min-w-0 max-w-full flex-wrap justify-end gap-[0.4rem]">
                     <span className={METRIC_CLASS}>{queuedEntries.length} queued</span>
                     <span className={METRIC_CLASS}>{readyEntries.length} ready</span>
+                    {displayedEntries.length !== queuedEntries.length ? (
+                        <span className={METRIC_CLASS}>{displayedEntries.length} shown</span>
+                    ) : null}
                 </div>
             </div>
+            {queuedEntries.length > 0 ? (
+                <div className="grid gap-2">
+                    <label className="relative block">
+                        <span className="sr-only">Search queue</span>
+                        <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            className="pl-8"
+                            placeholder="Search queue"
+                            value={searchQuery}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                        />
+                    </label>
+                    {categoryOptions.length > 1 ? (
+                        <Select value={categoryFilterId} onValueChange={setCategoryFilterId}>
+                            <SelectTrigger aria-label="Queue category filter">
+                                <SelectValue placeholder="All categories" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    <SelectItem value="all">All categories</SelectItem>
+                                    {categoryOptions.map((category) => (
+                                        <SelectItem key={category.id} value={category.id}>
+                                            {category.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    ) : null}
+                </div>
+            ) : null}
             {selectionMode ? (
                 <div className="grid gap-2 rounded-sm border border-border bg-muted p-2">
                     <div className="text-sm text-muted-foreground">
@@ -160,18 +243,26 @@ export function QueuePanel({
                     <Button
                         size="lg"
                         variant={queueRankMode ? "outline" : "default"}
-                        disabled={queueRankMode ? false : busy || Boolean(activeSessionId) || readyEntries.length === 0}
+                        disabled={queueRankMode ? false : busy || Boolean(activeSessionId) || scopedReadyEntries.length === 0}
                         type="button"
                         onClick={() => {
                             if (queueRankMode) {
                                 onStopQueue();
                             } else {
-                                void onStartQueue();
+                                void onStartQueue(selectedCategoryId ?? undefined);
                             }
                         }}
                     >
                         {queueRankMode ? <Square data-icon="inline-start" /> : <Swords data-icon="inline-start" />}
-                        <span>{queueRankMode ? "Stop Ranking Queue" : "Rank Queue"}</span>
+                        <span>
+                            {queueRankMode
+                                ? activeQueueRankCategoryName
+                                    ? `Stop Ranking ${activeQueueRankCategoryName}`
+                                    : "Stop Ranking Queue"
+                                : selectedCategoryName
+                                    ? `Rank ${selectedCategoryName}`
+                                    : "Rank Queue"}
+                        </span>
                     </Button>
                     <Button
                         disabled={busy || queuedEntries.length === 0}
@@ -186,9 +277,9 @@ export function QueuePanel({
                 </div>
             )}
 
-            {queuedEntries.length > 0 ? (
+            {queuedEntries.length > 0 && displayedEntries.length > 0 ? (
                 <div className="grid max-h-[min(42vh,520px)] min-h-0 min-w-0 gap-[0.55rem] overflow-x-hidden overflow-y-auto pr-[0.15rem] max-[720px]:max-h-none max-[720px]:overflow-y-visible max-[720px]:pr-0">
-                    {readyEntries.map((entry) => (
+                    {visibleReadyEntries.map((entry) => (
                         <QueuedEntryRow
                             metadataDisabled={busy}
                             entry={entry}
@@ -200,11 +291,11 @@ export function QueuePanel({
                             rankLocked={busy || Boolean(activeSessionId)}
                             selected={selectedEntryIds.has(entry.id)}
                             selectionMode={selectionMode}
-                            onSelect={(event) => handleSelection(entry, event)}
+                            onSelect={(event, options) => handleSelection(entry, event, options)}
                             onStart={onStart}
                         />
                     ))}
-                    {pendingEntries.map((entry) => (
+                    {visiblePendingEntries.map((entry) => (
                         <QueuedEntryRow
                             metadataDisabled={busy}
                             entry={entry}
@@ -216,11 +307,15 @@ export function QueuePanel({
                             rankLocked={busy || Boolean(activeSessionId)}
                             selected={selectedEntryIds.has(entry.id)}
                             selectionMode={selectionMode}
-                            onSelect={(event) => handleSelection(entry, event)}
+                            onSelect={(event, options) => handleSelection(entry, event, options)}
                             onStart={onStart}
                         />
                     ))}
                 </div>
+            ) : queuedEntries.length > 0 ? (
+                <EmptyState compact icon={Search} title="No Queue Matches">
+                    Try another search or category.
+                </EmptyState>
             ) : (
                 <EmptyState compact icon={Swords} title="Queue Empty">
                     {activeSessionId

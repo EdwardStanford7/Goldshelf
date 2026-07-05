@@ -22,6 +22,10 @@ export function passwordLengthMessage(minPasswordLength: number) {
   return `Use at least ${minPasswordLength} characters.\nLonger passphrases are more secure.`;
 }
 
+export function validateNewPasswordLength(password: string, minPasswordLength: number) {
+  return password.length < minPasswordLength ? passwordLengthMessage(minPasswordLength) : null;
+}
+
 export async function signInWithEmail({ email, password }: { email: string; password: string }) {
   const result = await signIn.email({
     email: email.trim(),

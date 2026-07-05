@@ -865,6 +865,7 @@ async function listFollowProfiles(
                     COUNT(categories.id) AS public_category_count,
                     CASE
                       WHEN reciprocal.status = 'accepted' THEN 'mutual'
+                      WHEN reciprocal.status = 'pending' THEN 'requested'
                       ELSE 'follows_you'
                     END AS relation_state
              FROM user_follows
@@ -875,7 +876,7 @@ async function listFollowProfiles(
              LEFT JOIN user_follows reciprocal
                ON reciprocal.follower_user_id = ?
               AND reciprocal.followed_user_id = user_follows.follower_user_id
-              AND reciprocal.status = 'accepted'
+              AND reciprocal.status IN ('pending', 'accepted')
              WHERE user_follows.followed_user_id = ?
                AND user_follows.status = 'accepted'
              GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,

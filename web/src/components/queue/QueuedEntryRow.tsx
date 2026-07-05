@@ -43,7 +43,7 @@ export function QueuedEntryRow({
     rankLocked: boolean;
     selected?: boolean;
     selectionMode?: boolean;
-    onSelect?: (event: MouseEvent<HTMLDivElement>) => void;
+    onSelect?: (event: MouseEvent<HTMLElement>, options?: { forceAdditive?: boolean }) => void;
     onStart: (entry: QueuedEntry) => Promise<void>;
 }) {
     const [isRenaming, setIsRenaming] = useState(false);
@@ -92,6 +92,10 @@ export function QueuedEntryRow({
                             aria-label={`Select queued ${entry.name}`}
                             checked={selected}
                             className="mt-1 w-auto"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onSelect?.(event, { forceAdditive: !event.shiftKey });
+                            }}
                             readOnly
                             type="checkbox"
                         />

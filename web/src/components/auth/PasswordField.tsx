@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,24 +9,29 @@ export function PasswordField({
   name,
   placeholder,
   autoComplete,
+  minLength,
 }: {
   label: string;
   name: string;
   placeholder: string;
   autoComplete: string;
+  minLength?: number;
 }) {
   const [visible, setVisible] = useState(false);
+  const inputId = useId();
 
   return (
-    <label className={FIELD_CLASS}>
-      <span>{label}</span>
+    <div className={FIELD_CLASS}>
+      <label htmlFor={inputId}>{label}</label>
       <span className="relative block">
         <Input
+          id={inputId}
           className={`${FIELD_INPUT_CLASS} pr-12`}
           name={name}
           type={visible ? 'text' : 'password'}
           placeholder={placeholder}
           autoComplete={autoComplete}
+          minLength={minLength}
           required
         />
         <Button
@@ -42,6 +47,6 @@ export function PasswordField({
           : <Eye />}
         </Button>
       </span>
-    </label>
+    </div>
   );
 }

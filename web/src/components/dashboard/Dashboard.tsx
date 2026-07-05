@@ -234,6 +234,8 @@ export function Dashboard({
     const closedRepairSessionIdsRef = useRef<Set<string>>(new Set());
     const [queueRankMode, setQueueRankMode] = useState(false);
     const queueRankModeRef = useRef(false);
+    const [queueRankCategoryId, setQueueRankCategoryId] = useState<string | null>(null);
+    const queueRankCategoryIdRef = useRef<string | null>(null);
     const skippedQueueRankIdsRef = useRef<Set<string>>(new Set());
     const [categoryDraftName, setCategoryDraftName] = useState("");
     const [entryDraftName, setEntryDraftName] = useState("");
@@ -612,10 +614,15 @@ export function Dashboard({
         };
     }, []);
 
-    function setQueueRankingActive(isActive: boolean) {
+    function setQueueRankingActive(isActive: boolean, categoryId: string | null = queueRankCategoryIdRef.current) {
         queueRankModeRef.current = isActive;
-        if (!isActive) {
+        if (isActive) {
+            queueRankCategoryIdRef.current = categoryId;
+            setQueueRankCategoryId(categoryId);
+        } else {
             skippedQueueRankIdsRef.current = new Set();
+            queueRankCategoryIdRef.current = null;
+            setQueueRankCategoryId(null);
         }
         setQueueRankMode(isActive);
     }
@@ -1095,8 +1102,13 @@ export function Dashboard({
 
     function getReadyQueuedEntries(queuedEntries: QueuedEntry[], excludedQueuedEntryIds: Set<string> = new Set()) {
         const currentTime = Date.now();
+        const categoryScopeId = queueRankCategoryIdRef.current;
         return queuedEntries
-            .filter((entry) => entry.availableAt <= currentTime && !excludedQueuedEntryIds.has(entry.id))
+            .filter((entry) =>
+                entry.availableAt <= currentTime &&
+                !excludedQueuedEntryIds.has(entry.id) &&
+                (!categoryScopeId || entry.categoryId === categoryScopeId)
+            )
             .sort((left, right) => left.availableAt - right.availableAt || left.createdAt - right.createdAt);
     }
 
@@ -1140,10 +1152,15 @@ export function Dashboard({
         const nextEntry = getNextReadyQueuedEntry(queuedEntries);
         if (!nextEntry) {
             const skippedCount = skippedQueueRankIdsRef.current.size;
+            const categoryScopeId = queueRankCategoryIdRef.current;
             setQueueRankingActive(false);
-            setMessage(skippedCount > 0
-                ? "No unskipped ready queued entries remain."
-                : "No ready queued entries remain.");
+            setMessage(categoryScopeId
+                ? skippedCount > 0
+                    ? "No unskipped ready queued entries remain in that category."
+                    : "No ready queued entries remain in that category."
+                : skippedCount > 0
+                    ? "No unskipped ready queued entries remain."
+                    : "No ready queued entries remain.");
             return;
         }
 
@@ -1182,9 +1199,9 @@ export function Dashboard({
         }
     }
 
-    async function handleStartQueueRank() {
+    async function handleStartQueueRank(categoryId?: string) {
         skippedQueueRankIdsRef.current = new Set();
-        setQueueRankingActive(true);
+        setQueueRankingActive(true, categoryId ?? null);
         await startNextQueuedRank(dashboard.queuedEntries);
     }
 
@@ -1786,9 +1803,9 @@ export function Dashboard({
         scrollMainToTop();
     }
 
-    async function handleStartQueueRankFromDrawer() {
+    async function handleStartQueueRankFromDrawer(categoryId?: string) {
         setMobileDrawerOpen(false);
-        await handleStartQueueRank();
+        await handleStartQueueRank(categoryId);
         scrollMainToTop();
     }
 
@@ -1982,6 +1999,7 @@ export function Dashboard({
             <QueuePanel
                 activeSessionId={activeFlowId}
                 busy={busy}
+                queueRankCategoryId={queueRankCategoryId}
                 queueRankMode={queueRankMode}
                 queuedEntries={dashboard.queuedEntries}
                 onDelete={handleDeleteQueuedEntry}

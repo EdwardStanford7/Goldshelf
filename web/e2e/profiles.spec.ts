@@ -272,6 +272,7 @@ test.describe("Profiles", () => {
         await expect(alicePage.getByText("Follow request sent.")).toBeVisible();
         // Bob can appear in both Followers and Sent Requests.
         await expect(alicePage.getByText("Bob Stone").first()).toBeVisible();
+        await expect(alicePage.getByText("Requested").first()).toBeVisible();
         await expect(alicePage.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
 
         // --- Bob approves; the relationship becomes mutual on both sides. ---
