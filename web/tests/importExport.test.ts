@@ -33,13 +33,12 @@ describe("xlsx export", () => {
         const rows = await readSheet(buffer, "Queue");
         const parsed = await parseLegacyWorkbook(buffer, null);
 
-        expect(rows[0]).toEqual(["category", "entry", "added_at", "available_at"]);
-        expect(rows[1]).toEqual(["Books", "Dune", 1000, 2000]);
+        expect(rows[0]).toEqual(["category", "entry", "added_at"]);
+        expect(rows[1]).toEqual(["Books", "Dune", 1000]);
         expect(parsed.entries).toEqual([]);
         expect(parsed.queuedEntries).toEqual([{
             categoryName: "Books",
             name: "Dune",
-            availableAt: 2000,
             createdAt: 1000
         }]);
     });
@@ -82,7 +81,6 @@ describe("xlsx import", () => {
             queuedEntries: [{
                 categoryName: "Movies",
                 name: "Alien",
-                availableAt: 222,
                 createdAt: 111
             }]
         });
@@ -104,7 +102,6 @@ describe("xlsx import", () => {
         expect(parsed.queuedEntries).toEqual([{
             categoryName: "Books",
             name: "Dune",
-            availableAt: 555,
             createdAt: 444
         }]);
     });
@@ -145,7 +142,6 @@ function queuedEntry(categoryName: string, name: string): QueuedEntry {
         categoryName,
         name,
         imageKey: null,
-        availableAt: 2000,
         createdAt: 1000
     };
 }

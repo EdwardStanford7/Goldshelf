@@ -18,8 +18,7 @@ const ENTRY_METADATA_HEADERS = [
 const QUEUE_HEADERS = [
     "category",
     "entry",
-    "added_at",
-    "available_at"
+    "added_at"
 ];
 
 export async function parseLegacyWorkbook(
@@ -81,7 +80,6 @@ function parseQueueRows(rows: unknown[][]): ParsedImportQueuedEntry[] {
     }
 
     const addedColumn = findHeader(headers, ["added_at", "added", "created_at", "created", "first_consumed_at", "first_consumed", "consumed_at"]);
-    const availableColumn = findHeader(headers, ["available_at", "ready_at"]);
     const queuedEntries: ParsedImportQueuedEntry[] = [];
 
     for (const row of rows.slice(1)) {
@@ -94,7 +92,6 @@ function parseQueueRows(rows: unknown[][]): ParsedImportQueuedEntry[] {
         queuedEntries.push({
             categoryName,
             name,
-            availableAt: availableColumn >= 0 ? timestampCell(row[availableColumn]) : null,
             createdAt: addedColumn >= 0 ? timestampCell(row[addedColumn]) : null
         });
     }
@@ -121,15 +118,13 @@ export async function writeExportWorkbook(
     );
     const queueMetadata = [...queuedEntries]
         .sort((left, right) =>
-            left.availableAt - right.availableAt ||
             left.createdAt - right.createdAt ||
             left.name.localeCompare(right.name)
         )
         .map((entry) => ({
             category: entry.categoryName,
             entry: entry.name,
-            added_at: entry.createdAt,
-            available_at: entry.availableAt
+            added_at: entry.createdAt
         }));
 
     const workbook = writeXlsxFile([

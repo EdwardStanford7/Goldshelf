@@ -1,13 +1,10 @@
 import type { QueuedEntry, QueueSettings } from "@/lib/types";
 import { all, first, getDb } from "@/server/lib/db";
 
-export const DEFAULT_QUEUE_DELAY_DAYS = 0;
 export const DEFAULT_QUEUE_ENABLED = true;
-export const MAX_QUEUE_DELAY_DAYS = 365;
 
 interface QueueSettingsRow {
     enabled: number;
-    delay_days: number;
     prompt_missing_images: number;
     randomize_ready_entries: number;
 }
@@ -18,7 +15,6 @@ export interface QueuedEntryRow {
     category_name: string;
     name: string;
     image_key: string | null;
-    available_at: number;
     created_at: number;
 }
 
@@ -30,7 +26,7 @@ export async function getQueueSettings(userId: string): Promise<QueueSettings> {
     const row = await first<QueueSettingsRow>(
         getDb()
             .prepare(
-                `SELECT enabled, delay_days, prompt_missing_images, randomize_ready_entries
+                `SELECT enabled, prompt_missing_images, randomize_ready_entries
          FROM queue_settings
          WHERE user_id = ?`
             )
@@ -39,7 +35,6 @@ export async function getQueueSettings(userId: string): Promise<QueueSettings> {
 
     return {
         enabled: row ? row.enabled === 1 : DEFAULT_QUEUE_ENABLED,
-        delayDays: normalizeQueueDelayDays(row?.delay_days ?? DEFAULT_QUEUE_DELAY_DAYS),
         promptForMissingImages: row?.prompt_missing_images !== 0,
         randomizeReadyEntries: row?.randomize_ready_entries === 1
     };
@@ -50,11 +45,11 @@ export async function listQueuedEntries(userId: string): Promise<QueuedEntry[]> 
         getDb()
             .prepare(
                 `SELECT entry_queue.id, entry_queue.category_id, categories.name AS category_name,
-                entry_queue.name, entry_queue.image_key, entry_queue.available_at, entry_queue.created_at
+                entry_queue.name, entry_queue.image_key, entry_queue.created_at
          FROM entry_queue
          INNER JOIN categories ON categories.id = entry_queue.category_id
          WHERE entry_queue.user_id = ? AND entry_queue.status = 'queued'
-         ORDER BY entry_queue.available_at ASC, entry_queue.created_at ASC`
+         ORDER BY entry_queue.created_at ASC`
             )
             .bind(userId)
     );
@@ -67,7 +62,7 @@ export async function getOwnedQueuedEntry(userId: string, queuedEntryId: string)
         getDb()
             .prepare(
                 `SELECT entry_queue.id, entry_queue.category_id, categories.name AS category_name,
-                entry_queue.name, entry_queue.image_key, entry_queue.available_at, entry_queue.created_at
+                entry_queue.name, entry_queue.image_key, entry_queue.created_at
          FROM entry_queue
          INNER JOIN categories ON categories.id = entry_queue.category_id
          WHERE entry_queue.id = ? AND entry_queue.user_id = ? AND entry_queue.status = 'queued'`
@@ -83,7 +78,7 @@ export async function getOwnedQueuedEntryIncludingDeleted(userId: string, queued
         getDb()
             .prepare(
                 `SELECT entry_queue.id, entry_queue.category_id, categories.name AS category_name,
-                entry_queue.name, entry_queue.image_key, entry_queue.available_at, entry_queue.created_at,
+                entry_queue.name, entry_queue.image_key, entry_queue.created_at,
                 entry_queue.status
          FROM entry_queue
          INNER JOIN categories ON categories.id = entry_queue.category_id
@@ -169,14 +164,6 @@ export function restoreStartedQueuedEntryStatement(
         .bind(updatedAt, queuedEntryId, userId, userId, categoryId, name);
 }
 
-export function normalizeQueueDelayDays(value: number) {
-    if (!Number.isFinite(value)) {
-        return DEFAULT_QUEUE_DELAY_DAYS;
-    }
-
-    return Math.max(0, Math.min(MAX_QUEUE_DELAY_DAYS, Math.floor(value)));
-}
-
 function mapQueuedEntry(row: QueuedEntryRow): QueuedEntry {
     return {
         id: row.id,
@@ -184,7 +171,6 @@ function mapQueuedEntry(row: QueuedEntryRow): QueuedEntry {
         categoryName: row.category_name,
         name: row.name,
         imageKey: row.image_key,
-        availableAt: row.available_at,
         createdAt: row.created_at
     };
 }

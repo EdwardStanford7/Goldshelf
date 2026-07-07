@@ -91,7 +91,6 @@ export interface SeedUser {
     direct?: boolean;
     queueSettings?: {
         enabled?: boolean;
-        delayDays?: number;
         promptForMissingImages?: boolean;
         randomizeReadyEntries?: boolean;
     };
@@ -100,7 +99,6 @@ export interface SeedUser {
         categoryName: string;
         name: string;
         imageKey?: string | null;
-        availableAt?: number;
         createdAt?: number;
     }>;
 }

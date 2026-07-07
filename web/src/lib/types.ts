@@ -15,7 +15,6 @@ export interface Entry {
 
 export interface QueueSettings {
     enabled: boolean;
-    delayDays: number;
     promptForMissingImages: boolean;
     randomizeReadyEntries: boolean;
 }
@@ -26,7 +25,6 @@ export interface QueuedEntry {
     categoryName: string;
     name: string;
     imageKey: string | null;
-    availableAt: number;
     createdAt: number;
 }
 
@@ -190,7 +188,6 @@ export interface ParsedImportEntry {
 export interface ParsedImportQueuedEntry {
     categoryName: string;
     name: string;
-    availableAt: number | null;
     createdAt: number | null;
 }
 

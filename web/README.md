@@ -12,7 +12,7 @@ TanStack Start + Cloudflare Workers port of the Rust media ranking app.
 - Legacy xlsx import with an optional default added date.
 - Imported entries start without images. Images can be picked later from an 18-result search popup or uploaded manually.
 - Ranking comparisons prompt for one missing image at a time instead of fetching images during import.
-- Optional entry queue with a user-configurable delay before new entries become ready for binary ranking.
+- Optional entry queue for holding new entries before binary ranking.
 - xlsx export with the legacy `Sorted` sheet and entry metadata.
 
 ## Local Setup

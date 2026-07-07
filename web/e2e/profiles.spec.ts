@@ -116,7 +116,6 @@ test.describe("Profiles", () => {
         await bobPage.getByRole("button", { name: "Alice Movies" }).click();
         await expect(bobPage.getByRole("heading", { name: "Alice Movies" })).toBeVisible();
         await expect(bobPage.getByText("3 queued")).toBeVisible();
-        await expect(bobPage.getByText("3 ready")).toBeVisible();
         await expect(bobPage.getByText("Arrival").first()).toBeVisible();
         await expect(bobPage.getByText("Heat").first()).toBeVisible();
         await expect(bobPage.getByText("Solaris").first()).toBeVisible();

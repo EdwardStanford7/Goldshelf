@@ -7,12 +7,10 @@ import {
     getOwnedQueuedEntry,
     getOwnedQueuedEntryIncludingDeleted,
     getQueueSettings,
-    normalizeQueueDelayDays,
     type QueuedEntryStatusRow
 } from "./stores/queueStore";
 import { assertEntryNameAvailable, createEntryWithBinaryRankingForUser } from "./engine/entryCreation";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_BATCH_QUEUE_ACTION_IDS = 200;
 
 export const createQueuedEntry = createServerFn({ method: "POST" })
@@ -30,26 +28,23 @@ export const createQueuedEntry = createServerFn({ method: "POST" })
 
         await assertEntryNameAvailable(userId, input.categoryId, cleanName);
 
-        const settings = await getQueueSettings(userId);
         const updatedAt = now();
         const createdAt = normalizeCreatedAt(input.createdAt) ?? updatedAt;
-        const availableAt = updatedAt + settings.delayDays * DAY_MS;
         const queueId = newId("queue");
 
         await getDb()
             .prepare(
                 `INSERT INTO entry_queue (
-             id, user_id, category_id, name, available_at,
+             id, user_id, category_id, name,
              status, created_at, updated_at
            )
-           VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
+           VALUES (?, ?, ?, ?, 'queued', ?, ?)`
             )
             .bind(
                 queueId,
                 userId,
                 input.categoryId,
                 cleanName,
-                availableAt,
                 createdAt,
                 updatedAt
             )
@@ -61,11 +56,10 @@ export const createQueuedEntry = createServerFn({ method: "POST" })
             categoryName: category.name,
             name: cleanName,
             imageKey: null,
-            availableAt,
             createdAt
         };
 
-        return { queuedEntry, queuedEntryId: queueId, availableAt };
+        return { queuedEntry, queuedEntryId: queueId };
     });
 
 function normalizeCreatedAt(value: number | null | undefined) {
@@ -102,24 +96,21 @@ export const updateQueueSettings = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
     .inputValidator((data: {
         enabled: boolean;
-        delayDays: number;
         promptForMissingImages: boolean;
         randomizeReadyEntries: boolean;
     }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
-        const delayDays = normalizeQueueDelayDays(input.delayDays);
         const updatedAt = now();
 
         await getDb()
             .prepare(
                 `INSERT INTO queue_settings (
-             user_id, enabled, delay_days, prompt_missing_images, randomize_ready_entries, created_at, updated_at
+             user_id, enabled, prompt_missing_images, randomize_ready_entries, created_at, updated_at
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT(user_id) DO UPDATE SET
              enabled = excluded.enabled,
-             delay_days = excluded.delay_days,
              prompt_missing_images = excluded.prompt_missing_images,
              randomize_ready_entries = excluded.randomize_ready_entries,
              updated_at = excluded.updated_at`
@@ -127,7 +118,6 @@ export const updateQueueSettings = createServerFn({ method: "POST" })
             .bind(
                 userId,
                 input.enabled ? 1 : 0,
-                delayDays,
                 input.promptForMissingImages ? 1 : 0,
                 input.randomizeReadyEntries ? 1 : 0,
                 updatedAt,
@@ -140,17 +130,13 @@ export const updateQueueSettings = createServerFn({ method: "POST" })
 
 export const startQueuedEntryRanking = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { queuedEntryId: string; overrideDelay?: boolean }) => data)
+    .inputValidator((data: { queuedEntryId: string }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const queuedEntry = await getOwnedQueuedEntry(userId, input.queuedEntryId);
         assertOwned(queuedEntry, "Queued entry");
 
         const currentTime = now();
-        if (queuedEntry.availableAt > currentTime && !input.overrideDelay) {
-            throw new Error("This queued entry is not ready to rank yet");
-        }
-
         await assertEntryNameAvailable(userId, queuedEntry.categoryId, queuedEntry.name, queuedEntry.id);
 
         const result = await createEntryWithBinaryRankingForUser(userId, {
@@ -263,7 +249,7 @@ export const restoreQueuedEntries = createServerFn({ method: "POST" })
             db
                 .prepare(
                     `SELECT entry_queue.id, entry_queue.category_id, categories.name AS category_name,
-                    entry_queue.name, entry_queue.image_key, entry_queue.available_at, entry_queue.created_at,
+                    entry_queue.name, entry_queue.image_key, entry_queue.created_at,
                     entry_queue.status
              FROM entry_queue
              INNER JOIN categories ON categories.id = entry_queue.category_id

@@ -5,6 +5,7 @@ import { gotoApp, openAccountMenu, seedUsers, serverFnResponse, signInViaApi, TE
 const QUINN = {
     email: "quinn@e2e.test",
     name: "Quinn",
+    queueSettings: { enabled: false },
     categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }]
 };
 
@@ -15,14 +16,14 @@ const QUEUE_SCOPE_USER = {
         { name: "Movies", entries: ["Arrival"] },
         { name: "Books", entries: [] }
     ],
-    queueSettings: { enabled: true, delayDays: 0 },
+    queueSettings: { enabled: true },
     queuedEntries: [
         { categoryName: "Movies", name: "Memento" },
         { categoryName: "Books", name: "Hyperion" }
     ]
 };
 
-/** Opens the account menu's Settings flyout (queue toggles + delay days). */
+/** Opens the account menu's Settings flyout. */
 async function openQueueSettings(page: Page) {
     const queueToggle = page.getByRole("menuitemcheckbox", { name: "Queue entries" });
     if (await queueToggle.isVisible().catch(() => false)) {
@@ -112,7 +113,7 @@ async function openImportToast(page: Page) {
 }
 
 test.describe("Queue", () => {
-    test("new accounts default to a ready zero-day queue and settings apply before refresh", async ({
+    test("new accounts default to queue-on and settings apply before refresh", async ({
         page
     }) => {
         await gotoApp(page, "/signin");
@@ -125,10 +126,9 @@ test.describe("Queue", () => {
 
         await openQueueSettings(page);
         await expect(page.getByRole("menuitemcheckbox", { name: "Queue entries" })).toHaveAttribute("aria-checked", "true");
-        await expect(page.getByRole("menuitemcheckbox", { name: "Randomize ready queue" })).toHaveAttribute("aria-checked", "false");
-        await expect(page.getByLabel("Delay days")).toHaveValue("0");
+        await expect(page.getByRole("menuitemcheckbox", { name: "Randomize queue ranking" })).toHaveAttribute("aria-checked", "false");
 
-        await withSettingsSaved(page, () => page.getByRole("menuitemcheckbox", { name: "Randomize ready queue" }).click());
+        await withSettingsSaved(page, () => page.getByRole("menuitemcheckbox", { name: "Randomize queue ranking" }).click());
         await closeAccountMenu(page);
 
         await page.getByPlaceholder("New category").fill("Books");
@@ -137,9 +137,8 @@ test.describe("Queue", () => {
 
         await page.getByPlaceholder("New entry").fill("Dune");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Queued Dune for ranking on/)).toBeVisible();
+        await expect(page.getByText("Queued Dune for ranking.")).toBeVisible();
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
-        await expect(page.getByText("1 ready")).toBeVisible();
         await page.getByRole("button", { name: "Close", exact: true }).click();
 
         await queueItem(page, "Dune").click({ button: "right" });
@@ -156,7 +155,7 @@ test.describe("Queue", () => {
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
     });
 
-    test("full queue lifecycle: enable, delay, rename, rank now, undo delete, rank queue, disable", async ({
+    test("full queue lifecycle: enable, rename, rank now, undo delete, rank queue, disable", async ({
         page,
         context
     }) => {
@@ -167,18 +166,17 @@ test.describe("Queue", () => {
         await expect(page.getByText("#1 Arrival")).toBeVisible();
         await expect(page.getByText("Queue Empty")).toBeVisible();
 
-        // --- Enable the queue with the default delay (3 days). ---
+        // --- Enable the queue. ---
         await openQueueSettings(page);
         await withSettingsSaved(page, () => page.getByRole("menuitemcheckbox", { name: "Queue entries" }).click());
         await closeAccountMenu(page);
 
-        // --- New entries now land in the queue, not ready yet. ---
+        // --- New entries now land in the queue. ---
         await page.getByPlaceholder("New entry").fill("Solaris");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Queued Solaris for ranking on/)).toBeVisible();
+        await expect(page.getByText("Queued Solaris for ranking.")).toBeVisible();
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
-        await expect(page.getByText("0 ready")).toBeVisible();
-        await expect(page.getByRole("button", { name: "Rank Queue" })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Rank Queue" })).toBeEnabled();
 
         // --- Queue state survives a reload (server-side persistence). ---
         await gotoApp(page);
@@ -193,7 +191,7 @@ test.describe("Queue", () => {
         await expect(queueItem(page, "Stalker")).toBeVisible();
         await expect(queueItem(page, "Solaris")).toBeHidden();
 
-        // --- "Rank Now" overrides the delay and starts a binary session. ---
+        // --- "Rank Now" starts a binary session. ---
         await queueItem(page, "Stalker").click({ button: "right" });
         await page.getByRole("menuitem", { name: "Rank Now" }).click();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
@@ -204,11 +202,6 @@ test.describe("Queue", () => {
         await expect(page.getByText("#3 Dune")).toBeVisible();
         await expect(page.getByText("0 queued")).toBeVisible();
 
-        // --- With a zero-day delay, queued entries are ready immediately. ---
-        await openQueueSettings(page);
-        await withSettingsSaved(page, () => page.getByLabel("Delay days").fill("0"));
-        await closeAccountMenu(page);
-
         await page.getByPlaceholder("New entry").fill("Memento");
         await page.getByPlaceholder("New entry").press("Enter");
         await expect(page.getByText("1 queued")).toBeVisible();
@@ -216,7 +209,6 @@ test.describe("Queue", () => {
         await page.getByPlaceholder("New entry").fill("Klute");
         await page.getByPlaceholder("New entry").press("Enter");
         await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
-        await expect(page.getByText("2 ready")).toBeVisible();
         await expect(page.getByRole("button", { name: "Rank Queue" })).toBeEnabled();
 
         // --- Removing a queued entry is reversible via the undo toast. ---
@@ -229,16 +221,17 @@ test.describe("Queue", () => {
         await expect(page.getByText("Restored Klute to the queue.")).toBeVisible();
         await expect(page.getByText("2 queued")).toBeVisible();
 
-        // --- "Rank Queue" chains ranking sessions for every ready entry. ---
+        // --- "Rank Queue" chains ranking sessions for every queued entry. ---
         await page.getByRole("button", { name: "Rank Queue" }).click();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Memento");
         // The second session starts automatically once the first finishes.
         await winMatchups(page, "Klute");
+        // Undo/restore can alter the transient queue order, so finish Memento if it was second.
+        await winMatchups(page, "Memento");
 
-        await expect(page.getByText("No ready queued entries remain.")).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByText("#1 Klute")).toBeVisible();
-        await expect(page.getByText("#2 Memento")).toBeVisible();
+        await expect(page.getByText(/^#1 (Klute|Memento)$/)).toBeVisible();
+        await expect(page.getByText(/^#2 (Klute|Memento)$/)).toBeVisible();
         await expect(page.getByText("#3 Stalker")).toBeVisible();
         await expect(page.getByText("#4 Arrival")).toBeVisible();
         await expect(page.getByText("#5 Dune")).toBeVisible();
@@ -263,7 +256,6 @@ test.describe("Queue", () => {
         await signInViaApi(context, QUEUE_SCOPE_USER.email);
         await gotoApp(page);
         await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
-        await expect(page.getByText("2 ready")).toBeVisible();
 
         await page.getByPlaceholder("Search queue").fill("meme");
         await expect(queueItem(page, "Memento")).toBeVisible();
@@ -277,7 +269,7 @@ test.describe("Queue", () => {
         await expect(page.getByRole("button", { name: "Rank Books" })).toBeEnabled();
 
         await page.getByRole("button", { name: "Rank Books" }).click();
-        await expect(page.getByText("No ready queued entries remain in that category.")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("No queued entries remain in that category.")).toBeVisible({ timeout: 15_000 });
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
         await expect(page.getByText("#1 Hyperion")).toBeVisible();
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
@@ -292,13 +284,12 @@ test.describe("Queue", () => {
             name: "Queue Skip",
             queueSettings: {
                 enabled: true,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
             queuedEntries: [
-                { categoryName: "Movies", name: "Memento", availableAt: 1, createdAt: 1 },
-                { categoryName: "Movies", name: "Klute", availableAt: 2, createdAt: 2 }
+                { categoryName: "Movies", name: "Memento", createdAt: 1 },
+                { categoryName: "Movies", name: "Klute", createdAt: 2 }
             ]
         }]);
         await signInViaApi(context, "queue-skip@e2e.test");
@@ -312,7 +303,7 @@ test.describe("Queue", () => {
         await expect(matchChoice(page, "Memento")).toBeHidden();
 
         await winMatchups(page, "Klute");
-        await expect(page.getByText("No unskipped ready queued entries remain.")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("No unskipped queued entries remain.")).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("1 queued")).toBeVisible();
         await expect(queueItem(page, "Memento")).toBeVisible();
         await expect(page.getByText("#1 Klute")).toBeVisible();
@@ -324,13 +315,12 @@ test.describe("Queue", () => {
             name: "Queue Delete Current",
             queueSettings: {
                 enabled: true,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
             queuedEntries: [
-                { categoryName: "Movies", name: "Memento", availableAt: 1, createdAt: 1 },
-                { categoryName: "Movies", name: "Klute", availableAt: 2, createdAt: 2 }
+                { categoryName: "Movies", name: "Memento", createdAt: 1 },
+                { categoryName: "Movies", name: "Klute", createdAt: 2 }
             ]
         }]);
         await signInViaApi(context, "queue-delete-current@e2e.test");
@@ -346,7 +336,7 @@ test.describe("Queue", () => {
         await expect(queueItem(page, "Memento")).toBeHidden();
 
         await winMatchups(page, "Klute");
-        await expect(page.getByText("No ready queued entries remain.")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("No queued entries remain.")).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("Queue Empty")).toBeVisible();
     });
 
@@ -359,15 +349,14 @@ test.describe("Queue", () => {
             name: "Queue Batch",
             queueSettings: {
                 enabled: true,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
             queuedEntries: [
-                { categoryName: "Movies", name: "Memento", availableAt: 1, createdAt: 1 },
-                { categoryName: "Movies", name: "Klute", availableAt: 2, createdAt: 2 },
-                { categoryName: "Movies", name: "Solaris", availableAt: 3, createdAt: 3 },
-                { categoryName: "Movies", name: "Stalker", availableAt: 4, createdAt: 4 }
+                { categoryName: "Movies", name: "Memento", createdAt: 1 },
+                { categoryName: "Movies", name: "Klute", createdAt: 2 },
+                { categoryName: "Movies", name: "Solaris", createdAt: 3 },
+                { categoryName: "Movies", name: "Stalker", createdAt: 4 }
             ]
         }]);
         await signInViaApi(context, "queue-batch@e2e.test");
@@ -410,12 +399,11 @@ test.describe("Queue", () => {
             name: "Cancel Options",
             queueSettings: {
                 enabled: false,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
             queuedEntries: [
-                { categoryName: "Movies", name: "Solaris", availableAt: 1, createdAt: 1 }
+                { categoryName: "Movies", name: "Solaris", createdAt: 1 }
             ]
         }]);
         await signInViaApi(context, "cancel-options@e2e.test");
@@ -429,7 +417,7 @@ test.describe("Queue", () => {
 
         await page.getByPlaceholder("New entry").fill("Blade Runner");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Queued Blade Runner for ranking on/)).toBeVisible();
+        await expect(page.getByText("Queued Blade Runner for ranking.")).toBeVisible();
         await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
         await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible();
 
@@ -473,7 +461,7 @@ test.describe("Queue", () => {
             email: "sheet-export@e2e.test",
             name: "Sheet Export",
             categories: [{ name: "Books" }],
-            queuedEntries: [{ categoryName: "Books", name: "Dune", availableAt: 0, createdAt: 0 }]
+            queuedEntries: [{ categoryName: "Books", name: "Dune", createdAt: 0 }]
         }]);
         await signInViaApi(context, "sheet-export@e2e.test");
         await gotoApp(page);
@@ -507,7 +495,7 @@ test.describe("Queue", () => {
         await seedUsers([{
             email: "queue-selector@e2e.test",
             name: "Queue Selector",
-            queueSettings: { enabled: true, delayDays: 0 },
+            queueSettings: { enabled: true },
             categories: [
                 { name: "Movies", entries: ["Arrival"] },
                 { name: "Books" }
@@ -522,8 +510,8 @@ test.describe("Queue", () => {
         await page.getByRole("option", { name: "Books" }).click();
         await page.getByPlaceholder("New entry").press("Enter");
 
-        await expect(page.getByText(/Queued Dune for ranking on/)).toBeVisible();
-        await expect(page.getByText("Books · Ready")).toBeVisible();
+        await expect(page.getByText("Queued Dune for ranking.")).toBeVisible();
+        await expect(queueItem(page, "Dune")).toBeVisible();
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
     });
 });

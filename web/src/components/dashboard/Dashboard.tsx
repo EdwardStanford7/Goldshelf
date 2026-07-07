@@ -146,7 +146,6 @@ function applyDragOrder<T extends { id: string }>(items: T[], order: string[] | 
 
 function orderQueuedEntries(entries: QueuedEntry[]) {
     return [...entries].sort((left, right) =>
-        left.availableAt - right.availableAt ||
         left.createdAt - right.createdAt ||
         left.name.localeCompare(right.name)
     );
@@ -1020,7 +1019,7 @@ export function Dashboard({
                 formElement.reset();
                 setEntryDraftName("");
                 setEntryCategoryId(targetCategory.id);
-                setMessage(`Queued ${cleanName} for ranking on ${formatDateTime(result.availableAt)}.`);
+                setMessage(`Queued ${cleanName} for ranking.`);
                 setDashboard((currentDashboard) => ({
                     ...currentDashboard,
                     queuedEntries: orderQueuedEntries([
@@ -1100,36 +1099,33 @@ export function Dashboard({
         }
     }
 
-    function getReadyQueuedEntries(queuedEntries: QueuedEntry[], excludedQueuedEntryIds: Set<string> = new Set()) {
-        const currentTime = Date.now();
+    function getRankableQueuedEntries(queuedEntries: QueuedEntry[], excludedQueuedEntryIds: Set<string> = new Set()) {
         const categoryScopeId = queueRankCategoryIdRef.current;
         return queuedEntries
             .filter((entry) =>
-                entry.availableAt <= currentTime &&
                 !excludedQueuedEntryIds.has(entry.id) &&
                 (!categoryScopeId || entry.categoryId === categoryScopeId)
             )
-            .sort((left, right) => left.availableAt - right.availableAt || left.createdAt - right.createdAt);
+            .sort((left, right) => left.createdAt - right.createdAt || left.name.localeCompare(right.name));
     }
 
-    function getNextReadyQueuedEntry(queuedEntries: QueuedEntry[]) {
-        const readyEntries = getReadyQueuedEntries(queuedEntries, skippedQueueRankIdsRef.current);
-        if (readyEntries.length === 0) {
+    function getNextQueuedEntry(queuedEntries: QueuedEntry[]) {
+        const rankableEntries = getRankableQueuedEntries(queuedEntries, skippedQueueRankIdsRef.current);
+        if (rankableEntries.length === 0) {
             return null;
         }
 
         if (!queueSettingsRef.current.randomizeReadyEntries) {
-            return readyEntries[0] ?? null;
+            return rankableEntries[0] ?? null;
         }
 
-        return readyEntries[Math.floor(Math.random() * readyEntries.length)] ?? null;
+        return rankableEntries[Math.floor(Math.random() * rankableEntries.length)] ?? null;
     }
 
-    async function beginQueuedEntryRanking(entry: QueuedEntry, overrideDelay: boolean) {
+    async function beginQueuedEntryRanking(entry: QueuedEntry) {
         const result = await startQueuedEntryRanking({
             data: {
-                queuedEntryId: entry.id,
-                overrideDelay
+                queuedEntryId: entry.id
             }
         });
 
@@ -1149,18 +1145,18 @@ export function Dashboard({
             return;
         }
 
-        const nextEntry = getNextReadyQueuedEntry(queuedEntries);
+        const nextEntry = getNextQueuedEntry(queuedEntries);
         if (!nextEntry) {
             const skippedCount = skippedQueueRankIdsRef.current.size;
             const categoryScopeId = queueRankCategoryIdRef.current;
             setQueueRankingActive(false);
             setMessage(categoryScopeId
                 ? skippedCount > 0
-                    ? "No unskipped ready queued entries remain in that category."
-                    : "No ready queued entries remain in that category."
+                    ? "No unskipped queued entries remain in that category."
+                    : "No queued entries remain in that category."
                 : skippedCount > 0
-                    ? "No unskipped ready queued entries remain."
-                    : "No ready queued entries remain.");
+                    ? "No unskipped queued entries remain."
+                    : "No queued entries remain.");
             return;
         }
 
@@ -1168,7 +1164,7 @@ export function Dashboard({
         setMessage(null);
 
         try {
-            const { result, nextDashboard } = await beginQueuedEntryRanking(nextEntry, false);
+            const { result, nextDashboard } = await beginQueuedEntryRanking(nextEntry);
             if (!nextDashboard) {
                 setQueueRankingActive(false);
                 return;
@@ -1191,7 +1187,7 @@ export function Dashboard({
         setMessage(null);
 
         try {
-            await beginQueuedEntryRanking(entry, true);
+            await beginQueuedEntryRanking(entry);
         } catch (error) {
             setErrorMessage(error);
         } finally {

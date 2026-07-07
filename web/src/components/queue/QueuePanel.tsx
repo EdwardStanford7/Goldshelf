@@ -45,21 +45,11 @@ export function QueuePanel({
     onStartQueue: (categoryId?: string) => Promise<void>;
     onStopQueue: () => void;
 }) {
-    const [currentTime, setCurrentTime] = useState(Date.now());
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
     const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [categoryFilterId, setCategoryFilterId] = useState("all");
-
-    useEffect(() => {
-        const interval = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
-        return () => window.clearInterval(interval);
-    }, []);
-
-    useEffect(() => {
-        setCurrentTime(Date.now());
-    }, [queuedEntries]);
 
     const categoryOptions = useMemo(() => {
         const categories = new Map<string, string>();
@@ -78,11 +68,9 @@ export function QueuePanel({
     const activeQueueRankCategoryName = queueRankCategoryId
         ? categoryOptions.find((category) => category.id === queueRankCategoryId)?.name ?? "Category"
         : null;
-    const readyEntries = queuedEntries.filter((entry) => entry.availableAt <= currentTime);
-    const pendingEntries = queuedEntries.filter((entry) => entry.availableAt > currentTime);
-    const scopedReadyEntries = selectedCategoryId
-        ? readyEntries.filter((entry) => entry.categoryId === selectedCategoryId)
-        : readyEntries;
+    const scopedQueuedEntries = selectedCategoryId
+        ? queuedEntries.filter((entry) => entry.categoryId === selectedCategoryId)
+        : queuedEntries;
     const searchTerm = searchQuery.trim().toLowerCase();
     const entryMatchesFilters = (entry: QueuedEntry) => {
         const matchesCategory = !selectedCategoryId || entry.categoryId === selectedCategoryId;
@@ -91,11 +79,10 @@ export function QueuePanel({
             entry.categoryName.toLowerCase().includes(searchTerm);
         return matchesCategory && matchesSearch;
     };
-    const visibleReadyEntries = readyEntries.filter(entryMatchesFilters);
-    const visiblePendingEntries = pendingEntries.filter(entryMatchesFilters);
+    const visibleQueuedEntries = queuedEntries.filter(entryMatchesFilters);
     const displayedEntries = useMemo(
-        () => [...visibleReadyEntries, ...visiblePendingEntries],
-        [visiblePendingEntries, visibleReadyEntries]
+        () => visibleQueuedEntries,
+        [visibleQueuedEntries]
     );
     const displayedEntryIds = displayedEntries.map((entry) => entry.id);
     const selectedEntries = displayedEntries.filter((entry) => selectedEntryIds.has(entry.id));
@@ -167,7 +154,6 @@ export function QueuePanel({
                 <strong className="min-w-0 max-w-full">Queue</strong>
                 <div className="flex min-w-0 max-w-full flex-wrap justify-end gap-[0.4rem]">
                     <span className={METRIC_CLASS}>{queuedEntries.length} queued</span>
-                    <span className={METRIC_CLASS}>{readyEntries.length} ready</span>
                     {displayedEntries.length !== queuedEntries.length ? (
                         <span className={METRIC_CLASS}>{displayedEntries.length} shown</span>
                     ) : null}
@@ -243,7 +229,7 @@ export function QueuePanel({
                     <Button
                         size="lg"
                         variant={queueRankMode ? "outline" : "default"}
-                        disabled={queueRankMode ? false : busy || Boolean(activeSessionId) || scopedReadyEntries.length === 0}
+                        disabled={queueRankMode ? false : busy || Boolean(activeSessionId) || scopedQueuedEntries.length === 0}
                         type="button"
                         onClick={() => {
                             if (queueRankMode) {
@@ -279,27 +265,10 @@ export function QueuePanel({
 
             {queuedEntries.length > 0 && displayedEntries.length > 0 ? (
                 <div className="grid max-h-[min(42vh,520px)] min-h-0 min-w-0 gap-[0.55rem] overflow-x-hidden overflow-y-auto pr-[0.15rem] max-[720px]:max-h-none max-[720px]:overflow-y-visible max-[720px]:pr-0">
-                    {visibleReadyEntries.map((entry) => (
+                    {visibleQueuedEntries.map((entry) => (
                         <QueuedEntryRow
                             metadataDisabled={busy}
                             entry={entry}
-                            isReady
-                            key={entry.id}
-                            onDelete={onDelete}
-                            onPickImage={onPickImage}
-                            onRename={onRename}
-                            rankLocked={busy || Boolean(activeSessionId)}
-                            selected={selectedEntryIds.has(entry.id)}
-                            selectionMode={selectionMode}
-                            onSelect={(event, options) => handleSelection(entry, event, options)}
-                            onStart={onStart}
-                        />
-                    ))}
-                    {visiblePendingEntries.map((entry) => (
-                        <QueuedEntryRow
-                            metadataDisabled={busy}
-                            entry={entry}
-                            isReady={false}
                             key={entry.id}
                             onDelete={onDelete}
                             onPickImage={onPickImage}

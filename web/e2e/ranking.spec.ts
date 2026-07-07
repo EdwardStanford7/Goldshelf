@@ -39,7 +39,6 @@ test.describe("Ranking", () => {
             name: "Mobile",
             queueSettings: {
                 enabled: true,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [
@@ -64,7 +63,7 @@ test.describe("Ranking", () => {
         const accountMenu = await openAccountMenu(page);
         await accountMenu.getByRole("menuitem", { name: "Settings", exact: true }).hover();
         const settingsSubmenu = page
-            .locator("[data-slot='dropdown-menu-sub-content'][data-state='open']", { hasText: "Randomize ready queue" })
+            .locator("[data-slot='dropdown-menu-sub-content'][data-state='open']", { hasText: "Randomize queue ranking" })
             .first();
         await expect(settingsSubmenu).toBeVisible();
         const submenuBox = await settingsSubmenu.boundingBox();
@@ -97,7 +96,6 @@ test.describe("Ranking", () => {
         await page.getByTestId("mobile-tools-trigger").click();
         drawer = page.getByRole("dialog", { name: "Dashboard tools" });
         await expect(drawer.getByText("1 queued")).toBeVisible();
-        await expect(drawer.getByText("1 ready")).toBeVisible();
         await expect(drawer.getByText("Memento").first()).toBeVisible();
         await drawer.getByLabel("Actions for queued Memento").click();
         await expect(page.getByRole("menuitem", { name: "Rank Now" })).toBeEnabled();
@@ -115,7 +113,6 @@ test.describe("Ranking", () => {
             ...RANKER,
             queueSettings: {
                 enabled: false,
-                delayDays: 0,
                 promptForMissingImages: false
             }
         }]);
@@ -217,7 +214,6 @@ test.describe("Ranking", () => {
             name: "Short Sidebar",
             queueSettings: {
                 enabled: true,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [
@@ -227,9 +223,9 @@ test.describe("Ranking", () => {
                 { name: "Games", entries: ["Celeste", "Hades"] }
             ],
             queuedEntries: [
-                { categoryName: "Books", name: "Foundation", availableAt: 1, createdAt: 1 },
-                { categoryName: "Movies", name: "Memento", availableAt: 2, createdAt: 2 },
-                { categoryName: "Shows", name: "Dark", availableAt: 3, createdAt: 3 }
+                { categoryName: "Books", name: "Foundation", createdAt: 1 },
+                { categoryName: "Movies", name: "Memento", createdAt: 2 },
+                { categoryName: "Shows", name: "Dark", createdAt: 3 }
             ]
         }]);
         await signInViaApi(context, "short-sidebar@e2e.test");
@@ -280,7 +276,6 @@ test.describe("Ranking", () => {
             name: "Repair Loop",
             queueSettings: {
                 enabled: false,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [{ name: "Movies", entries: ["Alpha", "Beta", "Gamma", "Delta"] }]
@@ -295,7 +290,7 @@ test.describe("Ranking", () => {
 
         await page.getByPlaceholder("New entry").fill("Omega");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Queued Omega for ranking on/)).toBeVisible();
+        await expect(page.getByText("Queued Omega for ranking.")).toBeVisible();
         await expect(page.getByText("1 queued")).toBeVisible();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible();
 
@@ -319,7 +314,6 @@ test.describe("Ranking", () => {
             name: "Repair Anomaly",
             queueSettings: {
                 enabled: false,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [{ name: "Movies", entries: ["Alpha", "Beta", "Gamma", "Delta"] }]
@@ -354,7 +348,6 @@ test.describe("Ranking", () => {
             name: "Repair Undo",
             queueSettings: {
                 enabled: false,
-                delayDays: 0,
                 promptForMissingImages: false
             },
             categories: [{ name: "Movies", entries: ["Alpha", "Beta", "Gamma", "Delta"] }]

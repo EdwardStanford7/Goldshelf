@@ -648,10 +648,10 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
                     db
                         .prepare(
                             `INSERT INTO entry_queue (
-                       id, user_id, category_id, name, image_key, available_at,
+                       id, user_id, category_id, name, image_key,
                        status, created_at, updated_at
                      )
-                     VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+                     VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
                         )
                         .bind(
                             entry.id,
@@ -659,7 +659,6 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
                             targetCategoryId,
                             entry.name,
                             entry.imageKey,
-                            entry.createdAt,
                             entry.createdAt,
                             entry.createdAt
                         )

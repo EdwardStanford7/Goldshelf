@@ -16,7 +16,6 @@ interface SeedCategory {
 
 interface SeedQueueSettings {
     enabled?: boolean;
-    delayDays?: number;
     promptForMissingImages?: boolean;
     randomizeReadyEntries?: boolean;
 }
@@ -25,7 +24,6 @@ interface SeedQueuedEntry {
     categoryName: string;
     name: string;
     imageKey?: string | null;
-    availableAt?: number;
     createdAt?: number;
 }
 
@@ -101,12 +99,11 @@ export const Route = createFileRoute("/api/test/seed")({
                     await db
                         .prepare(
                             `INSERT INTO queue_settings (
-                 user_id, enabled, delay_days, prompt_missing_images, randomize_ready_entries, created_at, updated_at
+                 user_id, enabled, prompt_missing_images, randomize_ready_entries, created_at, updated_at
                )
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT(user_id) DO UPDATE SET
                  enabled = excluded.enabled,
-                 delay_days = excluded.delay_days,
                  prompt_missing_images = excluded.prompt_missing_images,
                  randomize_ready_entries = excluded.randomize_ready_entries,
                  updated_at = excluded.updated_at`
@@ -114,7 +111,6 @@ export const Route = createFileRoute("/api/test/seed")({
                         .bind(
                             userId,
                             queueSettings.enabled ? 1 : 0,
-                            queueSettings.delayDays ?? 3,
                             queueSettings.promptForMissingImages ? 1 : 0,
                             queueSettings.randomizeReadyEntries ? 1 : 0,
                             timestamp,
@@ -174,10 +170,10 @@ export const Route = createFileRoute("/api/test/seed")({
                         await db
                             .prepare(
                                 `INSERT INTO entry_queue (
-                     id, user_id, category_id, name, image_key, available_at,
+                     id, user_id, category_id, name, image_key,
                      status, created_at, updated_at
                    )
-                   VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+                   VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
                             )
                             .bind(
                                 newId("queue"),
@@ -185,7 +181,6 @@ export const Route = createFileRoute("/api/test/seed")({
                                 categoryId,
                                 queuedEntry.name,
                                 queuedEntry.imageKey ?? null,
-                                queuedEntry.availableAt ?? queuedCreatedAt,
                                 queuedCreatedAt,
                                 timestamp
                             )

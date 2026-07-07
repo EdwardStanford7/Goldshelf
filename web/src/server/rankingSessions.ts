@@ -27,7 +27,6 @@ import {
 } from "./stores/entryStore";
 import {
     consumeQueuedEntryStatement,
-    getQueueSettings,
     restoreStartedQueuedEntryStatement
 } from "./stores/queueStore";
 import {
@@ -49,8 +48,6 @@ import {
     submitBubbleRepairWinner,
     submitLocalRepairWinner
 } from "./engine/rankingSessions";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const getBinarySession = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
@@ -236,16 +233,15 @@ export const cancelBinarySession = createServerFn({ method: "POST" })
                 throw new Error("That entry is already queued in this category");
             }
 
-            const settings = await getQueueSettings(userId);
             const queueId = newId("queue");
             statements.push(
                 db
                     .prepare(
                         `INSERT INTO entry_queue (
-                           id, user_id, category_id, name, image_key, available_at,
+                           id, user_id, category_id, name, image_key,
                            status, created_at, updated_at
                          )
-                         VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+                         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
                     )
                     .bind(
                         queueId,
@@ -253,7 +249,6 @@ export const cancelBinarySession = createServerFn({ method: "POST" })
                         session.category_id,
                         entry.name,
                         entry.imageKey,
-                        updatedAt + settings.delayDays * DAY_MS,
                         entry.createdAt,
                         updatedAt
                     )

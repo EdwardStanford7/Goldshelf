@@ -16,14 +16,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
-import { useHydrated } from "@/hooks/useHydrated";
-import { formatDateTime } from "@/lib/format";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import type { QueuedEntry } from "@/lib/types";
 
 export function QueuedEntryRow({
     entry,
-    isReady,
     metadataDisabled,
     onDelete,
     onPickImage,
@@ -35,7 +32,6 @@ export function QueuedEntryRow({
     onStart
 }: {
     entry: QueuedEntry;
-    isReady: boolean;
     metadataDisabled: boolean;
     onDelete: (entry: QueuedEntry) => Promise<void>;
     onPickImage: (entry: QueuedEntry) => void;
@@ -48,9 +44,6 @@ export function QueuedEntryRow({
 }) {
     const [isRenaming, setIsRenaming] = useState(false);
     const [name, setName] = useState(entry.name);
-    // availableAt is a real instant; the server can't know the client's
-    // timezone, so render UTC until hydration and local time after mount.
-    const hydrated = useHydrated();
     useEscapeKey(isRenaming, () => { setName(entry.name); setIsRenaming(false); });
 
     useEffect(() => {
@@ -79,7 +72,7 @@ export function QueuedEntryRow({
                 <div
                     className={`relative grid min-w-0 ${selectionMode ? "grid-cols-[auto_54px_minmax(0,1fr)] cursor-pointer" : "grid-cols-[54px_minmax(0,1fr)]"} items-start gap-[0.55rem] rounded-sm border p-[0.65rem] max-[720px]:pr-10 ${selected
                         ? "border-primary bg-accent"
-                        : isReady ? "border-primary bg-ready-panel" : "border-border bg-muted"
+                        : "border-border bg-muted"
                         }`}
                     onClick={(event) => {
                         if (selectionMode) {
@@ -170,7 +163,7 @@ export function QueuedEntryRow({
                                 }}
                             >
                                 <strong>{entry.name}</strong>
-                                <p className="m-0 mt-[0.2rem] text-muted-foreground">{entry.categoryName} · {isReady ? "Ready" : formatDateTime(entry.availableAt, hydrated ? undefined : "UTC")}</p>
+                                <p className="m-0 mt-[0.2rem] text-muted-foreground">{entry.categoryName}</p>
                             </div>
                         )}
                     </div>

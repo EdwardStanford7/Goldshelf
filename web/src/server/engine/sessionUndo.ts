@@ -15,7 +15,6 @@ interface QueueRowSnapshot {
     categoryId: string;
     name: string;
     imageKey: string | null;
-    availableAt: number;
     status: string;
     createdAt: number;
     updatedAt: number;
@@ -85,7 +84,6 @@ interface QueueSnapshotRow {
     category_id: string;
     name: string;
     image_key: string | null;
-    available_at: number;
     status: string;
     created_at: number;
     updated_at: number;
@@ -366,7 +364,7 @@ async function snapshotQueuedEntry(db: D1Database, userId: string, queuedEntryId
     const row = await first<QueueSnapshotRow>(
         db
             .prepare(
-                `SELECT id, user_id, category_id, name, image_key, available_at,
+                `SELECT id, user_id, category_id, name, image_key,
                         status, created_at, updated_at
                  FROM entry_queue
                  WHERE id = ? AND user_id = ?`
@@ -381,7 +379,6 @@ async function snapshotQueuedEntry(db: D1Database, userId: string, queuedEntryId
             categoryId: row.category_id,
             name: row.name,
             imageKey: row.image_key,
-            availableAt: row.available_at,
             status: row.status,
             createdAt: row.created_at,
             updatedAt: row.updated_at
@@ -441,10 +438,10 @@ function upsertQueueSnapshotStatement(db: D1Database, queuedEntry: QueueRowSnaps
     return db
         .prepare(
             `INSERT OR REPLACE INTO entry_queue (
-                 id, user_id, category_id, name, image_key, available_at,
+                 id, user_id, category_id, name, image_key,
                  status, created_at, updated_at
              )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
             queuedEntry.id,
@@ -452,7 +449,6 @@ function upsertQueueSnapshotStatement(db: D1Database, queuedEntry: QueueRowSnaps
             queuedEntry.categoryId,
             queuedEntry.name,
             queuedEntry.imageKey,
-            queuedEntry.availableAt,
             queuedEntry.status,
             queuedEntry.createdAt,
             queuedEntry.updatedAt

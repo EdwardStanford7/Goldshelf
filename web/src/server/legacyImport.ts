@@ -195,21 +195,19 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
                 knownNames.add(entry.name);
                 const queueId = newId("queue");
                 const rowCreatedAt = normalizeImportedTimestamp(entry.createdAt) ?? createdAt + queuedInsertIndex;
-                const availableAt = normalizeImportedTimestamp(entry.availableAt) ?? rowCreatedAt;
                 queueInsertStatements.push(
                     db.prepare(
                         `INSERT OR IGNORE INTO entry_queue (
-                 id, user_id, category_id, name, image_key, available_at,
+                 id, user_id, category_id, name, image_key,
                  status, created_at, updated_at
                )
-               VALUES (?, ?, ?, ?, NULL, ?, 'queued', ?, ?)`
+               VALUES (?, ?, ?, ?, NULL, 'queued', ?, ?)`
                     )
                         .bind(
                             queueId,
                             userId,
                             categoryId,
                             entry.name,
-                            availableAt,
                             rowCreatedAt,
                             createdAt
                         )

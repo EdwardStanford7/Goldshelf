@@ -15,7 +15,6 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { signOut } from "@/lib/auth-client";
 import { hasStoredImage } from "@/lib/images";
 import type { ThemeMode } from "@/lib/theme";
@@ -59,7 +58,6 @@ export function AccountMenu({
     userName: string;
 }) {
     const [enabled, setEnabled] = useState(settings.enabled);
-    const [delayDays, setDelayDays] = useState(settings.delayDays);
     const [promptForMissingImages, setPromptForMissingImages] = useState(settings.promptForMissingImages);
     const [randomizeReadyEntries, setRandomizeReadyEntries] = useState(settings.randomizeReadyEntries);
     const [quickSaving, setQuickSaving] = useState(false);
@@ -67,11 +65,9 @@ export function AccountMenu({
 
     useEffect(() => {
         setEnabled(settings.enabled);
-        setDelayDays(settings.delayDays);
         setPromptForMissingImages(settings.promptForMissingImages);
         setRandomizeReadyEntries(settings.randomizeReadyEntries);
     }, [
-        settings.delayDays,
         settings.enabled,
         settings.promptForMissingImages,
         settings.randomizeReadyEntries
@@ -101,20 +97,8 @@ export function AccountMenu({
         await saveSettingsImmediately({
             ...settings,
             enabled: key === "enabled" ? Boolean(value) : enabled,
-            delayDays,
             promptForMissingImages: key === "promptForMissingImages" ? Boolean(value) : promptForMissingImages,
             randomizeReadyEntries: key === "randomizeReadyEntries" ? Boolean(value) : randomizeReadyEntries
-        });
-    }
-
-    async function updateDelayDays(nextDelayDays: number) {
-        setDelayDays(nextDelayDays);
-        await saveSettingsImmediately({
-            ...settings,
-            enabled,
-            delayDays: nextDelayDays,
-            promptForMissingImages,
-            randomizeReadyEntries
         });
     }
 
@@ -173,20 +157,8 @@ export function AccountMenu({
                             onCheckedChange={(value) => void updateToggle("randomizeReadyEntries", value)}
                             onSelect={(event) => event.preventDefault()}
                         >
-                            Randomize ready queue
+                            Randomize queue ranking
                         </DropdownMenuCheckboxItem>
-                        <DropdownMenuSeparator />
-                        <label className="grid gap-[0.35rem] px-2 py-1.5" onKeyDown={(event) => event.stopPropagation()}>
-                            <span className="text-[0.82rem] text-muted-foreground">Delay days</span>
-                            <Input
-                                disabled={busy || quickSaving}
-                                min={0}
-                                max={365}
-                                type="number"
-                                value={delayDays}
-                                onChange={(event) => void updateDelayDays(Number(event.target.value))}
-                            />
-                        </label>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSub>
