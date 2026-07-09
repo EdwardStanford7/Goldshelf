@@ -27,11 +27,11 @@ import {
 } from "@/server/repairSessions";
 
 const REPAIR_PANEL_CLASS =
-    "max-w-full min-w-0 rounded-md border border-border bg-card p-4 shadow-panel";
+    "max-w-full min-w-0 rounded-md border border-border bg-card p-4 shadow-panel max-[720px]:p-3";
 const STATUS_CLASS =
     "rounded-sm border-l-4 border-l-gold bg-status px-3 py-[0.6rem] whitespace-pre-line";
 const POSTER_CLASS =
-    "aspect-[4/5] bg-[image:linear-gradient(135deg,var(--poster-start),var(--poster-end))] text-center text-muted-foreground";
+    "aspect-[4/5] bg-[image:linear-gradient(135deg,var(--poster-start),var(--poster-end))] text-center text-muted-foreground max-[720px]:aspect-square";
 const TRANSIENT_SESSION_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 
 export function RepairRankPanel({
@@ -369,8 +369,8 @@ export function RepairRankPanel({
     const controlsDisabled = submitting || recovering;
 
     return (
-        <section className={`${REPAIR_PANEL_CLASS} grid content-start gap-[0.9rem]`}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:flex-col max-[720px]:items-stretch *:max-w-full *:min-w-0">
+        <section className={`${REPAIR_PANEL_CLASS} grid content-start gap-[0.9rem] max-[720px]:gap-2`}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:mb-1 max-[720px]:gap-2 *:max-w-full *:min-w-0">
                 <div>
                     <strong>
                         {repairPhaseLabel(session.phase)} · {session.categoryName}
@@ -379,7 +379,7 @@ export function RepairRankPanel({
                         {repairSubtitle(session)}
                     </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 max-[720px]:gap-1.5">
                     {session.canUndoLastMatch ? (
                         <Button
                             size="sm"
@@ -417,7 +417,7 @@ export function RepairRankPanel({
             {recovering ? (
                 <div className={STATUS_CLASS}>Reconnecting...</div>
             ) : null}
-            <div className="grid min-w-0 grid-cols-2 gap-4 max-[720px]:grid-cols-1">
+            <div className="grid min-w-0 grid-cols-2 gap-4 max-[720px]:gap-2" data-testid="repair-choice-grid">
                 {[session.subject, session.opponent].map((entry) => (
                     <RepairMatchCard
                         disabled={controlsDisabled}
@@ -497,9 +497,9 @@ function RepairMatchCard({
 
     if (isRenaming) {
         return (
-            <article className="overflow-hidden rounded-md border border-border bg-card text-left">
+            <article className="overflow-hidden rounded-md border border-border bg-card text-left" data-testid="repair-choice-card">
                 <RepairMatchPoster entry={entry} />
-                <form className="grid gap-[0.6rem] p-[0.7rem]" onSubmit={handleRenameSubmit}>
+                <form className="grid gap-[0.6rem] p-[0.7rem] max-[720px]:gap-2 max-[720px]:p-2" onSubmit={handleRenameSubmit}>
                     <Input
                         autoFocus
                         aria-label={`Rename ${entry.name}`}
@@ -527,7 +527,7 @@ function RepairMatchCard({
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
-                <article className="relative overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-primary">
+                <article className="relative overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-primary" data-testid="repair-choice-card">
                     <button
                         className="block w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-55"
                         disabled={disabled}
@@ -535,13 +535,13 @@ function RepairMatchCard({
                         onClick={onChoose}
                     >
                         <RepairMatchPoster entry={entry} />
-                        <strong className="block p-[0.7rem] pr-11">{entry.name}</strong>
+                        <strong className="block truncate p-[0.7rem] pr-11 max-[720px]:p-2 max-[720px]:pr-9 max-[720px]:text-[0.82rem]">{entry.name}</strong>
                     </button>
                     <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 aria-label={`Actions for ${entry.name}`}
-                                className="absolute top-2 right-2 z-20 hidden border-overlay-button-line bg-overlay-button text-overlay-button-ink hover:bg-overlay-button max-[720px]:inline-flex"
+                                className="absolute top-2 right-2 z-20 hidden border-overlay-button-line bg-overlay-button text-overlay-button-ink hover:bg-overlay-button max-[720px]:top-1.5 max-[720px]:right-1.5 max-[720px]:inline-flex"
                                 disabled={disabled}
                                 size="icon-sm"
                                 type="button"
@@ -597,9 +597,9 @@ function RepairMatchPoster({ entry }: { entry: Entry }) {
     }
 
     return (
-        <div className={`${POSTER_CLASS} grid content-center place-items-center gap-[0.35rem] p-4`}>
-            <span className="text-[1rem] leading-tight">{entry.name}</span>
-            <small className="text-[0.95rem] leading-tight text-muted-foreground">{isNoImageKey(entry.imageKey) ? "No image saved" : "No image"}</small>
+        <div className={`${POSTER_CLASS} grid content-center place-items-center gap-[0.35rem] p-4 max-[720px]:gap-1 max-[720px]:p-2`}>
+            <span className="text-[1rem] leading-tight max-[720px]:text-[0.78rem]">{entry.name}</span>
+            <small className="text-[0.95rem] leading-tight text-muted-foreground max-[720px]:text-[0.72rem]">{isNoImageKey(entry.imageKey) ? "No image saved" : "No image"}</small>
         </div>
     );
 }

@@ -74,6 +74,8 @@ test.describe("Ranking", () => {
         await expect(settingsSubmenu).toBeHidden();
 
         const firstCardWidth = await page.locator("[data-entry-id]").first().evaluate((element) => element.getBoundingClientRect().width);
+        expect(firstCardWidth).toBeGreaterThan(140);
+        expect(firstCardWidth).toBeLessThan(210);
         await mobileHeader.getByLabel("Search entries").fill("Dune");
         await expect(page.getByText("#1 Dune")).toBeVisible();
         const filteredCardWidth = await page.locator("[data-entry-id]").first().evaluate((element) => element.getBoundingClientRect().width);
@@ -89,20 +91,26 @@ test.describe("Ranking", () => {
 
         await page.getByTestId("mobile-tools-trigger").click();
         drawer = page.getByRole("dialog", { name: "Dashboard tools" });
-        await drawer.getByPlaceholder("New entry").fill("Memento");
-        await drawer.getByPlaceholder("New entry").press("Enter");
+        await drawer.getByRole("button", { name: "New Entry" }).click();
         await expect(drawer).toBeHidden({ timeout: 15_000 });
+        let mobilePanel = page.getByRole("dialog", { name: "New Entry" });
+        await mobilePanel.getByPlaceholder("New entry").fill("Memento");
+        await mobilePanel.getByPlaceholder("New entry").press("Enter");
+        await expect(mobilePanel).toBeHidden({ timeout: 15_000 });
 
         await page.getByTestId("mobile-tools-trigger").click();
         drawer = page.getByRole("dialog", { name: "Dashboard tools" });
-        await expect(drawer.getByText("1 queued")).toBeVisible();
-        await expect(drawer.getByText("Memento").first()).toBeVisible();
-        await drawer.getByLabel("Actions for queued Memento").click();
+        await drawer.getByRole("button", { name: /^Queue/ }).click();
+        await expect(drawer).toBeHidden();
+        mobilePanel = page.getByRole("dialog", { name: "Queue" });
+        await expect(mobilePanel.getByText("1 queued")).toBeVisible();
+        await expect(mobilePanel.getByText("Memento").first()).toBeVisible();
+        await mobilePanel.getByLabel("Actions for queued Memento").click();
         await expect(page.getByRole("menuitem", { name: "Rank Now" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Rename" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Pick image" })).toBeEnabled();
         await page.getByRole("menuitem", { name: "Pick image" }).click();
-        await expect(drawer).toBeHidden();
+        await expect(mobilePanel).toBeHidden();
         const imagePicker = page.locator("section", { hasText: "Pick Image" }).first();
         await expect(imagePicker.getByRole("button", { name: "Close" })).toBeVisible();
         await imagePicker.getByRole("button", { name: "Close" }).click();
@@ -110,7 +118,9 @@ test.describe("Ranking", () => {
 
         await page.getByTestId("mobile-tools-trigger").click();
         drawer = page.getByRole("dialog", { name: "Dashboard tools" });
-        await drawer.getByLabel("Actions for queued Memento").click();
+        await drawer.getByRole("button", { name: /^Queue/ }).click();
+        mobilePanel = page.getByRole("dialog", { name: "Queue" });
+        await mobilePanel.getByLabel("Actions for queued Memento").click();
         await expect(page.getByRole("menuitem", { name: "Remove" })).toBeEnabled();
     });
 
@@ -148,10 +158,25 @@ test.describe("Ranking", () => {
 
         await page.getByTestId("mobile-tools-trigger").click();
         drawer = page.getByRole("dialog", { name: "Dashboard tools" });
-        await drawer.getByPlaceholder("New entry").fill("Zeta");
-        await drawer.getByPlaceholder("New entry").press("Enter");
+        await drawer.getByRole("button", { name: "New Entry" }).click();
         await expect(drawer).toBeHidden({ timeout: 15_000 });
+        const newEntryPanel = page.getByRole("dialog", { name: "New Entry" });
+        await newEntryPanel.getByPlaceholder("New entry").fill("Zeta");
+        await newEntryPanel.getByPlaceholder("New entry").press("Enter");
+        await expect(newEntryPanel).toBeHidden({ timeout: 15_000 });
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId("ranking-choice-card")).toHaveCount(2);
+        const choiceBoxes = await page.getByTestId("ranking-choice-card").evaluateAll((nodes) =>
+            nodes.map((node) => {
+                const box = node.getBoundingClientRect();
+                return {
+                    top: box.top,
+                    width: box.width
+                };
+            })
+        );
+        expect(Math.abs(choiceBoxes[0].top - choiceBoxes[1].top)).toBeLessThanOrEqual(2);
+        expect(choiceBoxes[0].width).toBeLessThan(210);
 
         await page.getByLabel("Actions for Zeta").click();
         await expect(page.getByRole("menuitem", { name: "Rename" })).toBeEnabled();

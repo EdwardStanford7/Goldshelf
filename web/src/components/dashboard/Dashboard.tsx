@@ -17,7 +17,7 @@ import {
     rectSortingStrategy,
     verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { Library, Menu, Search, Swords, Wrench } from "lucide-react";
+import { Library, ListPlus, Menu, Plus, Search, Swords, Wrench } from "lucide-react";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { BinaryRankPanel } from "@/components/ranking/BinaryRankPanel";
 import { RepairRankPanel } from "@/components/ranking/RepairRankPanel";
@@ -124,6 +124,7 @@ const ACTIVE_FLOW_RESUME_REFRESH_AFTER_MS = 2_000;
 const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 const SIDEBAR_PANEL_CLASS =
     "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
+type MobilePanel = "newCategory" | "newEntry" | "queue";
 
 /**
  * Apply an optimistic drag ordering (a list of ids) on top of the canonical
@@ -222,9 +223,10 @@ export function Dashboard({
     const resumeRefreshInFlightRef = useRef(false);
     const resumeRetryTimerRef = useRef<number | null>(null);
     const resumeRetryAttemptRef = useRef(0);
-    const drawerImagePickerTimerRef = useRef<number | null>(null);
+    const mobileLayerTimerRef = useRef<number | null>(null);
     const [entrySearch, setEntrySearch] = useState("");
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+    const [mobilePanel, setMobilePanel] = useState<MobilePanel | null>(null);
     const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
     const activeSessionIdRef = useRef<string | null>(initialActiveSessionId);
     const closedBinarySessionIdsRef = useRef<Set<string>>(new Set());
@@ -374,8 +376,8 @@ export function Dashboard({
     }, [busy]);
 
     useEffect(() => () => {
-        if (drawerImagePickerTimerRef.current !== null) {
-            window.clearTimeout(drawerImagePickerTimerRef.current);
+        if (mobileLayerTimerRef.current !== null) {
+            window.clearTimeout(mobileLayerTimerRef.current);
         }
     }, []);
 
@@ -1799,24 +1801,36 @@ export function Dashboard({
         }
     }
 
-    async function handleCreateCategoryFromDrawer(event: FormEvent<HTMLFormElement>) {
+    function scheduleAfterMobileLayerClose(action: () => void) {
+        if (mobileLayerTimerRef.current !== null) {
+            window.clearTimeout(mobileLayerTimerRef.current);
+        }
+
+        mobileLayerTimerRef.current = window.setTimeout(() => {
+            mobileLayerTimerRef.current = null;
+            action();
+        }, 240);
+    }
+
+    function openMobilePanelFromDrawer(panel: MobilePanel) {
         setMobileDrawerOpen(false);
+        scheduleAfterMobileLayerClose(() => setMobilePanel(panel));
+    }
+
+    async function handleCreateCategoryFromMobilePanel(event: FormEvent<HTMLFormElement>) {
+        setMobilePanel(null);
         await handleCreateCategory(event);
         scrollMainToTop();
     }
 
-    async function handleCreateEntryFromDrawer(event: FormEvent<HTMLFormElement>) {
-        setMobileDrawerOpen(false);
+    async function handleCreateEntryFromMobilePanel(event: FormEvent<HTMLFormElement>) {
+        setMobilePanel(null);
         await handleCreateEntry(event);
         scrollMainToTop();
     }
 
-    function handlePickQueuedImageFromDrawer(entry: QueuedEntry) {
-        setMobileDrawerOpen(false);
-        if (drawerImagePickerTimerRef.current !== null) {
-            window.clearTimeout(drawerImagePickerTimerRef.current);
-        }
-
+    function handlePickQueuedImageFromMobilePanel(entry: QueuedEntry) {
+        setMobilePanel(null);
         const target: ImagePickerTarget = {
             kind: "queue",
             item: entry,
@@ -1825,26 +1839,23 @@ export function Dashboard({
                 name: entry.categoryName
             }
         };
-        drawerImagePickerTimerRef.current = window.setTimeout(() => {
-            drawerImagePickerTimerRef.current = null;
-            setImagePickerTarget(target);
-        }, 240);
+        scheduleAfterMobileLayerClose(() => setImagePickerTarget(target));
     }
 
-    async function handleStartQueuedEntryFromDrawer(entry: QueuedEntry) {
-        setMobileDrawerOpen(false);
+    async function handleStartQueuedEntryFromMobilePanel(entry: QueuedEntry) {
+        setMobilePanel(null);
         await handleStartQueuedEntry(entry);
         scrollMainToTop();
     }
 
-    async function handleStartQueueRankFromDrawer(categoryId?: string) {
-        setMobileDrawerOpen(false);
+    async function handleStartQueueRankFromMobilePanel(categoryId?: string) {
+        setMobilePanel(null);
         await handleStartQueueRank(categoryId);
         scrollMainToTop();
     }
 
-    function handleStopQueueRankFromDrawer() {
-        setMobileDrawerOpen(false);
+    function handleStopQueueRankFromMobilePanel() {
+        setMobilePanel(null);
         handleStopQueueRank();
     }
 
@@ -2027,8 +2038,8 @@ export function Dashboard({
         );
     }
 
-    function renderQueuePanel(options: { drawer?: boolean } = {}) {
-        const drawer = Boolean(options.drawer);
+    function renderQueuePanel(options: { mobilePanel?: boolean } = {}) {
+        const panel = Boolean(options.mobilePanel);
         return (
             <QueuePanel
                 activeSessionId={activeFlowId}
@@ -2038,8 +2049,8 @@ export function Dashboard({
                 queuedEntries={dashboard.queuedEntries}
                 onDelete={handleDeleteQueuedEntry}
                 onDeleteSelected={handleDeleteQueuedEntries}
-                onPickImage={drawer
-                    ? handlePickQueuedImageFromDrawer
+                onPickImage={panel
+                    ? handlePickQueuedImageFromMobilePanel
                     : (entry) => setImagePickerTarget({
                         kind: "queue",
                         item: entry,
@@ -2048,10 +2059,10 @@ export function Dashboard({
                             name: entry.categoryName
                         }
                     })}
-                onStartQueue={drawer ? handleStartQueueRankFromDrawer : handleStartQueueRank}
+                onStartQueue={panel ? handleStartQueueRankFromMobilePanel : handleStartQueueRank}
                 onRename={handleRenameQueuedEntry}
-                onStart={drawer ? handleStartQueuedEntryFromDrawer : handleStartQueuedEntry}
-                onStopQueue={drawer ? handleStopQueueRankFromDrawer : handleStopQueueRank}
+                onStart={panel ? handleStartQueuedEntryFromMobilePanel : handleStartQueuedEntry}
+                onStopQueue={panel ? handleStopQueueRankFromMobilePanel : handleStopQueueRank}
             />
         );
     }
@@ -2075,11 +2086,84 @@ export function Dashboard({
         const hasCategories = dashboard.categories.length > 0;
         return (
             <>
-                {hasCategories ? renderCategoryList(true, true) : renderNewCategoryPanel(handleCreateCategoryFromDrawer)}
-                {renderNewEntryPanel(handleCreateEntryFromDrawer)}
-                {renderQueuePanel({ drawer: true })}
-                {hasCategories ? renderNewCategoryPanel(handleCreateCategoryFromDrawer) : renderCategoryList(true, true)}
+                {hasCategories ? renderCategoryList(true, true) : null}
+                <section className={SIDEBAR_PANEL_CLASS}>
+                    <strong className="min-w-0 max-w-full">Tools</strong>
+                    <div className="grid gap-2">
+                        <Button
+                            className="justify-start"
+                            disabled={busy || !selectedCategory}
+                            type="button"
+                            variant="outline"
+                            onClick={() => openMobilePanelFromDrawer("newEntry")}
+                        >
+                            <ListPlus data-icon="inline-start" />
+                            <span>New Entry</span>
+                        </Button>
+                        <Button
+                            className="justify-start"
+                            disabled={busy}
+                            type="button"
+                            variant="outline"
+                            onClick={() => openMobilePanelFromDrawer("queue")}
+                        >
+                            <Swords data-icon="inline-start" />
+                            <span>Queue</span>
+                            <span className="ml-auto text-muted-foreground">{dashboard.queuedEntries.length} queued</span>
+                        </Button>
+                        <Button
+                            className="justify-start"
+                            disabled={busy}
+                            type="button"
+                            variant={hasCategories ? "outline" : "default"}
+                            onClick={() => openMobilePanelFromDrawer("newCategory")}
+                        >
+                            <Plus data-icon="inline-start" />
+                            <span>New Category</span>
+                        </Button>
+                    </div>
+                </section>
+                {!hasCategories ? renderCategoryList(true, true) : null}
             </>
+        );
+    }
+
+    function renderMobilePanelSheet() {
+        const title = mobilePanel === "newEntry"
+            ? "New Entry"
+            : mobilePanel === "queue"
+                ? "Queue"
+                : "New Category";
+        const description = mobilePanel === "newEntry"
+            ? "Add an entry to the selected category."
+            : mobilePanel === "queue"
+                ? "Manage queued entries."
+                : "Create a category.";
+
+        return (
+            <Sheet
+                open={mobilePanel !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setMobilePanel(null);
+                    }
+                }}
+            >
+                <SheetContent side="right" className="w-[min(28rem,calc(100vw-1.25rem))] max-[720px]:w-full max-[720px]:max-w-none max-[720px]:border-l-0">
+                    <SheetHeader>
+                        <SheetTitle>{title}</SheetTitle>
+                        <SheetDescription className="sr-only">{description}</SheetDescription>
+                        <SheetCloseButton />
+                    </SheetHeader>
+                    <SheetBody>
+                        <div className="grid content-start gap-3">
+                            {mobilePanel === "newEntry" ? renderNewEntryPanel(handleCreateEntryFromMobilePanel) : null}
+                            {mobilePanel === "queue" ? renderQueuePanel({ mobilePanel: true }) : null}
+                            {mobilePanel === "newCategory" ? renderNewCategoryPanel(handleCreateCategoryFromMobilePanel) : null}
+                        </div>
+                    </SheetBody>
+                </SheetContent>
+            </Sheet>
         );
     }
 
@@ -2110,6 +2194,7 @@ export function Dashboard({
                     onSaved={handleImageSaved}
                 />
             ) : null}
+            {renderMobilePanelSheet()}
             {categoryDeleteTarget ? (
                 <ConfirmDialog
                     confirmLabel="Delete Category"
@@ -2311,7 +2396,7 @@ export function Dashboard({
                             strategy={rectSortingStrategy}
                         >
                             <section
-                                className={`grid min-w-0 gap-3 ${entrySearch.trim()
+                                className={`grid min-w-0 gap-3 max-[720px]:grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] max-[720px]:gap-2 ${entrySearch.trim()
                                     ? "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
                                     : "grid-cols-[repeat(auto-fit,minmax(min(100%,16.5rem),1fr))]"
                                     }`}

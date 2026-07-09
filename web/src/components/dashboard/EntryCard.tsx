@@ -187,7 +187,7 @@ export function EntryCard({
                         </DropdownMenu>
                     ) : null}
                     <EntryPoster entry={entry} />
-                    <div className="grid min-w-0 gap-[0.55rem] p-[0.65rem]">
+                    <div className="grid min-w-0 gap-[0.55rem] p-[0.65rem] max-[720px]:p-2">
                         {isRenaming ? (
                             <form className="grid gap-[0.45rem]" onSubmit={handleRenameSubmit}>
                                 <span className="text-sm text-muted-foreground">#{entry.rankPosition + 1}</span>
@@ -215,7 +215,7 @@ export function EntryCard({
                         ) : (
                             <div className="flex min-w-0 items-center gap-[0.45rem]">
                                 <strong
-                                    className="block min-w-0 flex-1 truncate text-[0.70rem] leading-tight wrap-normal"
+                                    className="block min-w-0 flex-1 truncate text-[0.70rem] leading-tight wrap-normal max-[720px]:text-[0.68rem]"
                                     title={`#${position} ${entry.name} · Double-click to rename · Right-click for actions${canDragReorder ? " · Drag to reorder" : ""}`}
                                     onDoubleClick={startRename}
                                 >
@@ -223,7 +223,7 @@ export function EntryCard({
                                 </strong>
                                 {showPercentile ? (
                                     <span
-                                        className="shrink-0 whitespace-nowrap rounded-full border border-primary/35 px-[0.36rem] py-[0.08rem] text-[0.62rem] leading-tight text-primary"
+                                        className="shrink-0 whitespace-nowrap rounded-full border border-primary/35 px-[0.36rem] py-[0.08rem] text-[0.62rem] leading-tight text-primary max-[720px]:px-[0.28rem] max-[720px]:text-[0.58rem]"
                                         title={`${position} of ${listSize}`}
                                     >
                                         {percentileLabel}
@@ -403,9 +403,9 @@ export function EntryPoster({
                     onError={() => setImageFailed(true)}
                 />
             ) : (
-                <div className={`${POSTER_CLASS} grid content-center place-items-center gap-[0.35rem] p-4 [grid-area:1/1]`}>
-                    <span className="text-[1rem] leading-tight">{entry.name}</span>
-                    <small className="text-[0.95rem] leading-tight text-muted-foreground">{isNoImageKey(entry.imageKey) ? "No image saved" : "No image"}</small>
+                <div className={`${POSTER_CLASS} grid content-center place-items-center gap-[0.35rem] p-4 [grid-area:1/1] max-[720px]:gap-1 max-[720px]:p-2`}>
+                    <span className="text-[1rem] leading-tight max-[720px]:text-[0.78rem]">{entry.name}</span>
+                    <small className="text-[0.95rem] leading-tight text-muted-foreground max-[720px]:text-[0.72rem]">{isNoImageKey(entry.imageKey) ? "No image saved" : "No image"}</small>
                 </div>
             )}
         </div>
