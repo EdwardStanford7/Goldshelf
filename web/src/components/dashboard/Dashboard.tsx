@@ -62,7 +62,6 @@ import {
     currentDateTimestamp,
     dateInputToTimestamp,
     errorMessage,
-    formatDateTime,
     isTransientRequestFailure
 } from "@/lib/format";
 import { shouldPromptForImage } from "@/lib/images";
@@ -223,6 +222,7 @@ export function Dashboard({
     const resumeRefreshInFlightRef = useRef(false);
     const resumeRetryTimerRef = useRef<number | null>(null);
     const resumeRetryAttemptRef = useRef(0);
+    const drawerImagePickerTimerRef = useRef<number | null>(null);
     const [entrySearch, setEntrySearch] = useState("");
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
@@ -372,6 +372,12 @@ export function Dashboard({
     useEffect(() => {
         busyRef.current = busy;
     }, [busy]);
+
+    useEffect(() => () => {
+        if (drawerImagePickerTimerRef.current !== null) {
+            window.clearTimeout(drawerImagePickerTimerRef.current);
+        }
+    }, []);
 
     useEffect(() => {
         setCurrentUserName(userName);
@@ -1794,15 +1800,35 @@ export function Dashboard({
     }
 
     async function handleCreateCategoryFromDrawer(event: FormEvent<HTMLFormElement>) {
-        await handleCreateCategory(event);
         setMobileDrawerOpen(false);
+        await handleCreateCategory(event);
         scrollMainToTop();
     }
 
     async function handleCreateEntryFromDrawer(event: FormEvent<HTMLFormElement>) {
-        await handleCreateEntry(event);
         setMobileDrawerOpen(false);
+        await handleCreateEntry(event);
         scrollMainToTop();
+    }
+
+    function handlePickQueuedImageFromDrawer(entry: QueuedEntry) {
+        setMobileDrawerOpen(false);
+        if (drawerImagePickerTimerRef.current !== null) {
+            window.clearTimeout(drawerImagePickerTimerRef.current);
+        }
+
+        const target: ImagePickerTarget = {
+            kind: "queue",
+            item: entry,
+            category: {
+                id: entry.categoryId,
+                name: entry.categoryName
+            }
+        };
+        drawerImagePickerTimerRef.current = window.setTimeout(() => {
+            drawerImagePickerTimerRef.current = null;
+            setImagePickerTarget(target);
+        }, 240);
     }
 
     async function handleStartQueuedEntryFromDrawer(entry: QueuedEntry) {
@@ -2012,14 +2038,16 @@ export function Dashboard({
                 queuedEntries={dashboard.queuedEntries}
                 onDelete={handleDeleteQueuedEntry}
                 onDeleteSelected={handleDeleteQueuedEntries}
-                onPickImage={(entry) => setImagePickerTarget({
-                    kind: "queue",
-                    item: entry,
-                    category: {
-                        id: entry.categoryId,
-                        name: entry.categoryName
-                    }
-                })}
+                onPickImage={drawer
+                    ? handlePickQueuedImageFromDrawer
+                    : (entry) => setImagePickerTarget({
+                        kind: "queue",
+                        item: entry,
+                        category: {
+                            id: entry.categoryId,
+                            name: entry.categoryName
+                        }
+                    })}
                 onStartQueue={drawer ? handleStartQueueRankFromDrawer : handleStartQueueRank}
                 onRename={handleRenameQueuedEntry}
                 onStart={drawer ? handleStartQueuedEntryFromDrawer : handleStartQueuedEntry}

@@ -145,7 +145,7 @@ export function CategoryListItem({
                             <GripVertical className="size-4" />
                         </span>
                     ) : null}
-                    <DropdownMenu onOpenChange={setMenuOpen}>
+                    <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 aria-label={`Actions for ${category.name}`}

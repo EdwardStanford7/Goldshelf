@@ -144,7 +144,7 @@ export function EntryCard({
                         </span>
                     ) : null}
                     {!isRenaming && !moveControlsOpen ? (
-                        <DropdownMenu onOpenChange={setMenuOpen}>
+                        <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     aria-label={`Actions for ${entry.name}`}

@@ -537,7 +537,7 @@ function RepairMatchCard({
                         <RepairMatchPoster entry={entry} />
                         <strong className="block p-[0.7rem] pr-11">{entry.name}</strong>
                     </button>
-                    <DropdownMenu>
+                    <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 aria-label={`Actions for ${entry.name}`}

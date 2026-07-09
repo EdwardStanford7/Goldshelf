@@ -94,7 +94,7 @@ export function QueuedEntryRow({
                         />
                     ) : null}
                     {!isRenaming && !selectionMode ? (
-                        <DropdownMenu>
+                        <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     aria-label={`Actions for queued ${entry.name}`}

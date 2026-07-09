@@ -101,6 +101,16 @@ test.describe("Ranking", () => {
         await expect(page.getByRole("menuitem", { name: "Rank Now" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Rename" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Pick image" })).toBeEnabled();
+        await page.getByRole("menuitem", { name: "Pick image" }).click();
+        await expect(drawer).toBeHidden();
+        const imagePicker = page.locator("section", { hasText: "Pick Image" }).first();
+        await expect(imagePicker.getByRole("button", { name: "Close" })).toBeVisible();
+        await imagePicker.getByRole("button", { name: "Close" }).click();
+        await expect(imagePicker).toBeHidden();
+
+        await page.getByTestId("mobile-tools-trigger").click();
+        drawer = page.getByRole("dialog", { name: "Dashboard tools" });
+        await drawer.getByLabel("Actions for queued Memento").click();
         await expect(page.getByRole("menuitem", { name: "Remove" })).toBeEnabled();
     });
 

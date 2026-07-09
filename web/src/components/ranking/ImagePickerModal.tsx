@@ -296,31 +296,31 @@ export function ImagePickerModal({
 
     return (
         <div
-            className="fixed inset-0 z-60 grid place-items-center bg-modal-backdrop p-4"
+            className="fixed inset-0 z-60 grid place-items-center bg-modal-backdrop p-4 max-[720px]:block max-[720px]:p-0"
             onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
                     onClose();
                 }
             }}
         >
-            <section className="grid max-h-[min(760px,calc(100vh-2rem))] w-[min(920px,100%)] max-w-[calc(100vw-2rem)] gap-[0.9rem] overflow-x-hidden overflow-y-auto rounded-md border border-border bg-card p-4 shadow-panel [&_h2]:m-0 [&_p]:m-0">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:flex-col max-[720px]:items-stretch *:max-w-full *:min-w-0">
-                    <div>
-                        <h2 className="text-lg font-semibold">Pick Image</h2>
+            <section className="grid max-h-[min(760px,calc(100vh-2rem))] w-[min(920px,100%)] max-w-[calc(100vw-2rem)] gap-[0.9rem] overflow-x-hidden overflow-y-auto rounded-md border border-border bg-card p-4 shadow-panel max-[720px]:h-dvh max-[720px]:max-h-dvh max-[720px]:w-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0 max-[720px]:p-3 [&_h2]:m-0 [&_p]:m-0">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:sticky max-[720px]:top-0 max-[720px]:z-10 max-[720px]:-mx-3 max-[720px]:-mt-3 max-[720px]:mb-1 max-[720px]:flex-nowrap max-[720px]:bg-card max-[720px]:px-3 max-[720px]:py-3 max-[720px]:shadow-sm *:max-w-full *:min-w-0">
+                    <div className="min-w-0">
+                        <h2 className="truncate text-lg font-semibold">Pick Image</h2>
                         <p className="text-muted-foreground">{target.item.name} - {target.category.name}</p>
                     </div>
-                    <Button variant="outline" type="button" onClick={onClose}>Close</Button>
+                    <Button className="shrink-0" variant="outline" type="button" onClick={onClose}>Close</Button>
                 </div>
 
                 <form
-                    className="flex flex-wrap items-center gap-[0.7rem] max-[720px]:flex-col max-[720px]:items-stretch *:max-w-full *:min-w-0"
+                    className="flex flex-wrap items-center gap-[0.7rem] max-[720px]:grid max-[720px]:grid-cols-2 max-[720px]:items-stretch *:max-w-full *:min-w-0"
                     onSubmit={(event) => {
                         event.preventDefault();
                         void search(query);
                     }}
                 >
                     <Input
-                        className="flex-[1_1_12rem]"
+                        className="flex-[1_1_12rem] max-[720px]:col-span-2"
                         value={query}
                         onChange={(event) => {
                             setQuery(event.target.value);
@@ -330,8 +330,9 @@ export function ImagePickerModal({
                         }}
                         placeholder="Search"
                     />
-                    <Button disabled={loading || Boolean(savingCandidateId)} type="submit">Search</Button>
+                    <Button className="max-[720px]:w-full" disabled={loading || Boolean(savingCandidateId)} type="submit">Search</Button>
                     <Button
+                        className="max-[720px]:w-full"
                         variant="outline"
                         disabled={loading || Boolean(savingCandidateId)}
                         type="button"
@@ -344,8 +345,8 @@ export function ImagePickerModal({
                     </Button>
                 </form>
 
-                <div className="flex flex-wrap items-center gap-[0.65rem]">
-                    <label className="w-fit cursor-pointer rounded-sm border border-border bg-card px-[0.8rem] py-[0.55rem] text-foreground">
+                <div className="flex flex-wrap items-center gap-[0.65rem] max-[720px]:grid max-[720px]:grid-cols-2">
+                    <label className="relative w-fit cursor-pointer rounded-sm border border-border bg-card px-[0.8rem] py-[0.55rem] text-center text-foreground max-[720px]:w-full">
                         <span>Upload File</span>
                         <input
                             accept="image/*"
@@ -366,6 +367,7 @@ export function ImagePickerModal({
                         />
                     </label>
                     <Button
+                        className="max-[720px]:w-full"
                         variant="outline"
                         disabled={Boolean(savingCandidateId)}
                         type="button"
@@ -378,7 +380,7 @@ export function ImagePickerModal({
                 {error ? <div className={STATUS_CLASS}>{error}</div> : null}
                 {loading ? <div className={STATUS_CLASS}>Searching for images...</div> : null}
 
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-[0.7rem]">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-[0.7rem] max-[720px]:grid-cols-2 max-[720px]:gap-2">
                     {candidates.map((candidate) => (
                         <button
                             className="relative block aspect-4/5 cursor-pointer overflow-hidden rounded-sm border border-border bg-secondary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-55"
