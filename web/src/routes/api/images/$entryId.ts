@@ -41,14 +41,6 @@ export const Route = createFileRoute("/api/images/$entryId")({
 
                 const image = await env.IMAGES.get(entry.image_key);
                 if (!image?.body) {
-                    await getDb()
-                        .prepare(
-                            `UPDATE entries
-               SET image_key = NULL, updated_at = ?
-               WHERE id = ? AND user_id = ?`
-                        )
-                        .bind(now(), params.entryId, session.user.id)
-                        .run();
                     return new Response("Not found", { status: 404 });
                 }
 
@@ -102,18 +94,23 @@ export const Route = createFileRoute("/api/images/$entryId")({
                     }
                 });
 
-                if (hasStoredImage(entry.image_key) && entry.image_key !== imageKey) {
-                    await env.IMAGES.delete(entry.image_key);
-                }
-
-                await getDb()
-                    .prepare(
-                        `UPDATE entries
+                try {
+                    await getDb()
+                        .prepare(
+                            `UPDATE entries
              SET image_key = ?, updated_at = ?
              WHERE id = ? AND user_id = ?`
-                    )
-                    .bind(imageKey, now(), entry.id, session.user.id)
-                    .run();
+                        )
+                        .bind(imageKey, now(), entry.id, session.user.id)
+                        .run();
+                } catch (error) {
+                    await env.IMAGES.delete(imageKey).catch(() => undefined);
+                    throw error;
+                }
+
+                if (hasStoredImage(entry.image_key) && entry.image_key !== imageKey) {
+                    await env.IMAGES.delete(entry.image_key).catch(() => undefined);
+                }
 
                 return Response.json({ imageKey });
             },

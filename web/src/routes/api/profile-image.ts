@@ -28,14 +28,6 @@ export const Route = createFileRoute("/api/profile-image")({
 
                 const image = await env.IMAGES.get(imageKey);
                 if (!image?.body) {
-                    await getDb()
-                        .prepare(
-                            `UPDATE "user"
-               SET image = NULL, updatedAt = ?
-               WHERE id = ?`
-                        )
-                        .bind(now(), session.user.id)
-                        .run();
                     return new Response("Not found", { status: 404 });
                 }
 
@@ -94,7 +86,7 @@ export const Route = createFileRoute("/api/profile-image")({
                 }
 
                 if (hasStoredImage(oldImageKey) && oldImageKey !== imageKey) {
-                    await env.IMAGES.delete(oldImageKey);
+                    await env.IMAGES.delete(oldImageKey).catch(() => undefined);
                 }
 
                 return Response.json({ imageKey });

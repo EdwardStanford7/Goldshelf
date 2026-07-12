@@ -1,5 +1,6 @@
 import { test, expect } from "./base";
 import { gotoApp, seedUsers, signInViaApi, winMatchups } from "./helpers";
+import { BASE_URL } from "./constants";
 
 const ERIN = {
     email: "erin@e2e.test",
@@ -123,5 +124,29 @@ test.describe("Entry operations", () => {
         await expect(page.getByRole("button", { name: "Novels" })).toBeHidden();
         await expect(page.getByText("Hyperion")).toBeHidden();
         await expect(page.getByText("#1 Arrival")).toBeVisible();
+    });
+
+    test("missing stored image objects do not clear entry image keys on read", async ({ page, context }) => {
+        await seedUsers([{
+            email: "missing-image@e2e.test",
+            name: "Missing Image",
+            categories: [{
+                name: "Movies",
+                entries: [{ name: "Arrival", imageKey: "missing-image-test/arrival.jpg" }]
+            }]
+        }]);
+        await signInViaApi(context, "missing-image@e2e.test");
+        await gotoApp(page);
+
+        await expect(page.getByText("#1 Arrival")).toBeVisible();
+        const entryId = await page.locator("[data-entry-id]").first().getAttribute("data-entry-id");
+        expect(entryId).toBeTruthy();
+        const imageResponse = await page.request.get(`${BASE_URL}/api/images/${encodeURIComponent(entryId!)}`);
+        expect(imageResponse.status()).toBe(404);
+
+        await gotoApp(page);
+        await page.getByText("#1 Arrival").click({ button: "right" });
+        await expect(page.getByRole("menuitem", { name: "Change Image" })).toBeEnabled();
+        await expect(page.getByRole("menuitem", { name: "Pick Image" })).toBeHidden();
     });
 });
