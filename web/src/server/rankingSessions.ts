@@ -259,7 +259,7 @@ export const cancelBinarySession = createServerFn({ method: "POST" })
 
         await db.batch(statements);
         if (hasStoredImage(imageKeyToDelete)) {
-            await env.IMAGES.delete(imageKeyToDelete);
+            await env.IMAGES.delete(imageKeyToDelete).catch(() => undefined);
         }
     });
 

@@ -3,6 +3,7 @@ import { orderEntries } from "@/lib/ranking";
 import { env } from "cloudflare:workers";
 import { NO_IMAGE_KEY, hasStoredImage } from "@/lib/images";
 import { assertOwned, first, getDb, now } from "@/server/lib/db";
+import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import { getOwnedCategory } from "./stores/categoryStore";
 import {
@@ -56,7 +57,7 @@ export const markImageUnavailable = createServerFn({ method: "POST" })
                 .run();
 
             if (hasStoredImage(entry.image_key)) {
-                await env.IMAGES.delete(entry.image_key);
+                await env.IMAGES.delete(entry.image_key).catch(() => undefined);
             }
 
             return { imageKey: NO_IMAGE_KEY };
@@ -83,7 +84,7 @@ export const markImageUnavailable = createServerFn({ method: "POST" })
             .run();
 
         if (hasStoredImage(queuedEntry.image_key)) {
-            await env.IMAGES.delete(queuedEntry.image_key);
+            await env.IMAGES.delete(queuedEntry.image_key).catch(() => undefined);
         }
 
         return { imageKey: NO_IMAGE_KEY };
@@ -181,10 +182,7 @@ export const renameEntry = createServerFn({ method: "POST" })
         const entry = await getOwnedEntry(userId, entryId);
         assertOwned(entry, "Entry");
 
-        const cleanName = name.trim();
-        if (!cleanName) {
-            throw new Error("Entry name is required");
-        }
+        const cleanName = normalizeRequiredText(name, "Entry name", MAX_ENTRY_NAME_LENGTH);
 
         const updatedAt = now();
         await getDb()

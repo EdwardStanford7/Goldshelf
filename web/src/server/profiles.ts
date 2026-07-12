@@ -16,6 +16,13 @@ import type {
     PublicProfileData
 } from "@/lib/types";
 import { all, assertOwned, first, getDb, newId, now, runBatches } from "@/server/lib/db";
+import {
+    MAX_CATEGORY_NAME_LENGTH,
+    MAX_PROFILE_SEARCH_LENGTH,
+    isWithinTextLimit,
+    normalizeOptionalSearch,
+    normalizeRequiredText
+} from "@/server/lib/validation";
 import { authMiddleware, optionalAuthMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow, getOwnedCategory } from "./stores/categoryStore";
 import {
@@ -179,8 +186,7 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
     .inputValidator((data: { query: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
-        const { query } = data;
-        const cleanQuery = query.trim().toLowerCase();
+        const cleanQuery = normalizeOptionalSearch(data.query, MAX_PROFILE_SEARCH_LENGTH).toLowerCase();
         if (cleanQuery.length < 2) {
             return [];
         }
@@ -568,10 +574,7 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
         let skippedCount = 0;
 
         if (data.mode === "new") {
-            const cleanName = data.categoryName.trim();
-            if (!cleanName) {
-                throw new Error("Category name is required");
-            }
+            const cleanName = normalizeRequiredText(data.categoryName, "Category name", MAX_CATEGORY_NAME_LENGTH);
 
             await assertCategoryNameAvailable(userId, cleanName);
             targetCategoryId = newId("cat");
@@ -615,7 +618,7 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
                     .bind(userId, targetCategoryId, userId, targetCategoryId)
             );
             const unavailableNames = new Set(existingRows.map((row) => row.name));
-            entriesToQueue = orderedEntries.filter((entry) => {
+            entriesToQueue = entriesToQueue.filter((entry) => {
                 if (unavailableNames.has(entry.name)) {
                     skippedCount += 1;
                     return false;
@@ -707,6 +710,9 @@ function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[
     if (selectedEntryIds.length === 0) {
         throw new Error("Select at least one entry to copy");
     }
+    if (selectedEntryIds.length > 500) {
+        throw new Error("Select fewer entries to copy at once");
+    }
 
     const selectedEntryIdSet = new Set(selectedEntryIds);
     const entries = orderedEntries.filter((entry) => selectedEntryIdSet.has(entry.id));
@@ -783,6 +789,10 @@ async function assertProfileSlugAvailable(userId: string, profileSlug: string) {
 }
 
 async function assertCategoryNameAvailable(userId: string, categoryName: string) {
+    if (!isWithinTextLimit(categoryName, MAX_CATEGORY_NAME_LENGTH)) {
+        throw new Error(`Category name must be ${MAX_CATEGORY_NAME_LENGTH} characters or fewer`);
+    }
+
     const existing = await first<{ id: string }>(
         getDb()
             .prepare(`SELECT id FROM categories WHERE user_id = ? AND name = ?`)

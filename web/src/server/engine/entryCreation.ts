@@ -1,4 +1,5 @@
 import { assertOwned, first, getDb, newId, now } from "@/server/lib/db";
+import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
 import { getOwnedCategory } from "../stores/categoryStore";
 import { getActiveEntryCount, getOwnedEntry } from "../stores/entryStore";
 import {
@@ -32,10 +33,7 @@ export async function createEntryWithBinaryRankingForUser(
     const category = await getOwnedCategory(userId, input.categoryId);
     assertOwned(category, "Category");
 
-    const cleanName = input.name.trim();
-    if (!cleanName) {
-        throw new Error("Entry name is required");
-    }
+    const cleanName = normalizeRequiredText(input.name, "Entry name", MAX_ENTRY_NAME_LENGTH);
 
     await repairInterruptedRankingState(userId);
     const activeSession = await getActiveSessionRow(userId);

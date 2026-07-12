@@ -8,6 +8,7 @@ import type {
     AdminUserSummary
 } from "@/lib/types";
 import { all, first, getDb, newId, now } from "@/server/lib/db";
+import { MAX_ADMIN_SEARCH_LENGTH, normalizeOptionalSearch } from "@/server/lib/validation";
 import { adminMiddleware } from "@/server/middleware/auth";
 
 const DEFAULT_LIMIT = 20;
@@ -381,7 +382,7 @@ function normalizeUserListQuery(input: {
     const limit = Math.min(MAX_LIMIT, Math.max(1, Math.floor(input.limit ?? DEFAULT_LIMIT)));
     const offset = Math.max(0, Math.floor(input.offset ?? 0));
     return {
-        search: (input.search ?? "").trim(),
+        search: normalizeOptionalSearch(input.search, MAX_ADMIN_SEARCH_LENGTH),
         searchField,
         limit,
         offset

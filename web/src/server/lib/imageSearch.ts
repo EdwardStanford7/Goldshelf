@@ -1,4 +1,8 @@
+import { fetchWithTimeout } from "./network";
+
 const SEARCH_RESULT_COUNT = 18;
+const MAX_SEARCH_QUERY_LENGTH = 120;
+const IMAGE_SEARCH_TIMEOUT_MS = 8_000;
 
 interface DuckDuckGoImageResult {
     image?: string;
@@ -31,6 +35,9 @@ export async function searchImageCandidates(query: string): Promise<ImageSearchC
     const cleanQuery = query.trim();
     if (!cleanQuery) {
         throw new Error("Search query is required");
+    }
+    if (cleanQuery.length > MAX_SEARCH_QUERY_LENGTH) {
+        throw new Error("Search query is too long");
     }
 
     const queries = buildSearchQueries(cleanQuery);
@@ -222,9 +229,14 @@ async function fetchText(
         headers.set("x-requested-with", options.requestedWith);
     }
 
-    const response = await fetch(url, {
-        headers
-    });
+    const response = await fetchWithTimeout(
+        url,
+        {
+            headers
+        },
+        IMAGE_SEARCH_TIMEOUT_MS,
+        "Image search timed out"
+    );
 
     if (!response.ok) {
         throw new Error(`Image search failed with ${response.status}`);

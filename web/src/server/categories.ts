@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
 import { hasStoredImage } from "@/lib/images";
 import { all, assertOwned, first, getDb, newId, now } from "@/server/lib/db";
+import { MAX_CATEGORY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import {
     type CategoryRow,
@@ -15,10 +16,7 @@ export const createCategory = createServerFn({ method: "POST" })
     .inputValidator((data: { name: string; isPublic?: boolean }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
-        const cleanName = data.name.trim();
-        if (!cleanName) {
-            throw new Error("Category name is required");
-        }
+        const cleanName = normalizeRequiredText(data.name, "Category name", MAX_CATEGORY_NAME_LENGTH);
 
         const db = getDb();
         const maxSort = await first<{ max_sort: number | null }>(
@@ -52,10 +50,7 @@ export const renameCategory = createServerFn({ method: "POST" })
         const category = await getOwnedCategory(userId, data.categoryId);
         assertOwned(category, "Category");
 
-        const cleanName = data.name.trim();
-        if (!cleanName) {
-            throw new Error("Category name is required");
-        }
+        const cleanName = normalizeRequiredText(data.name, "Category name", MAX_CATEGORY_NAME_LENGTH);
 
         const updatedAt = now();
         await getDb()
@@ -181,7 +176,7 @@ export const deleteCategory = createServerFn({ method: "POST" })
                 .bind(now(), userId, category.sort_order)
         ]);
 
-        await Promise.all(imageKeys.map((imageKey) => env.IMAGES.delete(imageKey)));
+        await Promise.all(imageKeys.map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined)));
     });
 
 export const updateCategoryVisibility = createServerFn({ method: "POST" })

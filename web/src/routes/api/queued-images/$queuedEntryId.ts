@@ -1,6 +1,7 @@
 import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
 import { isNoImageKey, hasStoredImage } from "@/lib/images";
+import { requireSameOriginMutation } from "@/server/lib/requestGuards";
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 
@@ -61,6 +62,10 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                 const session = await auth.api.getSession({ headers: request.headers });
                 if (!session?.user) {
                     return Response.json({ message: "Unauthorized" }, { status: 401 });
+                }
+                const originError = requireSameOriginMutation(request);
+                if (originError) {
+                    return originError;
                 }
 
                 const entry = await first<{ id: string; image_key: string | null }>(
@@ -125,6 +130,10 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                 if (!session?.user) {
                     return Response.json({ message: "Unauthorized" }, { status: 401 });
                 }
+                const originError = requireSameOriginMutation(request);
+                if (originError) {
+                    return originError;
+                }
 
                 const entry = await first<{ id: string; image_key: string | null }>(
                     getDb()
@@ -140,10 +149,6 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                     return Response.json({ message: "Queued entry not found" }, { status: 404 });
                 }
 
-                if (hasStoredImage(entry.image_key)) {
-                    await env.IMAGES.delete(entry.image_key);
-                }
-
                 await getDb()
                     .prepare(
                         `UPDATE entry_queue
@@ -152,6 +157,10 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                     )
                     .bind(now(), entry.id, session.user.id)
                     .run();
+
+                if (hasStoredImage(entry.image_key)) {
+                    await env.IMAGES.delete(entry.image_key).catch(() => undefined);
+                }
 
                 return Response.json({ ok: true });
             }

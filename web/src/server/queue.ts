@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { QueuedEntry } from "@/lib/types";
 import { all, assertOwned, getDb, newId, now, runBatches } from "@/server/lib/db";
+import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import { getOwnedCategory } from "./stores/categoryStore";
 import {
@@ -21,10 +22,7 @@ export const createQueuedEntry = createServerFn({ method: "POST" })
         const category = await getOwnedCategory(userId, input.categoryId);
         assertOwned(category, "Category");
 
-        const cleanName = input.name.trim();
-        if (!cleanName) {
-            throw new Error("Entry name is required");
-        }
+        const cleanName = normalizeRequiredText(input.name, "Entry name", MAX_ENTRY_NAME_LENGTH);
 
         await assertEntryNameAvailable(userId, input.categoryId, cleanName);
 
@@ -323,10 +321,7 @@ export const renameQueuedEntry = createServerFn({ method: "POST" })
         const queuedEntry = await getOwnedQueuedEntry(userId, queuedEntryId);
         assertOwned(queuedEntry, "Queued entry");
 
-        const cleanName = name.trim();
-        if (!cleanName) {
-            throw new Error("Entry name is required");
-        }
+        const cleanName = normalizeRequiredText(name, "Entry name", MAX_ENTRY_NAME_LENGTH);
 
         await assertEntryNameAvailable(userId, queuedEntry.categoryId, cleanName, queuedEntry.id);
 

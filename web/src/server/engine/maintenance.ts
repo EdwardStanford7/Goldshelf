@@ -60,7 +60,7 @@ async function purgeDeletedRows({
             .map((row) => row.image_key)
             .filter((imageKey): imageKey is string => hasStoredImage(imageKey))
     ));
-    await Promise.all(imageKeys.map((imageKey) => env.IMAGES.delete(imageKey)));
+    await Promise.all(imageKeys.map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined)));
     await db.batch(
         deletedRows.map((row) =>
             db

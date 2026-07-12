@@ -689,7 +689,9 @@ async function cancelStaleActiveRankingSessions(userId: string) {
     }
 
     await runBatches(db, statements);
-    await Promise.all(Array.from(new Set(imageKeysToDelete)).map((imageKey) => env.IMAGES.delete(imageKey)));
+    await Promise.all(
+        Array.from(new Set(imageKeysToDelete)).map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined))
+    );
 }
 
 function canResumeActiveSession(session: ActiveSessionRepairRow) {
@@ -810,7 +812,9 @@ async function recoverInterruptedRankingEntries(userId: string) {
     }
 
     await runBatches(db, statements);
-    await Promise.all(Array.from(new Set(imageKeysToDelete)).map((imageKey) => env.IMAGES.delete(imageKey)));
+    await Promise.all(
+        Array.from(new Set(imageKeysToDelete)).map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined))
+    );
 }
 
 export async function prepareBinarySession(

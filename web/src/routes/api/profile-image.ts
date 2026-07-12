@@ -1,6 +1,7 @@
 import { hasStoredImage } from "@/lib/images";
 import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
+import { requireSameOriginMutation } from "@/server/lib/requestGuards";
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 
@@ -42,6 +43,10 @@ export const Route = createFileRoute("/api/profile-image")({
                 const session = await auth.api.getSession({ headers: request.headers });
                 if (!session?.user) {
                     return Response.json({ message: "Unauthorized" }, { status: 401 });
+                }
+                const originError = requireSameOriginMutation(request);
+                if (originError) {
+                    return originError;
                 }
 
                 const contentType = request.headers.get("content-type") ?? "";
@@ -96,6 +101,10 @@ export const Route = createFileRoute("/api/profile-image")({
                 if (!session?.user) {
                     return Response.json({ message: "Unauthorized" }, { status: 401 });
                 }
+                const originError = requireSameOriginMutation(request);
+                if (originError) {
+                    return originError;
+                }
 
                 const user = await first<{ image: string | null }>(
                     getDb()
@@ -117,7 +126,7 @@ export const Route = createFileRoute("/api/profile-image")({
                     .run();
 
                 if (hasStoredImage(imageKey)) {
-                    await env.IMAGES.delete(imageKey);
+                    await env.IMAGES.delete(imageKey).catch(() => undefined);
                 }
 
                 return Response.json({ ok: true });

@@ -5,9 +5,11 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { env } from "cloudflare:workers";
 import { ADMIN_ROLE, USER_ROLE } from "@/lib/admin";
 import { captureAuthUrl, isTestMode } from "./testMode";
+import { fetchWithTimeout } from "./network";
 
 export const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 128;
+const PASSWORD_RESET_EMAIL_TIMEOUT_MS = 8_000;
 
 // better-auth names the session cookie `<prefix>better-auth.session_token`
 // (prefixed with `__Secure-` when secure cookies are on). We only need to
@@ -54,32 +56,37 @@ async function sendResetPasswordEmail({
         return;
     }
 
-    const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-            "authorization": `Bearer ${resendApiKey}`,
-            "content-type": "application/json"
+    const response = await fetchWithTimeout(
+        "https://api.resend.com/emails",
+        {
+            method: "POST",
+            headers: {
+                "authorization": `Bearer ${resendApiKey}`,
+                "content-type": "application/json"
+            },
+            body: JSON.stringify({
+                from: fromEmail,
+                to: user.email,
+                subject: "Reset your goldshelf password",
+                text: [
+                    `Hi ${user.name || "there"},`,
+                    "",
+                    "Use this link to reset your goldshelf password:",
+                    url,
+                    "",
+                    "This link expires in 1 hour. If you did not request this, you can ignore this email."
+                ].join("\n"),
+                html: [
+                    `<p>Hi ${escapeHtml(user.name || "there")},</p>`,
+                    "<p>Use this link to reset your goldshelf password:</p>",
+                    `<p><a href="${escapeHtml(url)}">Reset password</a></p>`,
+                    "<p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>"
+                ].join("")
+            })
         },
-        body: JSON.stringify({
-            from: fromEmail,
-            to: user.email,
-            subject: "Reset your goldshelf password",
-            text: [
-                `Hi ${user.name || "there"},`,
-                "",
-                "Use this link to reset your goldshelf password:",
-                url,
-                "",
-                "This link expires in 1 hour. If you did not request this, you can ignore this email."
-            ].join("\n"),
-            html: [
-                `<p>Hi ${escapeHtml(user.name || "there")},</p>`,
-                "<p>Use this link to reset your goldshelf password:</p>",
-                `<p><a href="${escapeHtml(url)}">Reset password</a></p>`,
-                "<p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>"
-            ].join("")
-        })
-    });
+        PASSWORD_RESET_EMAIL_TIMEOUT_MS,
+        "Password reset email timed out"
+    );
 
     if (!response.ok) {
         console.error("Password reset email failed", await response.text());

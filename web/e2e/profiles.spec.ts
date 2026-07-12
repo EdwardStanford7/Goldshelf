@@ -129,8 +129,15 @@ test.describe("Profiles", () => {
         context: aliceContext,
         browser
     }) => {
+        const aliceWithLongMovieList = {
+            ...ALICE,
+            categories: [
+                { name: "Movies", entries: ["Arrival", "Dune", "Heat"] },
+                { name: "Books", entries: ["Hyperion"] }
+            ]
+        };
         await seedUsers([
-            ALICE,
+            aliceWithLongMovieList,
             {
                 ...BOB,
                 categories: [
@@ -159,6 +166,10 @@ test.describe("Profiles", () => {
         await dialog.getByRole("button", { name: "Merge" }).click();
         await dialog.getByLabel("Existing category").click();
         await bobPage.getByRole("option", { name: "Movies" }).click();
+        await dialog.getByRole("button", { name: "Deselect visible" }).click();
+        await dialog.getByRole("checkbox", { name: "Select Arrival" }).click();
+        await dialog.getByRole("checkbox", { name: "Select Dune" }).click();
+        await expect(dialog.getByText("2 of 3 selected")).toBeVisible();
         await dialog.getByRole("button", { name: "Copy List" }).click();
         await expect(bobPage.getByText("Copied 1 entry to Movies. Skipped 1 duplicate.")).toBeVisible({ timeout: 15_000 });
 
@@ -169,6 +180,7 @@ test.describe("Profiles", () => {
         await expect(bobPage.getByText("1 queued")).toBeVisible();
         await expect(bobPage.getByText("Arrival").first()).toBeVisible();
         await expect(bobPage.getByText("Dune").first()).toBeVisible();
+        await expect(bobPage.getByText("Heat").first()).toBeHidden();
 
         await bobContext.close();
     });

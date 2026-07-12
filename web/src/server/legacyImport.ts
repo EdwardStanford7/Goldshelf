@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { ParsedImport } from "@/lib/types";
 import { all, getDb, newId, now, runBatches } from "@/server/lib/db";
+import { MAX_CATEGORY_NAME_LENGTH, MAX_ENTRY_NAME_LENGTH, isWithinTextLimit } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow } from "./stores/categoryStore";
 import { assertNoActiveBinarySession } from "./engine/rankingSessions";
@@ -44,6 +45,9 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
             if (!categoryName || !name) {
                 continue;
             }
+            if (!isWithinTextLimit(categoryName, MAX_CATEGORY_NAME_LENGTH) || !isWithinTextLimit(name, MAX_ENTRY_NAME_LENGTH)) {
+                continue;
+            }
 
             const bucket = importedByCategory.get(categoryName) ?? [];
             bucket.push({ ...entry, categoryName, name });
@@ -54,6 +58,9 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
             const categoryName = entry.categoryName.trim();
             const name = entry.name.trim();
             if (!categoryName || !name) {
+                continue;
+            }
+            if (!isWithinTextLimit(categoryName, MAX_CATEGORY_NAME_LENGTH) || !isWithinTextLimit(name, MAX_ENTRY_NAME_LENGTH)) {
                 continue;
             }
 

@@ -9,6 +9,11 @@ import { getActiveBinarySession, repairInterruptedRankingState } from "@/server/
 import { getActiveRepairSession, repairInterruptedRepairState } from "@/server/engine/repairSessions";
 import { purgeExpiredDeletedItems } from "@/server/engine/maintenance";
 
+const SLOW_DASHBOARD_LOAD_MS = 750;
+const LARGE_DASHBOARD_CATEGORY_COUNT = 100;
+const LARGE_DASHBOARD_ENTRY_COUNT = 1_000;
+const LARGE_DASHBOARD_QUEUE_COUNT = 500;
+
 /**
  * Assembles the full dashboard payload for a user: categories with ordered
  * entries, the ranking queue, any active binary-ranking session, and the
@@ -16,6 +21,7 @@ import { purgeExpiredDeletedItems } from "@/server/engine/maintenance";
  * function and the `/` route's `loadHome` (which resolves the session once).
  */
 export async function buildDashboard(userId: string): Promise<DashboardData> {
+    const startedAt = Date.now();
     const db = getDb();
     await repairInterruptedRankingState(userId);
     await repairInterruptedRepairState(userId);
@@ -37,7 +43,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
     );
 
     if (categories.length === 0) {
-        return {
+        const dashboard = {
             categories: [],
             queueSettings,
             queuedEntries,
@@ -45,6 +51,14 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
             activeRepairSession,
             profile: mapCurrentUserProfile(profile)
         };
+        logDashboardLoadIfNeeded(startedAt, {
+            categoryCount: 0,
+            entryCount: 0,
+            queuedEntryCount: queuedEntries.length,
+            hasActiveBinarySession: Boolean(activeBinarySession),
+            hasActiveRepairSession: Boolean(activeRepairSession)
+        });
+        return dashboard;
     }
 
     const entryRows = await all<EntryRow>(
@@ -64,7 +78,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
         entriesByCategory.set(row.category_id, entries);
     }
 
-    return {
+    const dashboard = {
         categories: categories.map((category) => ({
             id: category.id,
             name: category.name,
@@ -79,4 +93,38 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
         activeRepairSession,
         profile: mapCurrentUserProfile(profile)
     };
+    logDashboardLoadIfNeeded(startedAt, {
+        categoryCount: categories.length,
+        entryCount: entryRows.length,
+        queuedEntryCount: queuedEntries.length,
+        hasActiveBinarySession: Boolean(activeBinarySession),
+        hasActiveRepairSession: Boolean(activeRepairSession)
+    });
+    return dashboard;
+}
+
+function logDashboardLoadIfNeeded(
+    startedAt: number,
+    metrics: {
+        categoryCount: number;
+        entryCount: number;
+        queuedEntryCount: number;
+        hasActiveBinarySession: boolean;
+        hasActiveRepairSession: boolean;
+    }
+) {
+    const durationMs = Date.now() - startedAt;
+    if (
+        durationMs < SLOW_DASHBOARD_LOAD_MS &&
+        metrics.categoryCount < LARGE_DASHBOARD_CATEGORY_COUNT &&
+        metrics.entryCount < LARGE_DASHBOARD_ENTRY_COUNT &&
+        metrics.queuedEntryCount < LARGE_DASHBOARD_QUEUE_COUNT
+    ) {
+        return;
+    }
+
+    console.warn("[goldshelf] dashboard_load_heavy", {
+        durationMs,
+        ...metrics
+    });
 }

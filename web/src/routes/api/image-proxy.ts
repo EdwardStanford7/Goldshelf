@@ -1,8 +1,10 @@
 import { auth } from "@/server/lib/auth";
 import { assertSafeImageUrl, decodeImageUrl } from "@/server/lib/imageSearch";
+import { fetchWithTimeout } from "@/server/lib/network";
 import { createFileRoute } from "@tanstack/react-router";
 
 const MAX_PROXY_IMAGE_BYTES = 8 * 1024 * 1024;
+const IMAGE_PROXY_TIMEOUT_MS = 8_000;
 
 export const Route = createFileRoute("/api/image-proxy")({
     server: {
@@ -27,12 +29,22 @@ export const Route = createFileRoute("/api/image-proxy")({
                     });
                 }
 
-                const response = await fetch(imageUrl, {
-                    headers: {
-                        "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-                        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-                    }
-                });
+                let response: Response;
+                try {
+                    response = await fetchWithTimeout(
+                        imageUrl,
+                        {
+                            headers: {
+                                "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                                "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+                            }
+                        },
+                        IMAGE_PROXY_TIMEOUT_MS,
+                        "Image request timed out"
+                    );
+                } catch {
+                    return new Response("Image request failed", { status: 502 });
+                }
 
                 if (!response.ok) {
                     return new Response("Image request failed", { status: 502 });
