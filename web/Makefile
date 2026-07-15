@@ -56,7 +56,7 @@ build:
 	pnpm build
 
 audit:
-	pnpm audit --prod
+	node scripts/audit-prod.mjs
 
 check:
 	$(MAKE) test
