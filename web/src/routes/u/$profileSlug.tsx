@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { BrandLink } from "@/components/ui/BrandLink";
 import { Button } from "@/components/ui/button";
+import { CategoryVisibilityBadge } from "@/components/category/CategoryVisibilityBadge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
 import { redirectIfUnauthorized } from "@/lib/errors";
-import { followButtonLabel, followRelationLabel } from "@/lib/follows";
+import { canViewProfile, followButtonLabel, followRelationLabel } from "@/lib/follows";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import { nextMultiSelection } from "@/lib/multiSelect";
 import { orderEntries } from "@/lib/ranking";
@@ -251,6 +252,8 @@ function PublicProfileRoute() {
     }
 
     const { profile, viewer } = profileData;
+    const canCopySharedCategories = canViewProfile(profile.isPublic, false, viewer.relationState);
+    const showCategoryVisibility = profileData.categories.some((category) => !category.isPublic);
 
     return (
         <main className="grid h-dvh min-h-screen grid-rows-[auto_auto_minmax(0,1fr)] gap-4 overflow-hidden bg-background px-[clamp(1rem,3vw,2.25rem)] py-5 text-foreground max-[720px]:h-auto max-[720px]:grid-rows-none max-[720px]:overflow-visible">
@@ -293,7 +296,7 @@ function PublicProfileRoute() {
             </Card>
 
             {profileData.categories.length > 0 ? (
-                <div className="m-0 grid min-h-0 w-full grid-cols-[220px_minmax(0,1fr)] items-stretch overflow-hidden rounded-md border border-border bg-card shadow-panel max-[720px]:grid-cols-1 max-[720px]:overflow-visible">
+                <div className="m-0 grid min-h-0 w-full grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-md border border-border bg-card shadow-panel max-[720px]:grid-cols-1 max-[720px]:overflow-visible">
                     <nav className="grid min-h-0 content-start gap-0.5 overflow-y-auto border-r border-border bg-sidebar p-[0.65rem] max-[720px]:flex max-[720px]:max-h-none max-[720px]:flex-row max-[720px]:flex-nowrap max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:overflow-y-hidden max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label="Categories">
                         {profileData.categories.map((category) => {
                             const isActive = category.id === selectedCategoryId;
@@ -308,7 +311,12 @@ function PublicProfileRoute() {
                                     aria-current={isActive ? "true" : undefined}
                                     onClick={() => selectCategory(category.id)}
                                 >
-                                    <span className="block min-w-0 truncate text-[0.92rem]">{category.name}</span>
+                                    <span className="flex min-w-0 items-center gap-2">
+                                        <span className="block min-w-0 flex-1 truncate text-[0.92rem]">{category.name}</span>
+                                        {showCategoryVisibility ? (
+                                            <CategoryVisibilityBadge isPublic={category.isPublic} className="max-[720px]:hidden" />
+                                        ) : null}
+                                    </span>
                                 </button>
                             );
                         })}
@@ -324,10 +332,11 @@ function PublicProfileRoute() {
                                     category={category}
                                     copyDisabled={copyingCategoryId === category.id}
                                     onCopy={
-                                        viewer.isSignedIn && !viewer.isSelf
+                                        viewer.isSignedIn && !viewer.isSelf && category.isPublic && canCopySharedCategories
                                             ? () => openCopyDialog(category)
                                             : undefined
                                     }
+                                    showVisibility={showCategoryVisibility}
                                     usePrivateImages={viewer.isSelf}
                                 />
                             );
@@ -659,11 +668,13 @@ function PublicCategory({
     category,
     copyDisabled,
     onCopy,
+    showVisibility,
     usePrivateImages
 }: {
     category: CategoryWithEntries;
     copyDisabled?: boolean;
     onCopy?: () => void;
+    showVisibility: boolean;
     usePrivateImages: boolean;
 }) {
     const entries = useMemo(() => orderEntries(category.entries), [category.entries]);
@@ -671,7 +682,10 @@ function PublicCategory({
     return (
         <section className="grid gap-[0.8rem]">
             <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">{category.name}</h2>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h2 className="min-w-0 text-lg font-semibold">{category.name}</h2>
+                    {showVisibility ? <CategoryVisibilityBadge isPublic={category.isPublic} /> : null}
+                </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                     <span className="text-muted-foreground">{entries.length} {entries.length === 1 ? "entry" : "entries"}</span>
                     {onCopy ? (

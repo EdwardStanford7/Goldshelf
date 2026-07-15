@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, MoreVertical, Pencil, Trash2, Wrench } from "lucide-react";
+import { Globe2, GripVertical, Lock, MoreVertical, Pencil, Trash2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     ContextMenu,
@@ -36,7 +36,8 @@ export function CategoryListItem({
     onDelete,
     onRename,
     onRepair,
-    onSelect
+    onSelect,
+    onToggleVisibility
 }: {
     category: CategoryWithEntries;
     isActive: boolean;
@@ -47,6 +48,7 @@ export function CategoryListItem({
     onRename: (name: string) => Promise<void>;
     onRepair: () => void;
     onSelect: () => void;
+    onToggleVisibility: () => void;
 }) {
     const [isRenaming, setIsRenaming] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -170,6 +172,10 @@ export function CategoryListItem({
                             <DropdownMenuItem disabled={busy} onSelect={startRename}>
                                 <Pencil />Rename
                             </DropdownMenuItem>
+                            <DropdownMenuItem disabled={busy} onSelect={onToggleVisibility}>
+                                {category.isPublic ? <Lock /> : <Globe2 />}
+                                {category.isPublic ? "Make Private" : "Show on Profile"}
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                                 variant="destructive"
                                 disabled={busy || listLocked}
@@ -190,6 +196,10 @@ export function CategoryListItem({
                 </ContextMenuItem>
                 <ContextMenuItem onSelect={startRename}>
                     <Pencil />Rename
+                </ContextMenuItem>
+                <ContextMenuItem disabled={busy} onSelect={onToggleVisibility}>
+                    {category.isPublic ? <Lock /> : <Globe2 />}
+                    {category.isPublic ? "Make Private" : "Show on Profile"}
                 </ContextMenuItem>
                 <ContextMenuItem
                     variant="destructive"

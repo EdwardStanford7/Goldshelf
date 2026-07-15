@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequestHeaders } from "@tanstack/react-start/server";
 import { env } from "cloudflare:workers";
+import { hasAdminRole } from "@/lib/admin";
 import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
 import { hasStoredImage } from "@/lib/images";
 import { orderEntries } from "@/lib/ranking";
@@ -23,7 +25,8 @@ import {
     normalizeOptionalSearch,
     normalizeRequiredText
 } from "@/server/lib/validation";
-import { authMiddleware, optionalAuthMiddleware } from "@/server/middleware/auth";
+import { auth, requestHasSessionCookie } from "@/server/lib/auth";
+import { authMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow, getOwnedCategory } from "./stores/categoryStore";
 import {
     MIN_PROFILE_SLUG_LENGTH,
@@ -82,6 +85,8 @@ interface CopyableCategoryRow {
     profile_is_public: number;
     owner_name: string;
 }
+
+type PublicProfileViewerUser = { id: string; role?: string | string[] | null };
 
 type CopyPublicCategoryInput =
     | { sourceCategoryId: string; mode: "new"; categoryName: string; sourceEntryIds: string[] }
@@ -476,49 +481,61 @@ export const unblockProfile = createServerFn({ method: "POST" })
     });
 
 export const loadPublicProfile = createServerFn({ method: "GET" })
-    .middleware([optionalAuthMiddleware])
     .inputValidator((data: { profileSlug: string }) => data)
-    .handler(async ({ context, data }) => {
-        const viewerUserId = context.user?.id ?? null;
-        const { profileSlug } = data;
-        const slug = parseProfileSlugInput(profileSlug);
-        const profile = await getProfileBySlug(slug);
-        if (!profile) {
-            return null;
+    .handler(({ data }) => loadPublicProfileFromCurrentRequest(data.profileSlug));
+
+async function loadPublicProfileFromCurrentRequest(profileSlug: string) {
+    const headers = getRequestHeaders();
+    const session = requestHasSessionCookie(headers)
+        ? await auth.api.getSession({ headers })
+        : null;
+    return loadPublicProfileForViewer(profileSlug, session?.user ?? null);
+}
+
+async function loadPublicProfileForViewer(
+    profileSlug: string,
+    viewerUser: PublicProfileViewerUser | null | undefined
+): Promise<PublicProfileData | null> {
+    const viewerUserId = viewerUser?.id ?? null;
+    const slug = parseProfileSlugInput(profileSlug);
+    const profile = await getProfileBySlug(slug);
+    if (!profile) {
+        return null;
+    }
+
+    const isSelf = viewerUserId === profile.user_id;
+    const relationState = viewerUserId
+        ? await getFollowRelationState(viewerUserId, profile.user_id)
+        : "none";
+    const isAdminViewer = hasAdminRole(viewerUser);
+    if (!isAdminViewer && !canViewProfile(Boolean(profile.is_public), isSelf, relationState)) {
+        return null;
+    }
+
+    const categories = await loadPublicCategories(profile.user_id, { includePrivate: isAdminViewer });
+    const viewerCategories = viewerUserId
+        ? await listCopyTargetCategories(viewerUserId)
+        : [];
+
+    return {
+        profile: {
+            userId: profile.user_id,
+            name: profile.name,
+            imageKey: profile.image,
+            slug: profile.slug,
+            isPublic: Boolean(profile.is_public),
+            isSelf,
+            relationState
+        },
+        categories,
+        viewer: {
+            isSignedIn: Boolean(viewerUserId),
+            isSelf,
+            relationState,
+            categories: viewerCategories
         }
-
-        const isSelf = viewerUserId === profile.user_id;
-        const relationState = viewerUserId
-            ? await getFollowRelationState(viewerUserId, profile.user_id)
-            : "none";
-        if (!canViewProfile(Boolean(profile.is_public), isSelf, relationState)) {
-            return null;
-        }
-
-        const categories = await loadPublicCategories(profile.user_id);
-        const viewerCategories = viewerUserId
-            ? await listCopyTargetCategories(viewerUserId)
-            : [];
-
-        return {
-            profile: {
-                userId: profile.user_id,
-                name: profile.name,
-                imageKey: profile.image,
-                slug: profile.slug,
-                isPublic: Boolean(profile.is_public),
-                isSelf,
-                relationState
-            },
-            categories,
-            viewer: {
-                isSignedIn: Boolean(viewerUserId),
-                isSelf,
-                relationState,
-                categories: viewerCategories
-            }
-        };
-    });
+    };
+}
 
 export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
@@ -842,13 +859,18 @@ async function listCopyTargetCategories(userId: string): Promise<ProfileCopyTarg
     }));
 }
 
-async function loadPublicCategories(userId: string): Promise<CategoryWithEntries[]> {
+async function loadPublicCategories(
+    userId: string,
+    options: { includePrivate?: boolean } = {}
+): Promise<CategoryWithEntries[]> {
+    const categoryVisibilityFilter = options.includePrivate ? "" : "AND is_public = 1";
+    const entryVisibilityFilter = options.includePrivate ? "" : "AND categories.is_public = 1";
     const categories = await all<CategoryRow>(
         getDb()
             .prepare(
                 `SELECT id, name, sort_order, created_at, is_public
          FROM categories
-         WHERE user_id = ? AND is_public = 1
+         WHERE user_id = ? ${categoryVisibilityFilter}
          ORDER BY sort_order ASC, name ASC`
             )
             .bind(userId)
@@ -867,7 +889,7 @@ async function loadPublicCategories(userId: string): Promise<CategoryWithEntries
          INNER JOIN categories ON categories.id = entries.category_id
          WHERE entries.user_id = ? AND entries.status = 'active'
            AND categories.user_id = entries.user_id
-           AND categories.is_public = 1
+           ${entryVisibilityFilter}
          ORDER BY entries.category_id ASC, entries.rank_position ASC`
             )
             .bind(userId)

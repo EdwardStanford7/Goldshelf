@@ -72,7 +72,8 @@ import {
     createCategory,
     deleteCategory,
     moveCategoryRelativeToCategory,
-    renameCategory
+    renameCategory,
+    updateCategoryVisibility
 } from "@/server/categories";
 import { loadDashboard } from "@/server/dashboard";
 import {
@@ -865,6 +866,26 @@ export function Dashboard({
         try {
             await renameCategory({ data: { categoryId, name } });
             await refreshAfterMutation();
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
+    async function handleToggleCategoryVisibility(category: CategoryWithEntries) {
+        startBusy(category.isPublic ? "Making category private..." : "Showing category on profile...");
+        setMessage(null);
+
+        try {
+            await updateCategoryVisibility({
+                data: {
+                    categoryId: category.id,
+                    isPublic: !category.isPublic
+                }
+            });
+            await refreshAfterMutation();
+            setMessage(category.isPublic ? `${category.name} is now private.` : `${category.name} is shown on your profile.`);
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -1956,6 +1977,7 @@ export function Dashboard({
                                     onRename={(name) => handleRenameCategory(category.id, name)}
                                     onRepair={() => void handleStartRepair(category.id, closeOnRepair)}
                                     onSelect={() => selectCategory(category.id, closeOnSelect)}
+                                    onToggleVisibility={() => void handleToggleCategoryVisibility(category)}
                                 />
                             ))}
                             {dashboard.categories.length === 0 ? (

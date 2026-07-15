@@ -20,6 +20,7 @@ import { Ban, Inbox, ListOrdered, Send, UserPlus, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { BrandLink } from "@/components/ui/BrandLink";
+import { CategoryVisibilityBadge } from "@/components/category/CategoryVisibilityBadge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
@@ -620,8 +621,11 @@ function ProfileRoute() {
                             <div className="grid gap-[0.65rem]">
                                 {settings.categories.map((category) => (
                                     <label className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[0.8rem] rounded-md border border-border bg-muted p-3" key={category.id}>
-                                        <span>
-                                            <strong>{category.name}</strong>
+                                        <span className="min-w-0">
+                                            <span className="flex min-w-0 flex-wrap items-center gap-2">
+                                                <strong className="min-w-0 truncate">{category.name}</strong>
+                                                <CategoryVisibilityBadge isPublic={category.isPublic} />
+                                            </span>
                                             <small className="m-0 mt-[0.15rem] block text-muted-foreground">{category.entryCount} entries</small>
                                         </span>
                                         <input
