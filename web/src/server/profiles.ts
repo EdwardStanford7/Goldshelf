@@ -84,8 +84,8 @@ interface CopyableCategoryRow {
 }
 
 type CopyPublicCategoryInput =
-    | { sourceCategoryId: string; mode: "new"; categoryName: string; sourceEntryIds?: string[] }
-    | { sourceCategoryId: string; mode: "merge"; targetCategoryId: string; sourceEntryIds?: string[] };
+    | { sourceCategoryId: string; mode: "new"; categoryName: string; sourceEntryIds: string[] }
+    | { sourceCategoryId: string; mode: "merge"; targetCategoryId: string; sourceEntryIds: string[] };
 
 export const updateUserProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
@@ -697,11 +697,7 @@ interface PublicCategoryImageCopyInput {
     createdAt: number;
 }
 
-function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[] | undefined) {
-    if (sourceEntryIds === undefined) {
-        return orderedEntries;
-    }
-
+function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[]) {
     if (!Array.isArray(sourceEntryIds)) {
         throw new Error("Selected entries are required");
     }

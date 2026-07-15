@@ -1,6 +1,9 @@
 import { parseRankingOperationState } from "./rankingState";
 import { all, first, runBatches } from "@/server/lib/db";
 
+const MAX_EXISTENCE_CHECK_IDS = 90;
+const UNDO_RESTORE_BATCH_SIZE = 10;
+
 interface EntryStateSnapshot {
     id: string;
     categoryId: string;
@@ -265,7 +268,7 @@ export async function restoreRankingMatchUndoState(
             )
     );
 
-    await runBatches(db, statements);
+    await runUndoRestoreBatches(db, statements);
     return {
         sessionId: undoState.session.id,
         categoryId: undoState.session.categoryId
@@ -279,7 +282,7 @@ export async function restoreRepairMatchUndoState(
 ) {
     const undoState = parseRepairUndoState(undoStateValue);
     await assertSnapshotEntriesStillExist(db, userId, undoState.entries);
-    await runBatches(db, [
+    await runUndoRestoreBatches(db, [
         ...restoreEntryStatements(db, userId, undoState.entries),
         db
             .prepare(
@@ -395,18 +398,22 @@ async function assertSnapshotEntriesStillExist(
         throw new Error("That match can't be undone anymore.");
     }
 
-    const placeholders = entries.map(() => "?").join(", ");
-    const row = await first<{ count: number }>(
-        db
-            .prepare(
-                `SELECT COUNT(*) AS count
-                 FROM entries
-                 WHERE user_id = ? AND id IN (${placeholders})`
-            )
-            .bind(userId, ...entries.map((entry) => entry.id))
-    );
+    let foundCount = 0;
+    for (const chunk of chunks(entries, MAX_EXISTENCE_CHECK_IDS)) {
+        const placeholders = chunk.map(() => "?").join(", ");
+        const row = await first<{ count: number }>(
+            db
+                .prepare(
+                    `SELECT COUNT(*) AS count
+                     FROM entries
+                     WHERE user_id = ? AND id IN (${placeholders})`
+                )
+                .bind(userId, ...chunk.map((entry) => entry.id))
+        );
+        foundCount += row?.count ?? 0;
+    }
 
-    if ((row?.count ?? 0) !== entries.length) {
+    if (foundCount !== entries.length) {
         throw new Error("That match can't be undone anymore.");
     }
 }
@@ -453,4 +460,18 @@ function upsertQueueSnapshotStatement(db: D1Database, queuedEntry: QueueRowSnaps
             queuedEntry.createdAt,
             queuedEntry.updatedAt
         );
+}
+
+async function runUndoRestoreBatches(db: D1Database, statements: D1PreparedStatement[]) {
+    for (const chunk of chunks(statements, UNDO_RESTORE_BATCH_SIZE)) {
+        await runBatches(db, chunk);
+    }
+}
+
+function chunks<T>(items: T[], size: number) {
+    const result: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+        result.push(items.slice(index, index + size));
+    }
+    return result;
 }

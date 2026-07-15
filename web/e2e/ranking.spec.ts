@@ -464,6 +464,35 @@ test.describe("Ranking", () => {
         await expect(page.getByRole("button", { name: "Zeta" })).toBeVisible();
     });
 
+    test("ranking undo handles large categories without exceeding D1 variable limits", async ({
+        page,
+        context
+    }) => {
+        const largeEntries = Array.from({ length: 125 }, (_, index) =>
+            `Entry ${String(index + 1).padStart(3, "0")}`
+        );
+        await seedUsers([{
+            email: "large-undo@e2e.test",
+            name: "Large Undo",
+            categories: [{ name: "Movies", entries: largeEntries }]
+        }]);
+        await signInViaApi(context, "large-undo@e2e.test");
+        await gotoApp(page);
+
+        await page.getByPlaceholder("New entry").fill("Zeta");
+        await page.getByPlaceholder("New entry").press("Enter");
+        const panel = page.locator("section", { hasText: ACTIVE_RANKING_LABEL }).first();
+        await expect(panel).toBeVisible({ timeout: 15_000 });
+
+        await page.getByRole("button", { name: "Zeta" }).click();
+        await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeVisible({ timeout: 15_000 });
+        await page.getByRole("button", { name: "Undo Last Match" }).click();
+
+        await expect(panel.getByText(/0 comparisons/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
+        await expect(page.getByRole("button", { name: "Zeta" })).toBeVisible();
+    });
+
     test("ranking panel labels placement checks before local repair", async ({
         page,
         context

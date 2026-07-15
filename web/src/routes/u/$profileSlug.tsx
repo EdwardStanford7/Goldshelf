@@ -432,16 +432,19 @@ function CopyCategoryDialog({
     const duplicateCategoryName = targetCategories.some(
         (targetCategory) => targetCategory.name === cleanCategoryName
     );
-    const submitDisabled = saving ||
-        (mode === "new" && (!cleanCategoryName || duplicateCategoryName)) ||
-        (mode === "merge" && !targetCategoryId) ||
-        selectedEntryIds.size === 0;
     const searchTerm = entrySearch.trim().toLowerCase();
     const visibleEntries = searchTerm
         ? orderedEntries.filter((entry) => entry.name.toLowerCase().includes(searchTerm))
         : orderedEntries;
     const orderedEntryIds = visibleEntries.map((entry) => entry.id);
+    const selectedOrderedEntryIds = orderedEntries
+        .filter((entry) => selectedEntryIds.has(entry.id))
+        .map((entry) => entry.id);
     const entryPositionById = new Map(orderedEntries.map((entry, index) => [entry.id, index + 1]));
+    const submitDisabled = saving ||
+        (mode === "new" && (!cleanCategoryName || duplicateCategoryName)) ||
+        (mode === "merge" && !targetCategoryId) ||
+        selectedOrderedEntryIds.length === 0;
 
     function handleSelectEntry(entryId: string, event: MouseEvent) {
         if (saving) {
@@ -567,7 +570,7 @@ function CopyCategoryDialog({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <strong className="text-sm">Entries</strong>
                             <span className="text-sm text-muted-foreground">
-                                {selectedEntryIds.size} of {orderedEntries.length} selected
+                                {selectedOrderedEntryIds.length} of {orderedEntries.length} selected
                             </span>
                         </div>
                         <Input
@@ -642,7 +645,7 @@ function CopyCategoryDialog({
                     <Button
                         disabled={submitDisabled}
                         type="button"
-                        onClick={() => onSubmit(Array.from(selectedEntryIds))}
+                        onClick={() => onSubmit(selectedOrderedEntryIds)}
                     >
                         {saving ? "Copying..." : "Copy List"}
                     </Button>
