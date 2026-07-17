@@ -99,7 +99,7 @@ test.describe("Profiles", () => {
         await expect(dialog.getByRole("button", { name: "Copy List" })).toBeDisabled();
         await dialog.getByLabel("Category name").fill("Alice Movies");
         await expect(dialog.getByText("4 of 4 selected")).toBeVisible();
-        await dialog.getByRole("button", { name: "Deselect visible" }).click();
+        await dialog.getByRole("button", { name: "Deselect all" }).click();
         await expect(dialog.getByText("0 of 4 selected")).toBeVisible();
         await dialog.getByRole("checkbox", { name: "Select Arrival" }).click();
         await dialog.getByRole("checkbox", { name: "Select Heat" }).click({ modifiers: ["Shift"] });
@@ -107,7 +107,7 @@ test.describe("Profiles", () => {
         await dialog.getByRole("checkbox", { name: "Select Dune" }).click({ modifiers: ["Meta"] });
         await expect(dialog.getByText("2 of 4 selected")).toBeVisible();
         await dialog.getByLabel("Search entries to copy").fill("Sol");
-        await dialog.getByRole("button", { name: "Select visible", exact: true }).click();
+        await dialog.getByRole("button", { name: "Select matches", exact: true }).click();
         await expect(dialog.getByText("3 of 4 selected")).toBeVisible();
         await dialog.getByRole("button", { name: "Copy List" }).click();
         await expect(bobPage.getByText("Copied 3 entries to Alice Movies.")).toBeVisible({ timeout: 15_000 });
@@ -166,7 +166,7 @@ test.describe("Profiles", () => {
         await dialog.getByRole("button", { name: "Merge" }).click();
         await dialog.getByLabel("Existing category").click();
         await bobPage.getByRole("option", { name: "Movies" }).click();
-        await dialog.getByRole("button", { name: "Deselect visible" }).click();
+        await dialog.getByRole("button", { name: "Deselect all" }).click();
         await dialog.getByRole("checkbox", { name: "Select Arrival" }).click();
         await dialog.getByRole("checkbox", { name: "Select Dune" }).click();
         await expect(dialog.getByText("2 of 3 selected")).toBeVisible();

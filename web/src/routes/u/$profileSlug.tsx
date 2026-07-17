@@ -449,6 +449,12 @@ function CopyCategoryDialog({
     const selectedOrderedEntryIds = orderedEntries
         .filter((entry) => selectedEntryIds.has(entry.id))
         .map((entry) => entry.id);
+    const allFilteredEntriesSelected = orderedEntryIds.length > 0 &&
+        orderedEntryIds.every((entryId) => selectedEntryIds.has(entryId));
+    const selectionScopeLabel = searchTerm ? "matches" : "all";
+    const selectionToggleLabel = allFilteredEntriesSelected
+        ? `Deselect ${selectionScopeLabel}`
+        : `Select ${selectionScopeLabel}`;
     const entryPositionById = new Map(orderedEntries.map((entry, index) => [entry.id, index + 1]));
     const submitDisabled = saving ||
         (mode === "new" && (!cleanCategoryName || duplicateCategoryName)) ||
@@ -491,6 +497,14 @@ function CopyCategoryDialog({
             return nextSelectedIds;
         });
         setSelectionAnchorId(orderedEntryIds.at(-1) ?? selectionAnchorId);
+    }
+
+    function toggleFilteredSelection() {
+        if (allFilteredEntriesSelected) {
+            deselectVisible();
+        } else {
+            selectVisible();
+        }
     }
 
     return (
@@ -595,18 +609,9 @@ function CopyCategoryDialog({
                                 size="sm"
                                 type="button"
                                 variant="outline"
-                                onClick={selectVisible}
+                                onClick={toggleFilteredSelection}
                             >
-                                Select visible
-                            </Button>
-                            <Button
-                                disabled={saving || visibleEntries.length === 0}
-                                size="sm"
-                                type="button"
-                                variant="outline"
-                                onClick={deselectVisible}
-                            >
-                                Deselect visible
+                                {selectionToggleLabel}
                             </Button>
                         </div>
                         <div className="grid max-h-[min(42vh,22rem)] min-h-0 gap-1 overflow-y-auto rounded-md border border-border bg-background p-1">
