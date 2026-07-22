@@ -5,7 +5,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuCheckboxItem,
     DropdownMenuRadioGroup,
     DropdownMenuRadioItem,
@@ -114,13 +113,17 @@ export function AccountMenu({
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align={contentAlign} className="w-56">
-                <DropdownMenuLabel className="flex items-center gap-3">
+                <DropdownMenuItem
+                    aria-label={`Open ${userName} account`}
+                    className="flex items-center gap-3 px-1.5 py-2"
+                    onSelect={onOpenProfile}
+                >
                     <AccountAvatar imageKey={userImage} imageVersion={userImageVersion} large />
                     <div className="min-w-0">
                         <strong className="block min-w-0 truncate">{userName}</strong>
                         <span className="mt-[0.1rem] block text-[0.82rem] font-normal text-muted-foreground">Account</span>
                     </div>
-                </DropdownMenuLabel>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={onOpenProfile}>
                     <User />Profile
