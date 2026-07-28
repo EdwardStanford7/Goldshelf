@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, ListOrdered, Swords, Users } from "lucide-react";
+import { ArrowRight, ExternalLink, ListOrdered, Swords, Users } from "lucide-react";
 import { GildedBackground } from "./GildedBackground";
 import "./marketing.css";
 
@@ -22,6 +22,7 @@ const FEATURES = [
 ] as const;
 
 const CATEGORIES = ["Films", "Albums", "Books", "Games", "Restaurants", "Anything"] as const;
+const GITHUB_URL = "https://github.com/EdwardStanford7/Goldshelf";
 
 export function MarketingLanding() {
     return (
@@ -37,6 +38,12 @@ export function MarketingLanding() {
                         <span className="gs-gold font-display">Goldshelf</span>
                     </span>
                     <div className="flex flex-wrap items-center justify-end gap-2.5">
+                        <Link
+                            to="/about"
+                            className="gs-ghost inline-flex h-10 items-center rounded-full px-4 text-sm font-medium sm:px-5"
+                        >
+                            About
+                        </Link>
                         <Link
                             to="/signin"
                             className="gs-ghost inline-flex h-10 items-center rounded-full px-4 text-sm font-medium sm:px-5"
@@ -132,7 +139,20 @@ export function MarketingLanding() {
                         <img alt="" aria-hidden="true" className="h-4 w-4" src="/favicon.svg" />
                         <span className="gs-gold font-display font-medium">Goldshelf</span>
                     </span>
-                    <span>Rank everything you love.</span>
+                    <nav className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2" aria-label="Goldshelf information">
+                        <Link className="text-muted-foreground no-underline hover:text-accent-strong" to="/about">
+                            Created by Edward Stanford
+                        </Link>
+                        <a
+                            className="inline-flex items-center gap-1.5 text-muted-foreground no-underline hover:text-accent-strong"
+                            href={GITHUB_URL}
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            <ExternalLink className="size-4" aria-hidden="true" />
+                            GitHub
+                        </a>
+                    </nav>
                 </footer>
             </div>
         </main>
