@@ -249,6 +249,71 @@ test.describe("Ranking", () => {
         expect(metrics.firstRowRightGap).toBeLessThanOrEqual(12);
     });
 
+    test("clearing entry search restores the previous list scroll position", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([{
+            email: "search-scroll@e2e.test",
+            name: "Search Scroll",
+            categories: [{
+                name: "Long Search List",
+                entries: Array.from({ length: 45 }, (_, index) => `Scroll Item ${index + 1}`)
+            }]
+        }]);
+        await signInViaApi(context, "search-scroll@e2e.test");
+        await gotoApp(page);
+        await expect(page.getByText("#1 Scroll Item 1")).toBeVisible();
+
+        const scroller = page.getByTestId("dashboard-scroll-region");
+        await scroller.evaluate((element) => element.scrollTo({ top: 720 }));
+        const originalTop = await scroller.evaluate((element) => element.scrollTop);
+        expect(originalTop).toBeGreaterThan(300);
+
+        const topbar = page.getByTestId("dashboard-topbar");
+        await topbar.getByLabel("Search entries").fill("Scroll Item 44");
+        await expect(page.getByText("#44 Scroll Item 44")).toBeVisible();
+        await topbar.getByLabel("Search entries").fill("");
+
+        await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(originalTop - 80);
+    });
+
+    test("filtered entry menu can jump to the result in the full list", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([{
+            email: "search-jump@e2e.test",
+            name: "Search Jump",
+            categories: [{
+                name: "Jump List",
+                entries: Array.from({ length: 45 }, (_, index) => `Jump Item ${index + 1}`)
+            }]
+        }]);
+        await signInViaApi(context, "search-jump@e2e.test");
+        await gotoApp(page);
+
+        const scroller = page.getByTestId("dashboard-scroll-region");
+        const topbar = page.getByTestId("dashboard-topbar");
+        await topbar.getByLabel("Search entries").fill("Jump Item 44");
+        await expect(topbar.getByText("Showing 1 of 45 entries")).toBeVisible();
+
+        const targetCard = page.locator("[data-entry-id]", { hasText: "#44 Jump Item 44" }).first();
+        await targetCard.click({ button: "right" });
+        await page.getByRole("menuitem", { name: "Show in Full List" }).click();
+
+        await expect(topbar.getByLabel("Search entries")).toHaveValue("");
+        await expect(topbar.getByText("45 entries")).toBeVisible();
+        await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(300);
+        await expect.poll(async () => targetCard.evaluate((card) => {
+            const scrollerElement = document.querySelector("[data-testid='dashboard-scroll-region']");
+            const scrollerBox = scrollerElement?.getBoundingClientRect();
+            const cardBox = card.getBoundingClientRect();
+            return Boolean(scrollerBox && cardBox.top >= scrollerBox.top && cardBox.bottom <= scrollerBox.bottom);
+        })).toBe(true);
+        await expect.poll(() => targetCard.evaluate((card) => card.className.includes("ring-2"))).toBe(true);
+    });
+
     test("entry date filter and category stats use added dates", async ({
         page,
         context

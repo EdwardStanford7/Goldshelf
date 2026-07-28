@@ -139,6 +139,14 @@ const ENTRY_DATE_FILTER_LABELS: Record<EntryDateFilterPreset, string> = {
     custom: "Custom range"
 };
 
+function isEntryDateFilterActive(
+    preset: EntryDateFilterPreset,
+    customFrom: string,
+    customTo: string
+) {
+    return preset !== "all" && (preset !== "custom" || Boolean(customFrom || customTo));
+}
+
 /**
  * Apply an optimistic drag ordering (a list of ids) on top of the canonical
  * items so a reorder shows immediately, before the server refresh lands. Falls
@@ -347,6 +355,14 @@ export function Dashboard({
         useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
     );
     const mainRef = useRef<HTMLDivElement | null>(null);
+    const entryFilterScrollSnapshotRef = useRef<{
+        categoryId: string;
+        mainTop: number;
+        windowTop: number;
+    } | null>(null);
+    const locateEntryInFullListRef = useRef<{ categoryId: string; entryId: string } | null>(null);
+    const locateEntryHighlightTimerRef = useRef<number | null>(null);
+    const [locatedEntryId, setLocatedEntryId] = useState<string | null>(null);
     const reversibleActionIdRef = useRef(0);
     const undoStackRef = useRef<ReversibleAction[]>([]);
     const redoStackRef = useRef<ReversibleAction[]>([]);
@@ -370,8 +386,7 @@ export function Dashboard({
         () => entryDateFilterRange(entryDateFilterPreset, customDateFrom, customDateTo),
         [customDateFrom, customDateTo, entryDateFilterPreset]
     );
-    const entryDateFilterActive = entryDateFilterPreset !== "all" &&
-        (entryDateFilterPreset !== "custom" || Boolean(customDateFrom || customDateTo));
+    const entryDateFilterActive = isEntryDateFilterActive(entryDateFilterPreset, customDateFrom, customDateTo);
     const entryFilterActive = Boolean(entrySearch.trim()) || entryDateFilterActive;
     const displayedEntries = useMemo(() => {
         if (!selectedCategory) {
@@ -418,6 +433,65 @@ export function Dashboard({
         setActiveEntryId(null);
         setEntryDragOrder(null);
     }, [activeRepairSessionId, activeSessionId, entryDateFilterActive, entrySearch, selectedCategoryId]);
+
+    useEffect(() => {
+        if (entryFilterActive) {
+            return;
+        }
+
+        const snapshot = entryFilterScrollSnapshotRef.current;
+        if (!snapshot) {
+            return;
+        }
+
+        entryFilterScrollSnapshotRef.current = null;
+        if (activeFlowLocked || snapshot.categoryId !== selectedCategoryId) {
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
+            mainRef.current?.scrollTo({ top: snapshot.mainTop });
+            window.scrollTo({ top: snapshot.windowTop });
+        });
+    }, [activeFlowLocked, entryFilterActive, selectedCategoryId]);
+
+    useEffect(() => {
+        if (entryFilterActive) {
+            return;
+        }
+
+        const target = locateEntryInFullListRef.current;
+        if (!target) {
+            return;
+        }
+
+        locateEntryInFullListRef.current = null;
+        if (target.categoryId !== selectedCategoryId) {
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
+            const targetElement = Array.from(mainRef.current?.querySelectorAll<HTMLElement>("[data-entry-id]") ?? [])
+                .find((element) => element.dataset.entryId === target.entryId);
+            targetElement?.scrollIntoView({ block: "center", inline: "nearest" });
+            setLocatedEntryId(target.entryId);
+            if (locateEntryHighlightTimerRef.current !== null) {
+                window.clearTimeout(locateEntryHighlightTimerRef.current);
+            }
+            locateEntryHighlightTimerRef.current = window.setTimeout(() => {
+                setLocatedEntryId((currentId) => currentId === target.entryId ? null : currentId);
+                locateEntryHighlightTimerRef.current = null;
+            }, 2200);
+        });
+    }, [entryFilterActive, orderedEntries, selectedCategoryId]);
+
+    useEffect(() => {
+        return () => {
+            if (locateEntryHighlightTimerRef.current !== null) {
+                window.clearTimeout(locateEntryHighlightTimerRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (!canDragReorderCategories) {
@@ -753,6 +827,56 @@ export function Dashboard({
             mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
             window.scrollTo({ top: 0, behavior: "smooth" });
         });
+    }
+
+    function captureEntryFilterScrollPosition() {
+        if (entryFilterActive || entryFilterScrollSnapshotRef.current) {
+            return;
+        }
+
+        entryFilterScrollSnapshotRef.current = {
+            categoryId: selectedCategoryId,
+            mainTop: mainRef.current?.scrollTop ?? 0,
+            windowTop: window.scrollY
+        };
+    }
+
+    function handleEntrySearchChange(value: string) {
+        const nextFilterActive = Boolean(value.trim()) || entryDateFilterActive;
+        if (nextFilterActive) {
+            captureEntryFilterScrollPosition();
+        }
+        setEntrySearch(value);
+    }
+
+    function handleEntryDateFilterPresetChange(value: EntryDateFilterPreset) {
+        const nextFilterActive = Boolean(entrySearch.trim()) || isEntryDateFilterActive(value, customDateFrom, customDateTo);
+        if (nextFilterActive) {
+            captureEntryFilterScrollPosition();
+        }
+        setEntryDateFilterPreset(value);
+    }
+
+    function handleCustomDateFromChange(value: string) {
+        const nextFilterActive = Boolean(entrySearch.trim()) || isEntryDateFilterActive(entryDateFilterPreset, value, customDateTo);
+        if (nextFilterActive) {
+            captureEntryFilterScrollPosition();
+        }
+        setCustomDateFrom(value);
+    }
+
+    function handleCustomDateToChange(value: string) {
+        const nextFilterActive = Boolean(entrySearch.trim()) || isEntryDateFilterActive(entryDateFilterPreset, customDateFrom, value);
+        if (nextFilterActive) {
+            captureEntryFilterScrollPosition();
+        }
+        setCustomDateTo(value);
+    }
+
+    function handleLocateEntryInFullList(entryId: string) {
+        locateEntryInFullListRef.current = { categoryId: selectedCategoryId, entryId };
+        entryFilterScrollSnapshotRef.current = null;
+        resetEntryFilters();
     }
 
     function pushToast(toast: {
@@ -2016,11 +2140,11 @@ export function Dashboard({
                         aria-label="Search entries"
                         value={entrySearch}
                         placeholder="Search entries"
-                        onChange={(event) => setEntrySearch(event.target.value)}
+                        onChange={(event) => handleEntrySearchChange(event.target.value)}
                     />
                     <Select
                         value={entryDateFilterPreset}
-                        onValueChange={(value) => setEntryDateFilterPreset(value as EntryDateFilterPreset)}
+                        onValueChange={(value) => handleEntryDateFilterPresetChange(value as EntryDateFilterPreset)}
                     >
                         <SelectTrigger aria-label="Date added filter" className={compact ? "min-w-0" : "min-w-0 max-[520px]:w-[9.5rem]"}>
                             <CalendarDays className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -2055,7 +2179,7 @@ export function Dashboard({
                                 aria-label="Date added from"
                                 type="date"
                                 value={customDateFrom}
-                                onChange={(event) => setCustomDateFrom(event.target.value)}
+                                onChange={(event) => handleCustomDateFromChange(event.target.value)}
                             />
                         </label>
                         <label className="grid min-w-0 gap-1 text-xs font-semibold text-muted-foreground">
@@ -2064,7 +2188,7 @@ export function Dashboard({
                                 aria-label="Date added to"
                                 type="date"
                                 value={customDateTo}
-                                onChange={(event) => setCustomDateTo(event.target.value)}
+                                onChange={(event) => handleCustomDateToChange(event.target.value)}
                             />
                         </label>
                     </div>
@@ -2640,11 +2764,14 @@ export function Dashboard({
                                         categories={dashboard.categories}
                                         key={entry.id}
                                         canDragReorder={canDragReorderEntries}
+                                        highlighted={locatedEntryId === entry.id}
                                         listLocked={activeFlowLocked}
                                         listSize={selectedCategory.entries.length}
                                         selectedCategoryId={selectedCategory.id}
+                                        showLocateInList={entryFilterActive}
                                         showPercentile={showEntryPercentile}
                                         onDelete={() => handleDelete(entry)}
+                                        onLocateInList={() => handleLocateEntryInFullList(entry.id)}
                                         onPickImage={() => setImagePickerTarget({
                                             kind: "entry",
                                             item: entry,

@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowRightLeft, GripVertical, Image as ImageIcon, Info, MoreVertical, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowRightLeft, GripVertical, Image as ImageIcon, Info, MoreVertical, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     ContextMenu,
@@ -45,11 +45,14 @@ export function EntryCard({
     entry,
     categories,
     canDragReorder,
+    highlighted,
     listLocked,
     listSize,
     selectedCategoryId,
+    showLocateInList,
     showPercentile,
     onDelete,
+    onLocateInList,
     onPickImage,
     onRename,
     onRerank,
@@ -58,11 +61,14 @@ export function EntryCard({
     entry: Entry;
     categories: CategoryWithEntries[];
     canDragReorder: boolean;
+    highlighted?: boolean;
     listLocked: boolean;
     listSize: number;
     selectedCategoryId: string;
+    showLocateInList?: boolean;
     showPercentile: boolean;
     onDelete: () => void;
+    onLocateInList?: () => void;
     onPickImage: () => void;
     onRename: (name: string) => Promise<void>;
     onRerank: () => void;
@@ -127,6 +133,7 @@ export function EntryCard({
                 <article
                     ref={setNodeRef}
                     className={`relative max-w-full min-w-0 rounded-md border border-border bg-card shadow-panel transition-[border-color,box-shadow,opacity,background-color] duration-150 ease-[ease] ${canDragReorder ? "cursor-grab" : ""
+                        } ${highlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
                         } ${isDragging
                             ? ENTRY_CARD_DRAGGING_CLASS
                             : "motion-safe:hover:border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] motion-safe:hover:shadow-floating"
@@ -167,6 +174,11 @@ export function EntryCard({
                                         {renderInfoContent()}
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
+                                {showLocateInList && onLocateInList ? (
+                                    <DropdownMenuItem onSelect={onLocateInList}>
+                                        <Search />Show in Full List
+                                    </DropdownMenuItem>
+                                ) : null}
                                 <DropdownMenuItem onSelect={startRename}>
                                     <Pencil />Rename
                                 </DropdownMenuItem>
@@ -282,6 +294,11 @@ export function EntryCard({
                         {renderInfoContent()}
                     </ContextMenuSubContent>
                 </ContextMenuSub>
+                {showLocateInList && onLocateInList ? (
+                    <ContextMenuItem onSelect={onLocateInList}>
+                        <Search />Show in Full List
+                    </ContextMenuItem>
+                ) : null}
                 <ContextMenuItem
                     onSelect={startRename}
                 >
