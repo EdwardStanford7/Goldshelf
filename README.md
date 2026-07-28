@@ -2,6 +2,8 @@
 
 Goldshelf is a matchup-based ranking app for any category you can think of: books, movies, TV, restaurants, to name a few. Instead of rating items in isolation, users build ordered lists by comparing two entries at a time.
 
+Live at https://goldshelf.net
+
 The web app is the current version of the project. The original Rust desktop app is kept in this repo as a legacy reference and for historical spreadsheet compatibility.
 
 ## Repository Layout
