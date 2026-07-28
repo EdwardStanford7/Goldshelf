@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -112,6 +112,16 @@ export function EntryCard({
         event.stopPropagation();
     }
 
+    function handlePosterDoubleClick(event: MouseEvent<HTMLDivElement>) {
+        if (!showLocateInList || !onLocateInList || isRenaming || moveControlsOpen) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        onLocateInList();
+    }
+
     const showDragHandle = canDragReorder && !isRenaming && !moveControlsOpen;
     const position = entry.rankPosition + 1;
     const percentileLabel = percentileForPosition(position, listSize);
@@ -198,7 +208,7 @@ export function EntryCard({
                             </DropdownMenuContent>
                         </DropdownMenu>
                     ) : null}
-                    <EntryPoster entry={entry} />
+                    <EntryPoster entry={entry} onDoubleClick={handlePosterDoubleClick} />
                     <div className="grid min-w-0 gap-[0.55rem] p-[0.65rem] max-[720px]:p-2">
                         {isRenaming ? (
                             <form className="grid gap-[0.45rem]" onSubmit={handleRenameSubmit}>
@@ -397,9 +407,11 @@ export function EntryDragOverlay({ entry }: { entry: Entry }) {
 }
 
 export function EntryPoster({
-    entry
+    entry,
+    onDoubleClick
 }: {
     entry: Entry;
+    onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void;
 }) {
     const [imageFailed, setImageFailed] = useState(false);
 
@@ -408,7 +420,7 @@ export function EntryPoster({
     }, [entry.id, entry.imageKey]);
 
     return (
-        <div className="relative grid overflow-hidden rounded-t-panel">
+        <div className="relative grid overflow-hidden rounded-t-panel" data-testid="entry-poster" onDoubleClick={onDoubleClick}>
             {hasStoredImage(entry.imageKey) && !imageFailed ? (
                 <img
                     className={`${POSTER_CLASS} block h-auto w-full max-w-full object-cover [grid-area:1/1]`}

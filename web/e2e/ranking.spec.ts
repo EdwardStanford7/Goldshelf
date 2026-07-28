@@ -312,6 +312,24 @@ test.describe("Ranking", () => {
             return Boolean(scrollerBox && cardBox.top >= scrollerBox.top && cardBox.bottom <= scrollerBox.bottom);
         })).toBe(true);
         await expect.poll(() => targetCard.evaluate((card) => card.className.includes("ring-2"))).toBe(true);
+
+        await topbar.getByLabel("Search entries").fill("Jump Item 36");
+        await expect(topbar.getByText("Showing 1 of 45 entries")).toBeVisible();
+        const doubleClickTarget = page.locator("[data-entry-id]", { hasText: "#36 Jump Item 36" }).first();
+        await doubleClickTarget.getByText("#36 Jump Item 36").dblclick();
+        await expect(page.getByLabel("Rename Jump Item 36")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(topbar.getByLabel("Search entries")).toHaveValue("Jump Item 36");
+        await doubleClickTarget.getByTestId("entry-poster").dblclick();
+
+        await expect(topbar.getByLabel("Search entries")).toHaveValue("");
+        await expect(topbar.getByText("45 entries")).toBeVisible();
+        await expect.poll(async () => doubleClickTarget.evaluate((card) => {
+            const scrollerElement = document.querySelector("[data-testid='dashboard-scroll-region']");
+            const scrollerBox = scrollerElement?.getBoundingClientRect();
+            const cardBox = card.getBoundingClientRect();
+            return Boolean(scrollerBox && cardBox.top >= scrollerBox.top && cardBox.bottom <= scrollerBox.bottom);
+        })).toBe(true);
     });
 
     test("entry date filter and category stats use added dates", async ({
