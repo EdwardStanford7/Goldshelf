@@ -76,6 +76,7 @@ async function waitForStableLocator(locator: Locator) {
 export interface SeedEntry {
     name: string;
     imageKey?: string | null;
+    createdAt?: number;
 }
 
 export interface SeedCategory {

@@ -7,6 +7,7 @@ import { testModeGate } from "@/server/lib/testMode";
 interface SeedEntry {
     name: string;
     imageKey?: string | null;
+    createdAt?: number;
 }
 
 interface SeedCategory {
@@ -135,6 +136,7 @@ export const Route = createFileRoute("/api/test/seed")({
                             typeof entry === "string" ? { name: entry } : entry
                         );
                         for (const [entryIndex, entry] of entries.entries()) {
+                            const entryCreatedAt = entry.createdAt ?? timestamp;
                             await db
                                 .prepare(
                                     `INSERT INTO entries (
@@ -150,7 +152,7 @@ export const Route = createFileRoute("/api/test/seed")({
                                     entry.name,
                                     entryIndex,
                                     entry.imageKey === undefined ? NO_IMAGE_KEY : entry.imageKey,
-                                    timestamp,
+                                    entryCreatedAt,
                                     timestamp
                                 )
                                 .run();

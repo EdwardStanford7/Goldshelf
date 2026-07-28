@@ -10,6 +10,16 @@ const RANKER = {
 };
 
 const ACTIVE_RANKING_LABEL = /Binary Rank|Placement Check|Local Repair/;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function currentDateTimestamp() {
+    const today = new Date();
+    return Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+}
+
+function dateInputValue(timestamp: number) {
+    return new Date(timestamp).toISOString().slice(0, 10);
+}
 
 async function forceRankingDisplayPhase(
     page: Page,
@@ -237,6 +247,59 @@ test.describe("Ranking", () => {
         expect(metrics.scrollRegionTop).toBeGreaterThanOrEqual(metrics.topbarBottom - 1);
         expect(metrics.firstRowCardWidth).toBeGreaterThan(200);
         expect(metrics.firstRowRightGap).toBeLessThanOrEqual(12);
+    });
+
+    test("entry date filter and category stats use added dates", async ({
+        page,
+        context
+    }) => {
+        const today = currentDateTimestamp();
+        const oldDate = Date.UTC(new Date().getFullYear() - 1, 0, 15);
+        await seedUsers([{
+            email: "dates@e2e.test",
+            name: "Date Tester",
+            categories: [{
+                name: "Dates",
+                entries: [
+                    { name: "Today Pick", createdAt: today },
+                    { name: "Recent Pick", createdAt: today - (3 * DAY_MS) },
+                    { name: "Month Pick", createdAt: today - (20 * DAY_MS) },
+                    { name: "Old Pick", createdAt: oldDate }
+                ]
+            }]
+        }]);
+        await signInViaApi(context, "dates@e2e.test");
+        await gotoApp(page);
+
+        const topbar = page.getByTestId("dashboard-topbar");
+        await expect(page.getByRole("heading", { name: "Dates" })).toBeVisible();
+        await expect(topbar.getByText("4 entries")).toBeVisible();
+
+        await topbar.getByLabel("Date added filter").click();
+        await page.getByRole("option", { name: "Last 7 days" }).click();
+        await expect(topbar.getByText("Showing 2 of 4 entries")).toBeVisible();
+        await expect(page.getByText("#1 Today Pick")).toBeVisible();
+        await expect(page.getByText("#2 Recent Pick")).toBeVisible();
+        await expect(page.getByText("Month Pick")).toBeHidden();
+
+        await topbar.getByLabel("Date added filter").click();
+        await page.getByRole("option", { name: "Custom range" }).click();
+        await topbar.getByLabel("Date added from").fill(dateInputValue(oldDate));
+        await topbar.getByLabel("Date added to").fill(dateInputValue(oldDate));
+        await expect(topbar.getByText("Showing 1 of 4 entries")).toBeVisible();
+        await expect(page.getByText("#4 Old Pick")).toBeVisible();
+        await expect(page.getByText("Today Pick")).toBeHidden();
+
+        await topbar.getByLabel("Open category stats").click();
+        const stats = page.getByRole("dialog", { name: "Dates Stats" });
+        await expect(stats.getByText("Total entries")).toBeVisible();
+        await expect(stats.getByText("Added today")).toBeVisible();
+        await expect(stats.getByText("Added last 7 days")).toBeVisible();
+        await expect(stats.getByText("Added last 30 days")).toBeVisible();
+        await expect(stats.locator("dt", { hasText: "Total entries" }).locator("xpath=following-sibling::dd").getByText("4", { exact: true })).toBeVisible();
+        await expect(stats.locator("dt", { hasText: "Added today" }).locator("xpath=following-sibling::dd").getByText("1", { exact: true })).toBeVisible();
+        await expect(stats.locator("dt", { hasText: "Added last 7 days" }).locator("xpath=following-sibling::dd").getByText("2", { exact: true })).toBeVisible();
+        await expect(stats.locator("dt", { hasText: "Added last 30 days" }).locator("xpath=following-sibling::dd").getByText("3", { exact: true })).toBeVisible();
     });
 
     test("desktop sidebar scrolls instead of collapsing controls on short viewports", async ({

@@ -2,7 +2,7 @@ APP_NAME = goldshelf
 D1_NAME = media-rating
 R2_BUCKET = media-rating-images
 
-.PHONY: help install check test e2e typecheck build dev preview audit password-reset-link password-reset-link-local \
+.PHONY: help install check test e2e typecheck build dev preview audit audit-fix password-reset-link password-reset-link-local \
 	admin-promote admin-promote-local admin-demote admin-demote-local \
 	auth-clear-rate-limits auth-clear-rate-limits-local \
 	cf-login cf-whoami cf-create-d1 cf-create-r2 cf-secret-auth \
@@ -18,6 +18,7 @@ help:
 	@echo "  make check                Run unit tests, typecheck, e2e tests, audit, and build"
 	@echo "  make e2e                  Run Playwright browser tests"
 	@echo "  make dev                  Start local dev server"
+	@echo "  make audit-fix            Refresh dependency resolution from package.json and rerun audit"
 	@echo "  make cf-migrate-local     Apply D1 migrations to local Wrangler D1"
 	@echo "  make password-reset-link EMAIL=user@example.com Generate a one-hour remote reset link"
 	@echo "  make password-reset-link-local EMAIL=user@example.com Generate a local D1 reset link"
@@ -57,6 +58,10 @@ build:
 
 audit:
 	node scripts/audit-prod.mjs
+
+audit-fix:
+	pnpm install --no-frozen-lockfile
+	$(MAKE) audit
 
 check:
 	$(MAKE) test

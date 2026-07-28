@@ -24,7 +24,7 @@
     "@fontsource-variable/geist": "^5.2.9",
     "@tanstack/react-router": "^1.170.9",
     "@tanstack/react-start": "^1.168.16",
-    "better-auth": "^1.6.9",
+    "better-auth": "^1.6.22",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
@@ -56,13 +56,14 @@
   },
   "pnpm": {
     "overrides": {
-      "brace-expansion": "^5.0.7",
+      "brace-expansion": "^5.0.8",
       "body-parser": "^2.3.0",
       "esbuild": "^0.28.1",
       "fast-uri": "^3.1.4",
       "hono": "^4.12.27",
       "js-yaml": "^4.3.0",
-      "kysely": "^0.28.17"
+      "kysely": "^0.28.17",
+      "postcss": "^8.5.18"
     }
   }
 }

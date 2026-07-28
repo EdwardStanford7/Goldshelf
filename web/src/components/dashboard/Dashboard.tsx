@@ -17,7 +17,7 @@ import {
     rectSortingStrategy,
     verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { Library, ListPlus, Menu, Plus, Search, Swords, Wrench } from "lucide-react";
+import { BarChart3, CalendarDays, Library, ListPlus, Menu, Plus, Search, Swords, Wrench } from "lucide-react";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { BinaryRankPanel } from "@/components/ranking/BinaryRankPanel";
 import { RepairRankPanel } from "@/components/ranking/RepairRankPanel";
@@ -62,6 +62,7 @@ import {
     currentDateTimestamp,
     dateInputToTimestamp,
     errorMessage,
+    formatDate,
     isTransientRequestFailure
 } from "@/lib/format";
 import { shouldPromptForImage } from "@/lib/images";
@@ -126,6 +127,17 @@ const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 const SIDEBAR_PANEL_CLASS =
     "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
 type MobilePanel = "newCategory" | "newEntry" | "queue";
+type EntryDateFilterPreset = "all" | "today" | "last7" | "last30" | "year" | "custom";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const ENTRY_DATE_FILTER_LABELS: Record<EntryDateFilterPreset, string> = {
+    all: "All time",
+    today: "Today",
+    last7: "Last 7 days",
+    last30: "Last 30 days",
+    year: "This year",
+    custom: "Custom range"
+};
 
 /**
  * Apply an optimistic drag ordering (a list of ids) on top of the canonical
@@ -150,6 +162,66 @@ function orderQueuedEntries(entries: QueuedEntry[]) {
         left.createdAt - right.createdAt ||
         left.name.localeCompare(right.name)
     );
+}
+
+function entryDateFilterRange(
+    preset: EntryDateFilterPreset,
+    customFrom: string,
+    customTo: string
+) {
+    const today = currentDateTimestamp();
+    const tomorrow = today + DAY_MS;
+    const currentYear = new Date().getFullYear();
+
+    if (preset === "today") {
+        return { start: today, end: tomorrow };
+    }
+    if (preset === "last7") {
+        return { start: today - (6 * DAY_MS), end: tomorrow };
+    }
+    if (preset === "last30") {
+        return { start: today - (29 * DAY_MS), end: tomorrow };
+    }
+    if (preset === "year") {
+        return { start: Date.UTC(currentYear, 0, 1), end: Date.UTC(currentYear + 1, 0, 1) };
+    }
+    if (preset === "custom") {
+        const start = dateInputToTimestamp(customFrom);
+        const customEnd = dateInputToTimestamp(customTo);
+        return { start, end: customEnd === null ? null : customEnd + DAY_MS };
+    }
+
+    return { start: null, end: null };
+}
+
+function entryMatchesDateRange(entry: Entry, range: { start: number | null; end: number | null }) {
+    return (range.start === null || entry.createdAt >= range.start) &&
+        (range.end === null || entry.createdAt < range.end);
+}
+
+function countEntriesInRange(entries: Entry[], range: { start: number | null; end: number | null }) {
+    return entries.filter((entry) => entryMatchesDateRange(entry, range)).length;
+}
+
+function categoryDateStats(category: CategoryWithEntries) {
+    const entries = category.entries;
+    const todayRange = entryDateFilterRange("today", "", "");
+    const last7Range = entryDateFilterRange("last7", "", "");
+    const last30Range = entryDateFilterRange("last30", "", "");
+    const yearRange = entryDateFilterRange("year", "", "");
+    const sortedDates = entries
+        .map((entry) => entry.createdAt)
+        .sort((left, right) => left - right);
+
+    return {
+        total: entries.length,
+        today: countEntriesInRange(entries, todayRange),
+        last7: countEntriesInRange(entries, last7Range),
+        last30: countEntriesInRange(entries, last30Range),
+        year: countEntriesInRange(entries, yearRange),
+        firstAddedAt: sortedDates[0] ?? null,
+        newestAddedAt: sortedDates.at(-1) ?? null
+    };
 }
 
 function importResultMessage(result: {
@@ -226,6 +298,10 @@ export function Dashboard({
     const resumeRetryAttemptRef = useRef(0);
     const mobileLayerTimerRef = useRef<number | null>(null);
     const [entrySearch, setEntrySearch] = useState("");
+    const [entryDateFilterPreset, setEntryDateFilterPreset] = useState<EntryDateFilterPreset>("all");
+    const [customDateFrom, setCustomDateFrom] = useState("");
+    const [customDateTo, setCustomDateTo] = useState("");
+    const [statsCategoryId, setStatsCategoryId] = useState<string | null>(null);
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const [mobilePanel, setMobilePanel] = useState<MobilePanel | null>(null);
     const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
@@ -282,22 +358,35 @@ export function Dashboard({
             null,
         [dashboard.categories, selectedCategoryId]
     );
+    const statsCategory = useMemo(
+        () => dashboard.categories.find((category) => category.id === statsCategoryId) ?? null,
+        [dashboard.categories, statsCategoryId]
+    );
     const orderedCategories = useMemo(
         () => applyDragOrder(dashboard.categories, categoryDragOrder),
         [categoryDragOrder, dashboard.categories]
     );
+    const entryDateRange = useMemo(
+        () => entryDateFilterRange(entryDateFilterPreset, customDateFrom, customDateTo),
+        [customDateFrom, customDateTo, entryDateFilterPreset]
+    );
+    const entryDateFilterActive = entryDateFilterPreset !== "all" &&
+        (entryDateFilterPreset !== "custom" || Boolean(customDateFrom || customDateTo));
+    const entryFilterActive = Boolean(entrySearch.trim()) || entryDateFilterActive;
     const displayedEntries = useMemo(() => {
         if (!selectedCategory) {
             return [];
         }
 
         const searchTerm = entrySearch.trim().toLowerCase();
-        const entries = searchTerm
-            ? selectedCategory.entries.filter((entry) => entry.name.toLowerCase().includes(searchTerm))
-            : selectedCategory.entries;
+        const entries = selectedCategory.entries.filter((entry) => {
+            const matchesSearch = !searchTerm || entry.name.toLowerCase().includes(searchTerm);
+            const matchesDate = !entryDateFilterActive || entryMatchesDateRange(entry, entryDateRange);
+            return matchesSearch && matchesDate;
+        });
 
         return orderEntries(entries);
-    }, [entrySearch, selectedCategory]);
+    }, [entryDateFilterActive, entryDateRange, entrySearch, selectedCategory]);
     const orderedEntries = useMemo(
         () => applyDragOrder(displayedEntries, entryDragOrder),
         [displayedEntries, entryDragOrder]
@@ -306,7 +395,7 @@ export function Dashboard({
         selectedCategory &&
         !activeSessionId &&
         !activeRepairSessionId &&
-        !entrySearch.trim() &&
+        !entryFilterActive &&
         selectedCategory.entries.length > 1
     );
     const activeFlowId = activeSessionId ?? activeRepairSessionId;
@@ -315,6 +404,11 @@ export function Dashboard({
     const canDragReorderCategories = !busy && !activeFlowLocked && dashboard.categories.length > 1;
     const canCreateCategory = categoryDraftName.trim().length > 0;
     const canCreateEntry = entryDraftName.trim().length > 0;
+    const entryCountSummary = selectedCategory
+        ? entryFilterActive
+            ? `Showing ${displayedEntries.length} of ${selectedCategory.entries.length} entries`
+            : `${displayedEntries.length} entries`
+        : "Create a category to start ranking.";
 
     useEffect(() => {
         setEntryCategoryId(selectedCategory?.id ?? "");
@@ -323,7 +417,7 @@ export function Dashboard({
     useEffect(() => {
         setActiveEntryId(null);
         setEntryDragOrder(null);
-    }, [activeRepairSessionId, activeSessionId, entrySearch, selectedCategoryId]);
+    }, [activeRepairSessionId, activeSessionId, entryDateFilterActive, entrySearch, selectedCategoryId]);
 
     useEffect(() => {
         if (!canDragReorderCategories) {
@@ -332,10 +426,17 @@ export function Dashboard({
         }
     }, [canDragReorderCategories]);
 
+    function resetEntryFilters() {
+        setEntrySearch("");
+        setEntryDateFilterPreset("all");
+        setCustomDateFrom("");
+        setCustomDateTo("");
+    }
+
     function setActiveBinarySessionId(sessionId: string | null) {
         activeSessionIdRef.current = sessionId;
         if (sessionId) {
-            setEntrySearch("");
+            resetEntryFilters();
             setActiveRepairSessionId(null);
         }
         setActiveSessionIdState(sessionId);
@@ -344,7 +445,7 @@ export function Dashboard({
     function setActiveRepairSessionId(sessionId: string | null) {
         activeRepairSessionIdRef.current = sessionId;
         if (sessionId) {
-            setEntrySearch("");
+            resetEntryFilters();
             setActiveBinarySessionId(null);
             setQueueRankingActive(false);
         }
@@ -1898,6 +1999,133 @@ export function Dashboard({
         userName: currentUserName
     };
 
+    function renderEntryFilterControls(compact = false) {
+        if (!selectedCategory || activeFlowLocked) {
+            return null;
+        }
+
+        const customRangeActive = entryDateFilterPreset === "custom";
+
+        return (
+            <div className={`grid min-w-0 gap-2 ${compact ? "" : "w-[min(39rem,100%)] max-w-156 flex-[1_1_34rem]"}`}>
+                <div className={`grid min-w-0 gap-2 ${compact
+                    ? "grid-cols-[minmax(0,1fr)_8.75rem_auto]"
+                    : "grid-cols-[minmax(0,1fr)_minmax(9.5rem,auto)_auto] max-[520px]:grid-cols-[minmax(0,1fr)_auto]"
+                    }`}>
+                    <Input
+                        aria-label="Search entries"
+                        value={entrySearch}
+                        placeholder="Search entries"
+                        onChange={(event) => setEntrySearch(event.target.value)}
+                    />
+                    <Select
+                        value={entryDateFilterPreset}
+                        onValueChange={(value) => setEntryDateFilterPreset(value as EntryDateFilterPreset)}
+                    >
+                        <SelectTrigger aria-label="Date added filter" className={compact ? "min-w-0" : "min-w-0 max-[520px]:w-[9.5rem]"}>
+                            <CalendarDays className="size-4 text-muted-foreground" aria-hidden="true" />
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                {Object.entries(ENTRY_DATE_FILTER_LABELS).map(([value, label]) => (
+                                    <SelectItem key={value} value={value}>
+                                        {label}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                    <Button
+                        aria-label="Open category stats"
+                        disabled={busy}
+                        size="icon-lg"
+                        type="button"
+                        variant="outline"
+                        onClick={() => setStatsCategoryId(selectedCategory.id)}
+                    >
+                        <BarChart3 className="size-4" />
+                    </Button>
+                </div>
+                {customRangeActive ? (
+                    <div className="grid min-w-0 grid-cols-2 gap-2 max-[520px]:grid-cols-1">
+                        <label className="grid min-w-0 gap-1 text-xs font-semibold text-muted-foreground">
+                            From
+                            <Input
+                                aria-label="Date added from"
+                                type="date"
+                                value={customDateFrom}
+                                onChange={(event) => setCustomDateFrom(event.target.value)}
+                            />
+                        </label>
+                        <label className="grid min-w-0 gap-1 text-xs font-semibold text-muted-foreground">
+                            To
+                            <Input
+                                aria-label="Date added to"
+                                type="date"
+                                value={customDateTo}
+                                onChange={(event) => setCustomDateTo(event.target.value)}
+                            />
+                        </label>
+                    </div>
+                ) : null}
+            </div>
+        );
+    }
+
+    function renderCategoryStatsSheet() {
+        if (!statsCategory) {
+            return null;
+        }
+
+        const stats = categoryDateStats(statsCategory);
+        const statRows = [
+            ["Total entries", String(stats.total)],
+            ["Added today", String(stats.today)],
+            ["Added last 7 days", String(stats.last7)],
+            ["Added last 30 days", String(stats.last30)],
+            ["Added this year", String(stats.year)],
+            ["First added", stats.firstAddedAt === null ? "None" : formatDate(stats.firstAddedAt)],
+            ["Newest added", stats.newestAddedAt === null ? "None" : formatDate(stats.newestAddedAt)]
+        ] as const;
+
+        return (
+            <Sheet
+                open
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setStatsCategoryId(null);
+                    }
+                }}
+            >
+                <SheetContent side="right" className="w-[min(24rem,calc(100vw-1.25rem))] max-[720px]:w-full max-[720px]:max-w-none max-[720px]:border-l-0">
+                    <SheetHeader>
+                        <div className="min-w-0">
+                            <SheetTitle>{statsCategory.name} Stats</SheetTitle>
+                            <SheetDescription>
+                                Entry counts by date added.
+                            </SheetDescription>
+                        </div>
+                        <SheetCloseButton />
+                    </SheetHeader>
+                    <SheetBody>
+                        <dl className="grid gap-2">
+                            {statRows.map(([label, value]) => (
+                                <div
+                                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border bg-card px-3 py-2"
+                                    key={label}
+                                >
+                                    <dt className="min-w-0 text-sm text-muted-foreground">{label}</dt>
+                                    <dd className="m-0 text-sm font-bold text-foreground">{value}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </SheetBody>
+                </SheetContent>
+            </Sheet>
+        );
+    }
+
     function renderNewCategoryPanel(onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>) {
         return (
             <section className={SIDEBAR_PANEL_CLASS}>
@@ -2216,6 +2444,7 @@ export function Dashboard({
                     onSaved={handleImageSaved}
                 />
             ) : null}
+            {renderCategoryStatsSheet()}
             {renderMobilePanelSheet()}
             {categoryDeleteTarget ? (
                 <ConfirmDialog
@@ -2251,9 +2480,7 @@ export function Dashboard({
                     <div className="grid min-w-0 gap-[0.05rem] text-center">
                         <h1 className="m-0 truncate text-[1.08rem] font-bold">{selectedCategory?.name ?? "Categories"}</h1>
                         <p className="m-0 truncate text-[0.82rem] text-muted-foreground">
-                            {selectedCategory
-                                ? `${displayedEntries.length}${entrySearch.trim() ? ` of ${selectedCategory.entries.length}` : ""} entries`
-                                : "Create a category to start ranking."}
+                            {entryCountSummary}
                         </p>
                     </div>
                     <Sheet open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
@@ -2287,12 +2514,7 @@ export function Dashboard({
                 </div>
                 {selectedCategory && !activeFlowLocked ? (
                     <div className="mt-2 grid min-w-0">
-                        <Input
-                            aria-label="Search entries"
-                            value={entrySearch}
-                            placeholder="Search entries"
-                            onChange={(event) => setEntrySearch(event.target.value)}
-                        />
+                        {renderEntryFilterControls(true)}
                     </div>
                 ) : null}
             </div>
@@ -2307,21 +2529,10 @@ export function Dashboard({
                     <div className="grid max-w-[min(34rem,42vw)] min-w-0 flex-[0_1_auto] gap-[0.15rem]">
                         <h1 className="m-0 truncate text-2xl font-bold">{selectedCategory?.name ?? "Categories"}</h1>
                         <p className="m-0 text-muted-foreground">
-                            {selectedCategory
-                                ? `${displayedEntries.length}${entrySearch.trim() ? ` of ${selectedCategory.entries.length}` : ""} entries`
-                                : "Create a category to start ranking."}
+                            {entryCountSummary}
                         </p>
                     </div>
-                    {selectedCategory && !activeFlowLocked ? (
-                        <div className="mr-auto grid w-[min(26rem,100%)] max-w-104 min-w-0 flex-[0_1_26rem] gap-2 max-[720px]:w-full max-[720px]:max-w-none">
-                            <Input
-                                aria-label="Search entries"
-                                value={entrySearch}
-                                placeholder="Search entries"
-                                onChange={(event) => setEntrySearch(event.target.value)}
-                            />
-                        </div>
-                    ) : null}
+                    {renderEntryFilterControls()}
                     <AccountMenu
                         {...accountMenuProps}
                     />
@@ -2418,7 +2629,7 @@ export function Dashboard({
                             strategy={rectSortingStrategy}
                         >
                             <section
-                                className={`grid min-w-0 gap-3 max-[720px]:grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] max-[720px]:gap-2 ${entrySearch.trim()
+                                className={`grid min-w-0 gap-3 max-[720px]:grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] max-[720px]:gap-2 ${entryFilterActive
                                     ? "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
                                     : "grid-cols-[repeat(auto-fit,minmax(min(100%,16.5rem),1fr))]"
                                     }`}
@@ -2457,11 +2668,11 @@ export function Dashboard({
                     </DndContext>
                     {selectedCategory && displayedEntries.length === 0 ? (
                         <EmptyState
-                            icon={entrySearch.trim() ? Search : Swords}
-                            title={entrySearch.trim() ? "No Matches" : "No Entries Yet"}
+                            icon={entryFilterActive ? Search : Swords}
+                            title={entryFilterActive ? "No Matches" : "No Entries Yet"}
                         >
-                            {entrySearch.trim()
-                                ? "Try a different search term or clear the search field."
+                            {entryFilterActive
+                                ? "Try a different search or date range."
                                 : dashboard.queueSettings.enabled
                                     ? "Add entries from the sidebar to queue them for ranking."
                                     : "Add an entry from the sidebar to start ranking this category."}
