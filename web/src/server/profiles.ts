@@ -508,6 +508,12 @@ async function loadPublicProfileForViewer(
         ? await getFollowRelationState(viewerUserId, profile.user_id)
         : "none";
     const isAdminViewer = hasAdminRole(viewerUser);
+    if (!isAdminViewer && !isSelf && viewerUserId) {
+        const blockRelation = await getBlockRelation(viewerUserId, profile.user_id);
+        if (blockRelation.viewerBlockedTarget || blockRelation.targetBlockedViewer) {
+            return null;
+        }
+    }
     if (!isAdminViewer && !canViewProfile(Boolean(profile.is_public), isSelf, relationState)) {
         return null;
     }
@@ -566,8 +572,13 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             throw new Error("You already own this category");
         }
 
+        const blockRelation = await getBlockRelation(userId, sourceCategory.user_id);
         const relationState = await getFollowRelationState(userId, sourceCategory.user_id);
-        if (!canViewProfile(Boolean(sourceCategory.profile_is_public), false, relationState)) {
+        if (
+            blockRelation.viewerBlockedTarget ||
+            blockRelation.targetBlockedViewer ||
+            !canViewProfile(Boolean(sourceCategory.profile_is_public), false, relationState)
+        ) {
             throw new Error("Shared category not found");
         }
 

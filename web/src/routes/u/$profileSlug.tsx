@@ -1,6 +1,6 @@
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { CopyPlus, ListOrdered } from "lucide-react";
+import { CopyPlus, Globe2, ListOrdered, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
     AlertDialog,
@@ -266,7 +266,10 @@ function PublicProfileRoute() {
                     userId={profile.userId}
                 />
                 <div>
-                    <h1 className="text-2xl font-bold">{profile.name}</h1>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h1 className="text-2xl font-bold">{profile.name}</h1>
+                        <ProfileVisibilityBadge isPublic={profile.isPublic} />
+                    </div>
                     <p className="text-muted-foreground">
                         @{profile.slug}
                         {!viewer.isSelf && viewer.isSignedIn
@@ -314,7 +317,7 @@ function PublicProfileRoute() {
                                     <span className="flex min-w-0 items-center gap-2">
                                         <span className="block min-w-0 flex-1 truncate text-[0.92rem]">{category.name}</span>
                                         {showCategoryVisibility ? (
-                                            <CategoryVisibilityBadge isPublic={category.isPublic} className="max-[720px]:hidden" />
+                                            <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profile.isPublic} className="max-[720px]:hidden" />
                                         ) : null}
                                     </span>
                                 </button>
@@ -336,6 +339,7 @@ function PublicProfileRoute() {
                                             ? () => openCopyDialog(category)
                                             : undefined
                                     }
+                                    profileIsPublic={profile.isPublic}
                                     showVisibility={showCategoryVisibility}
                                     usePrivateImages={viewer.isSelf}
                                 />
@@ -368,6 +372,20 @@ function PublicProfileRoute() {
                 onTargetCategoryIdChange={setCopyTargetCategoryId}
             />
         </main>
+    );
+}
+
+function ProfileVisibilityBadge({ isPublic }: { isPublic: boolean }) {
+    const Icon = isPublic ? Globe2 : Users;
+    return (
+        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold uppercase ${
+            isPublic
+                ? "border-primary/40 bg-primary/15 text-primary"
+                : "border-border bg-muted text-muted-foreground"
+        }`} title={isPublic ? "Searchable and visible to anyone" : "Visible to accepted followers"}>
+            <Icon className="size-3" />
+            {isPublic ? "Public Profile" : "Followers Only"}
+        </span>
     );
 }
 
@@ -673,12 +691,14 @@ function PublicCategory({
     category,
     copyDisabled,
     onCopy,
+    profileIsPublic,
     showVisibility,
     usePrivateImages
 }: {
     category: CategoryWithEntries;
     copyDisabled?: boolean;
     onCopy?: () => void;
+    profileIsPublic: boolean;
     showVisibility: boolean;
     usePrivateImages: boolean;
 }) {
@@ -689,7 +709,7 @@ function PublicCategory({
             <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h2 className="min-w-0 text-lg font-semibold">{category.name}</h2>
-                    {showVisibility ? <CategoryVisibilityBadge isPublic={category.isPublic} /> : null}
+                    {showVisibility ? <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profileIsPublic} /> : null}
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                     <span className="text-muted-foreground">{entries.length} {entries.length === 1 ? "entry" : "entries"}</span>

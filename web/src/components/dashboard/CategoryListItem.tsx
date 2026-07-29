@@ -174,7 +174,7 @@ export function CategoryListItem({
                             </DropdownMenuItem>
                             <DropdownMenuItem disabled={busy} onSelect={onToggleVisibility}>
                                 {category.isPublic ? <Lock /> : <Globe2 />}
-                                {category.isPublic ? "Make Private" : "Show on Profile"}
+                                {category.isPublic ? "Hide from Profile" : "Show on Profile"}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 variant="destructive"
@@ -199,7 +199,7 @@ export function CategoryListItem({
                 </ContextMenuItem>
                 <ContextMenuItem disabled={busy} onSelect={onToggleVisibility}>
                     {category.isPublic ? <Lock /> : <Globe2 />}
-                    {category.isPublic ? "Make Private" : "Show on Profile"}
+                    {category.isPublic ? "Hide from Profile" : "Show on Profile"}
                 </ContextMenuItem>
                 <ContextMenuItem
                     variant="destructive"

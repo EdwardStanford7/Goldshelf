@@ -203,6 +203,9 @@ test.describe("Profiles", () => {
         await expect(page.getByRole("heading", { name: "Shared Shelf" })).toBeVisible();
 
         await gotoApp(page, "/profile");
+        await expect(page.getByText("Public profiles are searchable and visible to anyone.")).toBeVisible();
+        await expect(page.getByText("Shown lists appear on your profile.")).toBeVisible();
+        await expect(page.getByText("Private").first()).toBeVisible();
         await page.getByLabel("Public profile").check();
         await page.getByRole("button", { name: "Save Profile" }).click();
         await expect(page.getByText("Profile saved.")).toBeVisible();
@@ -247,8 +250,8 @@ test.describe("Profiles", () => {
         await expect(alicePage.getByRole("button", { name: "Unblock", exact: true })).toBeVisible();
 
         await gotoApp(bobPage, `/u/${aliceSlug}`);
-        await bobPage.getByRole("button", { name: "Follow", exact: true }).click();
-        await expect(bobPage.getByText("This profile is not available")).toBeVisible();
+        await expect(bobPage.getByRole("heading", { name: "Profile Not Found" })).toBeVisible();
+        await expect(bobPage.getByText("This profile is private or does not exist.")).toBeVisible();
 
         await gotoApp(alicePage, "/profile");
         await alicePage.getByRole("button", { name: "Unblock", exact: true }).click();
@@ -309,6 +312,7 @@ test.describe("Profiles", () => {
         await alicePage.getByRole("link", { name: "View Profile" }).click();
         await expect(alicePage).toHaveURL(`/u/${aliceSlug}`);
         await expect(alicePage.getByRole("heading", { name: "Alice Park" })).toBeVisible();
+        await expect(alicePage.getByText("Public Profile", { exact: true }).first()).toBeVisible();
         await expect(alicePage.getByRole("link", { name: "Edit Profile" })).toBeVisible();
         await expect(alicePage.getByText("Arrival")).toBeVisible();
         await expect(alicePage.getByText("Dune")).toBeVisible();
@@ -387,6 +391,7 @@ test.describe("Profiles", () => {
 
         await gotoApp(bobPage, `/u/${aliceSlug}`);
         await expect(bobPage.getByRole("heading", { name: "Alice Park" })).toBeVisible();
+        await expect(bobPage.getByText("Followers Only", { exact: true }).first()).toBeVisible();
 
         // --- Unfollowing revokes Bob's access to the private profile. ---
         await bobPage.getByRole("button", { name: "Mutual" }).click();

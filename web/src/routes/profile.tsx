@@ -550,6 +550,7 @@ function ProfileRoute() {
                             <div>
                                 <h1 className="text-2xl font-bold">{settings.user.name}</h1>
                                 <p className="text-muted-foreground">@{settings.user.slug}</p>
+                                <ProfileVisibilityBadge isPublic={settings.user.isPublic} />
                                 <div className="mt-[0.65rem] flex flex-wrap gap-2">
                                     <label className={`w-fit rounded-sm border border-border bg-card px-[0.8rem] py-[0.55rem] text-foreground ${savingProfileImage ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}>
                                         <span>{savingProfileImage ? "Uploading..." : "Upload Photo"}</span>
@@ -592,15 +593,21 @@ function ProfileRoute() {
                                     onChange={(event) => setProfileSlug(event.target.value)}
                                 />
                             </label>
-                            <label className="inline-flex items-center justify-start gap-[0.4rem] text-[0.86rem] text-muted-foreground">
-                                <input
-                                    checked={profileIsPublic}
-                                    className="w-auto"
-                                    type="checkbox"
-                                    onChange={(event) => setProfileIsPublic(event.target.checked)}
-                                />
-                                <span>Public profile</span>
-                            </label>
+                            <div className="grid gap-1">
+                                <label className="inline-flex items-center justify-start gap-[0.4rem] text-[0.86rem] text-muted-foreground">
+                                    <input
+                                        aria-label="Public profile"
+                                        checked={profileIsPublic}
+                                        className="w-auto"
+                                        type="checkbox"
+                                        onChange={(event) => setProfileIsPublic(event.target.checked)}
+                                    />
+                                    <span>Public profile</span>
+                                </label>
+                                <p className="m-0 text-sm text-muted-foreground">
+                                    Public profiles are searchable and visible to anyone. Private profiles are visible only to you and accepted followers.
+                                </p>
+                            </div>
                             <div className="flex flex-wrap gap-2">
                                 <Button size="lg" disabled={savingProfile} type="submit">
                                     {savingProfile ? "Saving..." : "Save Profile"}
@@ -617,6 +624,9 @@ function ProfileRoute() {
                             <h2 className="text-lg font-semibold">Shared Rankings</h2>
                             <span className="text-muted-foreground">{settings.categories.filter((category) => category.isPublic).length}</span>
                         </div>
+                        <p className="m-0 text-sm text-muted-foreground">
+                            Shown lists appear on your profile. On a private profile, accepted followers can see shown lists; hidden lists stay private.
+                        </p>
                         {settings.categories.length > 0 ? (
                             <div className="grid gap-[0.65rem]">
                                 {settings.categories.map((category) => (
@@ -624,7 +634,7 @@ function ProfileRoute() {
                                         <span className="min-w-0">
                                             <span className="flex min-w-0 flex-wrap items-center gap-2">
                                                 <strong className="min-w-0 truncate">{category.name}</strong>
-                                                <CategoryVisibilityBadge isPublic={category.isPublic} />
+                                                <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={settings.user.isPublic} />
                                             </span>
                                             <small className="m-0 mt-[0.15rem] block text-muted-foreground">{category.entryCount} entries</small>
                                         </span>
@@ -835,6 +845,18 @@ function ProfileRoute() {
                 </div>
             </div>
         </main>
+    );
+}
+
+function ProfileVisibilityBadge({ isPublic }: { isPublic: boolean }) {
+    return (
+        <span className={`mt-2 inline-flex w-fit rounded-full border px-2.5 py-1 text-xs font-bold uppercase ${
+            isPublic
+                ? "border-primary/40 bg-primary/15 text-primary"
+                : "border-border bg-muted text-muted-foreground"
+        }`}>
+            {isPublic ? "Public Profile" : "Private Profile"}
+        </span>
     );
 }
 

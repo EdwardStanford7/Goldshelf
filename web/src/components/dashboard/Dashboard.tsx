@@ -1099,7 +1099,7 @@ export function Dashboard({
     }
 
     async function handleToggleCategoryVisibility(category: CategoryWithEntries) {
-        startBusy(category.isPublic ? "Making category private..." : "Showing category on profile...");
+        startBusy(category.isPublic ? "Hiding category from profile..." : "Showing category on profile...");
         setMessage(null);
 
         try {
@@ -1110,7 +1110,7 @@ export function Dashboard({
                 }
             });
             await refreshAfterMutation();
-            setMessage(category.isPublic ? `${category.name} is now private.` : `${category.name} is shown on your profile.`);
+            setMessage(category.isPublic ? `${category.name} is hidden from your profile.` : `${category.name} is shown on your profile.`);
         } catch (error) {
             setErrorMessage(error);
         } finally {

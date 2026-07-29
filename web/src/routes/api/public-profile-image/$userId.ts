@@ -21,6 +21,16 @@ export const Route = createFileRoute("/api/public-profile-image/$userId")({
                WHERE "user".id = ?
                  AND (
                    ? = 1
+                   OR ? = ''
+                   OR NOT EXISTS (
+                     SELECT 1
+                     FROM user_blocks blocks
+                     WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = "user".id)
+                        OR (blocks.blocker_user_id = "user".id AND blocks.blocked_user_id = ?)
+                   )
+                 )
+                 AND (
+                   ? = 1
                    OR user_profiles.is_public = 1
                    OR EXISTS (
                      SELECT 1
@@ -38,7 +48,16 @@ export const Route = createFileRoute("/api/public-profile-image/$userId")({
                    )
                  )`
                         )
-                        .bind(params.userId, viewerIsAdmin ? 1 : 0, viewerUserId, viewerUserId)
+                        .bind(
+                            params.userId,
+                            viewerIsAdmin ? 1 : 0,
+                            viewerUserId,
+                            viewerUserId,
+                            viewerUserId,
+                            viewerIsAdmin ? 1 : 0,
+                            viewerUserId,
+                            viewerUserId
+                        )
                 );
 
                 const imageKey = user?.image ?? null;
