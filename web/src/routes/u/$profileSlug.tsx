@@ -299,13 +299,13 @@ function PublicProfileRoute() {
             </Card>
 
             {profileData.categories.length > 0 ? (
-                <div className="m-0 grid min-h-0 w-full grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-md border border-border bg-card shadow-panel max-[720px]:grid-cols-1 max-[720px]:overflow-visible">
-                    <nav className="grid min-h-0 content-start gap-0.5 overflow-y-auto border-r border-border bg-sidebar p-[0.65rem] max-[720px]:flex max-[720px]:max-h-none max-[720px]:flex-row max-[720px]:flex-nowrap max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:overflow-y-hidden max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label="Categories">
+                <div className="m-0 grid min-h-0 w-full grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-md border border-border bg-card shadow-panel max-[720px]:grid-cols-1 max-[720px]:overflow-visible">
+                    <nav className="grid min-h-0 min-w-0 content-start gap-0.5 overflow-y-auto border-r border-border bg-sidebar p-[0.65rem] max-[720px]:flex max-[720px]:max-h-none max-[720px]:flex-row max-[720px]:flex-nowrap max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:overflow-y-hidden max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label="Categories">
                         {profileData.categories.map((category) => {
                             const isActive = category.id === selectedCategoryId;
                             return (
                                 <button
-                                    className={`w-full rounded-sm border px-[0.65rem] py-2 text-left shadow-none enabled:hover:border-border enabled:hover:bg-secondary max-[720px]:w-auto max-[720px]:flex-none ${isActive
+                                    className={`w-full min-w-0 rounded-sm border px-[0.65rem] py-2 text-left shadow-none enabled:hover:border-border enabled:hover:bg-secondary max-[720px]:w-auto max-[720px]:flex-none ${isActive
                                         ? "border-primary bg-accent font-bold text-accent-strong"
                                         : "border-transparent bg-transparent"
                                         }`}
@@ -314,8 +314,8 @@ function PublicProfileRoute() {
                                     aria-current={isActive ? "true" : undefined}
                                     onClick={() => selectCategory(category.id)}
                                 >
-                                    <span className="flex min-w-0 items-center gap-2">
-                                        <span className="block min-w-0 flex-1 truncate text-[0.92rem]">{category.name}</span>
+                                    <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                                        <span className="block min-w-0 truncate text-[0.92rem]">{category.name}</span>
                                         {showCategoryVisibility ? (
                                             <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profile.isPublic} className="max-[720px]:hidden" />
                                         ) : null}
@@ -732,6 +732,7 @@ function PublicCategory({
                     <PublicEntryRow
                         entry={entry}
                         key={entry.id}
+                        listSize={entries.length}
                         usePrivateImages={usePrivateImages}
                     />
                 ))}
@@ -742,20 +743,57 @@ function PublicCategory({
 
 function PublicEntryRow({
     entry,
+    listSize,
     usePrivateImages
 }: {
     entry: Entry;
+    listSize: number;
     usePrivateImages: boolean;
 }) {
+    const position = entry.rankPosition + 1;
+    const percentileLabel = percentileForPosition(position, listSize);
+
     return (
-        <article className="grid grid-cols-[3.2rem_5rem_minmax(0,1fr)] items-center gap-[0.65rem] rounded-md border border-border bg-muted px-[0.55rem] py-[0.65rem]">
-            <span className="font-extrabold text-muted-foreground">#{entry.rankPosition + 1}</span>
+        <article className="grid grid-cols-[minmax(5.25rem,auto)_5rem_minmax(0,1fr)] items-center gap-[0.65rem] rounded-md border border-border bg-muted px-[0.55rem] py-[0.65rem] max-[520px]:grid-cols-[minmax(4.9rem,auto)_4.25rem_minmax(0,1fr)]">
+            <span className="flex min-w-0 flex-wrap items-center gap-1 font-extrabold text-muted-foreground">
+                <span>#{position}</span>
+                <span className="shrink-0 rounded-full border border-primary/35 px-[0.34rem] py-[0.04rem] text-[0.62rem] leading-tight text-primary" title={`${position} of ${listSize}`}>
+                    {percentileLabel}
+                </span>
+            </span>
             <PublicEntryPoster entry={entry} usePrivateImages={usePrivateImages} />
-            <div>
-                <strong>{entry.name}</strong>
+            <div className="min-w-0">
+                <strong className="block min-w-0 truncate">{entry.name}</strong>
             </div>
         </article>
     );
+}
+
+function percentileForPosition(position: number, total: number) {
+    if (total <= 0) {
+        return "100th";
+    }
+
+    const percentile = Math.max(1, Math.min(100, Math.ceil(((total - position + 1) / total) * 100)));
+    return ordinal(percentile);
+}
+
+function ordinal(value: number) {
+    const remainder = value % 100;
+    if (remainder >= 11 && remainder <= 13) {
+        return `${value}th`;
+    }
+
+    switch (value % 10) {
+        case 1:
+            return `${value}st`;
+        case 2:
+            return `${value}nd`;
+        case 3:
+            return `${value}rd`;
+        default:
+            return `${value}th`;
+    }
 }
 
 function PublicEntryPoster({

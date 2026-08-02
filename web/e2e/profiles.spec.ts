@@ -265,6 +265,72 @@ test.describe("Profiles", () => {
         await bobContext.close();
     });
 
+    test("public profile shows row percentiles and keeps visibility badges readable", async ({
+        page: ownerPage,
+        context: ownerContext,
+        browser
+    }) => {
+        const longCategoryName = "Movies With An Absurdly Long Category Name That Should Truncate Before The Badge";
+        await seedUsers([
+            {
+                email: "visibility-owner@e2e.test",
+                name: "Visibility Owner",
+                categories: [
+                    { name: longCategoryName, entries: ["Arrival", "Dune", "Heat", "Solaris"] },
+                    { name: "Private Notes", entries: ["Hidden One"] }
+                ]
+            },
+            { email: "visibility-admin@e2e.test", name: "Visibility Admin", role: "admin" }
+        ]);
+        await signInViaApi(ownerContext, "visibility-owner@e2e.test");
+
+        await gotoApp(ownerPage, "/profile");
+        const ownerSlug = await readOwnSlug(ownerPage);
+        await ownerPage.getByLabel("Public profile").check();
+        await ownerPage.getByRole("button", { name: "Save Profile" }).click();
+        await expect(ownerPage.getByText("Profile saved.")).toBeVisible();
+        await ownerPage.getByRole("checkbox", { name: new RegExp(longCategoryName) }).click();
+        await expect(ownerPage.getByText("Profile sharing saved.").first()).toBeVisible();
+
+        const adminContext = await browser.newContext();
+        const adminPage = await adminContext.newPage();
+        await signInViaApi(adminContext, "visibility-admin@e2e.test");
+        await gotoApp(adminPage, `/u/${ownerSlug}`);
+
+        await expect(adminPage.getByRole("heading", { name: "Visibility Owner" })).toBeVisible();
+        await expect(adminPage.getByText("#1").first()).toBeVisible();
+        await expect(adminPage.getByText("100th").first()).toBeVisible();
+        await expect(adminPage.getByText("75th").first()).toBeVisible();
+
+        const categoryNav = adminPage.getByRole("navigation", { name: "Categories" });
+        const longCategoryButton = categoryNav.getByRole("button", { name: new RegExp(longCategoryName) });
+        await expect(longCategoryButton).toBeVisible();
+        await expect(categoryNav.getByText("Public", { exact: true })).toBeVisible();
+        await expect(categoryNav.getByText("Private", { exact: true })).toBeVisible();
+
+        const layout = await longCategoryButton.evaluate((button) => {
+            const badge = button.querySelector(
+                '[title="Visible to anyone who can open this public profile"]'
+            ) as HTMLElement | null;
+            const buttonBox = button.getBoundingClientRect();
+            const badgeBox = badge?.getBoundingClientRect();
+            return {
+                badgeFound: Boolean(badgeBox),
+                badgeLeft: badgeBox?.left ?? 0,
+                badgeRight: badgeBox?.right ?? 0,
+                buttonLeft: buttonBox.left,
+                buttonRight: buttonBox.right,
+                buttonWidth: buttonBox.width
+            };
+        });
+        expect(layout.badgeFound).toBe(true);
+        expect(layout.badgeLeft).toBeGreaterThanOrEqual(layout.buttonLeft - 1);
+        expect(layout.badgeRight).toBeLessThanOrEqual(layout.buttonRight + 1);
+        expect(layout.buttonWidth).toBeLessThanOrEqual(340);
+
+        await adminContext.close();
+    });
+
     test("publish profile, share rankings, full follow round-trip, revoke access", async ({
         page: alicePage,
         context: aliceContext,
