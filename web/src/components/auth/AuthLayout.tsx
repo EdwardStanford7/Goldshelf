@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
 /*
@@ -24,8 +25,13 @@ export function AuthLayout({
                     aria-label="Goldshelf"
                     className="relative isolate grid min-h-168 content-between overflow-hidden bg-[linear-gradient(180deg,rgba(39,25,8,0.02),rgba(39,25,8,0.58)),url(/auth-hero.svg)] bg-cover bg-center bg-no-repeat p-[clamp(1.5rem,4vw,3rem)] text-white after:absolute after:inset-0 after:-z-10 after:bg-[linear-gradient(135deg,rgba(183,121,23,0.14),rgba(40,27,10,0.7))] after:content-[''] max-[720px]:min-h-88"
                 >
-                    <h1 className="m-0 self-start text-[clamp(3.25rem,8vw,6.8rem)] leading-[0.9] tracking-normal text-gold-strong [text-shadow:0_10px_30px_rgba(0,0,0,0.32)]">
-                        Goldshelf
+                    <h1 className="m-0 self-start text-[clamp(3.25rem,8vw,6.8rem)] leading-[0.9] tracking-normal [text-shadow:0_10px_30px_rgba(0,0,0,0.32)]">
+                        <Link
+                            className="rounded-sm text-gold-strong no-underline outline-offset-4 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+                            to="/"
+                        >
+                            Goldshelf
+                        </Link>
                     </h1>
                     <p className="m-0 max-w-md self-end text-[clamp(1.45rem,3vw,2.1rem)] leading-[1.14] font-bold text-[rgba(255,255,255,0.88)]">
                         Rank your taste, one choice at a time.

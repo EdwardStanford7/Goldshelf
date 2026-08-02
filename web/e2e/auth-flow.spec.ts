@@ -16,6 +16,9 @@ test.describe("Auth flows", () => {
         await gotoApp(page, "/signin");
         await expect(page.getByRole("heading", { name: "Goldshelf" })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+
+        await page.getByRole("link", { name: "Goldshelf" }).click();
+        await expect(page.getByRole("heading", { name: "Rank everything you love." })).toBeVisible();
     });
 
     test("sign up lands on an empty dashboard", async ({ page }) => {
