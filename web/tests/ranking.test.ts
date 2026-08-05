@@ -21,7 +21,9 @@ import {
     advancePairRepairState,
     chooseRepairMatchup,
     emptyRepairOperationState,
+    pickRepairCheckDisplayOrder,
     pickRepairFirstIndex,
+    pickRepairGap,
     pickRepairSecondIndex,
     pickWeightedRepairCategory,
     repairPairKey,
@@ -268,6 +270,37 @@ describe("repair mode sampling", () => {
             expect(secondIndex).toBeLessThan(20);
             expect(secondIndex).not.toBe(firstIndex);
         }
+    });
+
+    it("biases repair gaps toward near but not usually adjacent checks", () => {
+        const counts = new Map<number, number>();
+        let seed = 12345;
+        const random = () => {
+            seed = (seed * 16807) % 2147483647;
+            return (seed - 1) / 2147483646;
+        };
+
+        for (let index = 0; index < 10_000; index += 1) {
+            const gap = pickRepairGap(20, random);
+            counts.set(gap, (counts.get(gap) ?? 0) + 1);
+        }
+        const countFor = (gap: number) => counts.get(gap) ?? 0;
+
+        expect(countFor(1)).toBeLessThan(countFor(2));
+        expect(countFor(2)).toBeLessThan(countFor(3));
+        expect(countFor(4)).toBeLessThan(countFor(3));
+        expect(countFor(8)).toBeLessThan(countFor(4));
+    });
+
+    it("randomizes neutral repair check display order", () => {
+        expect(pickRepairCheckDisplayOrder("higher", "lower", () => 0.1)).toEqual({
+            entryAId: "higher",
+            entryBId: "lower"
+        });
+        expect(pickRepairCheckDisplayOrder("higher", "lower", () => 0.9)).toEqual({
+            entryAId: "lower",
+            entryBId: "higher"
+        });
     });
 
     it("avoids immediate duplicate repair pairs when another pair is available", () => {

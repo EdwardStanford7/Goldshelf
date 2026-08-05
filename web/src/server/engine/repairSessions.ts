@@ -6,6 +6,7 @@ import {
     chooseRepairMatchup,
     emptyRepairOperationState,
     parseRepairOperationState,
+    pickRepairCheckDisplayOrder,
     pickWeightedRepairCategory,
     serializeRepairOperationState,
     startAdjacentRepairState,
@@ -170,6 +171,7 @@ export async function startRepairSession(
     const db = getDb();
     const sessionId = newId("repair");
     const createdAt = now();
+    const displayOrder = pickRepairCheckDisplayOrder(matchup.higherEntryId, matchup.lowerEntryId);
     await db
         .prepare(
             `INSERT INTO repair_sessions (
@@ -185,8 +187,8 @@ export async function startRepairSession(
             scope,
             scopeCategoryId,
             matchup.categoryId,
-            matchup.higherEntryId,
-            matchup.lowerEntryId,
+            displayOrder.entryAId,
+            displayOrder.entryBId,
             serializeRepairOperationState(state),
             createdAt,
             createdAt
@@ -564,6 +566,7 @@ async function updateSessionWithMatchup(
         updatedAt: number;
     }
 ) {
+    const displayOrder = pickRepairCheckDisplayOrder(matchup.higherEntryId, matchup.lowerEntryId);
     await db
         .prepare(
             `UPDATE repair_sessions
@@ -580,8 +583,8 @@ async function updateSessionWithMatchup(
         )
         .bind(
             matchup.categoryId,
-            matchup.higherEntryId,
-            matchup.lowerEntryId,
+            displayOrder.entryAId,
+            displayOrder.entryBId,
             serializeRepairOperationState(state),
             options.comparisonIncrement,
             options.repairIncrement,

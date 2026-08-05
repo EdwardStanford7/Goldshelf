@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { gotoApp, openAccountMenu, seedUsers, signInViaApi, winMatchups } from "./helpers";
 import { BASE_URL } from "./constants";
@@ -36,6 +36,29 @@ async function forceRankingDisplayPhase(
 
 function rankingPanel(page: Page, label: string) {
     return page.locator("section", { hasText: `${label} · Movies` }).first();
+}
+
+async function clickLowerRankedRepairChoice(panel: Locator, orderedNames: string[]) {
+    const choices = panel.getByTestId("repair-choice-card");
+    const choiceNames = await choices.evaluateAll((nodes) =>
+        nodes.map((node) => node.querySelector("strong")?.textContent?.trim() ?? "")
+    );
+    let lowerChoiceIndex = -1;
+    let lowerRankIndex = -1;
+
+    choiceNames.forEach((name, choiceIndex) => {
+        const rankIndex = orderedNames.indexOf(name);
+        if (rankIndex > lowerRankIndex) {
+            lowerRankIndex = rankIndex;
+            lowerChoiceIndex = choiceIndex;
+        }
+    });
+
+    if (lowerChoiceIndex < 0) {
+        throw new Error(`No visible repair choice matched the seeded ranking order: ${choiceNames.join(", ")}`);
+    }
+
+    await choices.nth(lowerChoiceIndex).locator("button.block").click();
 }
 
 test.describe("Ranking", () => {
@@ -507,7 +530,7 @@ test.describe("Ranking", () => {
         const repairPanel = page.locator("section", { hasText: "Repair Check · Movies" }).first();
         await expect(repairPanel).toBeVisible({ timeout: 15_000 });
 
-        await repairPanel.locator("article > button.block").nth(1).click();
+        await clickLowerRankedRepairChoice(repairPanel, ["Alpha", "Beta", "Gamma", "Delta"]);
         const localRepairPanel = page.locator("section", { hasText: "Local Repair · Movies" }).first();
         await expect(localRepairPanel).toBeVisible({ timeout: 15_000 });
 
@@ -542,7 +565,7 @@ test.describe("Ranking", () => {
         await expect(panel).toBeVisible({ timeout: 15_000 });
         await expect(panel.getByText(/0 comparisons · 0 repairs/)).toBeVisible();
 
-        await panel.locator("article > button.block").nth(1).click();
+        await clickLowerRankedRepairChoice(panel, ["Alpha", "Beta", "Gamma", "Delta"]);
         await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeVisible({ timeout: 15_000 });
         await page.getByRole("button", { name: "Undo Last Match" }).click();
 

@@ -7,6 +7,9 @@ import type { Entry } from "./types";
 
 export const REPAIR_ADJACENT_GAP_THRESHOLD = 8;
 const RECENT_REPAIR_PAIR_LIMIT = 100;
+const LOCAL_REPAIR_GAP_RANDOM_PROBABILITY = 0.12;
+const LOCAL_REPAIR_GAP_MODE = 3;
+const LOCAL_REPAIR_GAP_DECAY = 0.6;
 
 export type RepairScope = "all" | "category";
 export type RepairSessionPhase = "checking" | "local_repair" | "binary_repair";
@@ -65,6 +68,11 @@ export interface RepairMatchupChoice {
     higherEntryId: string;
     lowerEntryId: string;
     gap: number;
+}
+
+export interface RepairDisplayOrder {
+    entryAId: string;
+    entryBId: string;
 }
 
 export interface PairRepairAdvanceResult {
@@ -139,6 +147,16 @@ export function addRecentRepairPair(
 
 export function repairPairKey(entryAId: string, entryBId: string) {
     return [entryAId, entryBId].sort().join(":");
+}
+
+export function pickRepairCheckDisplayOrder(
+    higherEntryId: string,
+    lowerEntryId: string,
+    random: () => number = Math.random
+): RepairDisplayOrder {
+    return random() < 0.5
+        ? { entryAId: higherEntryId, entryBId: lowerEntryId }
+        : { entryAId: lowerEntryId, entryBId: higherEntryId };
 }
 
 export function pickWeightedRepairCategory<T extends { entryCount: number }>(
@@ -538,19 +556,36 @@ function bubbleSubjectRight(
     }
 }
 
-function pickRepairGap(maxGap: number, random: () => number) {
+export function pickRepairGap(maxGap: number, random: () => number) {
     if (maxGap <= 1) {
         return 1;
     }
 
-    if (random() >= 0.88) {
+    if (random() < LOCAL_REPAIR_GAP_RANDOM_PROBABILITY) {
         return 1 + Math.floor(random() * maxGap);
     }
 
-    const p = 0.4;
-    const u = Math.min(Math.max(random(), Number.EPSILON), 1 - Number.EPSILON);
-    const gap = 1 + Math.floor(Math.log(1 - u) / Math.log(1 - p));
-    return Math.max(1, Math.min(maxGap, gap));
+    const mode = Math.min(LOCAL_REPAIR_GAP_MODE, maxGap);
+    let totalWeight = 0;
+    for (let gap = 1; gap <= maxGap; gap += 1) {
+        totalWeight += repairGapWeight(gap, mode);
+    }
+
+    let target = random() * totalWeight;
+    for (let gap = 1; gap <= maxGap; gap += 1) {
+        target -= repairGapWeight(gap, mode);
+        if (target < 0) {
+            return gap;
+        }
+    }
+
+    return maxGap;
+}
+
+function repairGapWeight(gap: number, mode: number) {
+    return gap <= mode
+        ? gap / mode
+        : Math.pow(LOCAL_REPAIR_GAP_DECAY, gap - mode);
 }
 
 function sampleNormal(random: () => number) {
