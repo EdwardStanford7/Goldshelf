@@ -105,11 +105,11 @@ The `Makefile` wraps the common local and deploy commands:
 ```sh
 make check
 make e2e
-make cf-migrate-local
+make migrate-local
 make deploy-first
 make deploy
 make cf-secret-password-reset
 make password-reset-link EMAIL=user@example.com
 ```
 
-`make deploy-first` handles Wrangler login, D1/R2 creation, and auth secret setup. `wrangler.jsonc` is already pointed at `https://goldshelf.net`; after the Worker rename, re-run `make cf-secret-auth` because Worker secrets are scoped to the Worker name.
+`make deploy-first` is only for one-time Cloudflare bootstrap on a new project or recreated resources. `wrangler.jsonc` is already pointed at `https://goldshelf.net`; after a Worker rename or intentional secret rotation, re-run `make cf-secret-auth` because Worker secrets are scoped to the Worker name. Use `make bootstrap-help` to see the rare setup targets.
