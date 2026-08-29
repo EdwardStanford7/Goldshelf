@@ -129,8 +129,10 @@ async function fetchWithTimeout(url, init) {
 }
 
 function flattenAdvisories(payload) {
-    return Object.values(payload ?? {})
-        .flat()
+    return Object.entries(payload ?? {})
+        .flatMap(([packageName, advisories]) => Array.isArray(advisories)
+            ? advisories.map((advisory) => ({ module_name: packageName, ...advisory }))
+            : [])
         .filter((advisory) => advisory && typeof advisory === "object");
 }
 

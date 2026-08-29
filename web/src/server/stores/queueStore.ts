@@ -49,7 +49,7 @@ export async function listQueuedEntries(userId: string): Promise<QueuedEntry[]> 
          FROM entry_queue
          INNER JOIN categories ON categories.id = entry_queue.category_id
          WHERE entry_queue.user_id = ? AND entry_queue.status = 'queued'
-         ORDER BY entry_queue.created_at ASC`
+         ORDER BY entry_queue.created_at ASC, lower(entry_queue.name) ASC, entry_queue.id ASC`
             )
             .bind(userId)
     );

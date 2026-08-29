@@ -275,6 +275,38 @@ test.describe("Queue", () => {
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
     });
 
+    test("queue ranking preserves visible order when randomize is off", async ({
+        context,
+        page
+    }) => {
+        await page.addInitScript(() => {
+            Math.random = () => 0.99;
+        });
+        await seedUsers([{
+            email: "queue-randomize-off@e2e.test",
+            name: "Queue Randomize Off",
+            queueSettings: {
+                enabled: true,
+                promptForMissingImages: false,
+                randomizeReadyEntries: false
+            },
+            categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
+            queuedEntries: [
+                { categoryName: "Movies", name: "Memento", createdAt: 1 },
+                { categoryName: "Movies", name: "Klute", createdAt: 2 }
+            ]
+        }]);
+        await signInViaApi(context, "queue-randomize-off@e2e.test");
+        await gotoApp(page);
+
+        await expect(queueItem(page, "Memento")).toBeVisible();
+        await expect(queueItem(page, "Klute")).toBeVisible();
+
+        await page.getByRole("button", { name: "Rank Queue" }).click();
+        await expect(matchChoice(page, "Memento")).toBeVisible({ timeout: 15_000 });
+        await expect(matchChoice(page, "Klute")).toBeHidden();
+    });
+
     test("queue ranking can skip the current queued entry for the current run", async ({
         context,
         page

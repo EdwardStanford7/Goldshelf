@@ -168,8 +168,18 @@ function applyDragOrder<T extends { id: string }>(items: T[], order: string[] | 
 function orderQueuedEntries(entries: QueuedEntry[]) {
     return [...entries].sort((left, right) =>
         left.createdAt - right.createdAt ||
-        left.name.localeCompare(right.name)
+        left.name.localeCompare(right.name) ||
+        left.id.localeCompare(right.id)
     );
+}
+
+function shuffledIds(entries: QueuedEntry[]) {
+    const ids = entries.map((entry) => entry.id);
+    for (let index = ids.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [ids[index], ids[swapIndex]] = [ids[swapIndex], ids[index]];
+    }
+    return ids;
 }
 
 function entryDateFilterRange(
@@ -323,6 +333,7 @@ export function Dashboard({
     const [queueRankCategoryId, setQueueRankCategoryId] = useState<string | null>(null);
     const queueRankCategoryIdRef = useRef<string | null>(null);
     const skippedQueueRankIdsRef = useRef<Set<string>>(new Set());
+    const queueRankOrderRef = useRef<string[] | null>(null);
     const [categoryDraftName, setCategoryDraftName] = useState("");
     const [entryDraftName, setEntryDraftName] = useState("");
     const [entryCategoryId, setEntryCategoryId] = useState(
@@ -804,6 +815,7 @@ export function Dashboard({
             setQueueRankCategoryId(categoryId);
         } else {
             skippedQueueRankIdsRef.current = new Set();
+            queueRankOrderRef.current = null;
             queueRankCategoryIdRef.current = null;
             setQueueRankCategoryId(null);
         }
@@ -1355,12 +1367,20 @@ export function Dashboard({
 
     function getRankableQueuedEntries(queuedEntries: QueuedEntry[], excludedQueuedEntryIds: Set<string> = new Set()) {
         const categoryScopeId = queueRankCategoryIdRef.current;
-        return queuedEntries
-            .filter((entry) =>
-                !excludedQueuedEntryIds.has(entry.id) &&
-                (!categoryScopeId || entry.categoryId === categoryScopeId)
-            )
-            .sort((left, right) => left.createdAt - right.createdAt || left.name.localeCompare(right.name));
+        return queuedEntries.filter((entry) =>
+            !excludedQueuedEntryIds.has(entry.id) &&
+            (!categoryScopeId || entry.categoryId === categoryScopeId)
+        );
+    }
+
+    function buildQueueRankOrder(queuedEntries: QueuedEntry[], categoryId: string | null) {
+        const rankableEntries = queuedEntries.filter((entry) =>
+            !categoryId || entry.categoryId === categoryId
+        );
+
+        return queueSettingsRef.current.randomizeReadyEntries
+            ? shuffledIds(rankableEntries)
+            : rankableEntries.map((entry) => entry.id);
     }
 
     function getNextQueuedEntry(queuedEntries: QueuedEntry[]) {
@@ -1369,11 +1389,27 @@ export function Dashboard({
             return null;
         }
 
-        if (!queueSettingsRef.current.randomizeReadyEntries) {
+        const rankableById = new Map(rankableEntries.map((entry) => [entry.id, entry]));
+        const queueRankOrder = queueRankOrderRef.current;
+        if (!queueRankOrder) {
             return rankableEntries[0] ?? null;
         }
 
-        return rankableEntries[Math.floor(Math.random() * rankableEntries.length)] ?? null;
+        for (const queuedEntryId of queueRankOrder) {
+            const queuedEntry = rankableById.get(queuedEntryId);
+            if (queuedEntry) {
+                return queuedEntry;
+            }
+        }
+
+        const orderedIds = new Set(queueRankOrder);
+        const newlyQueuedEntries = rankableEntries.filter((entry) => !orderedIds.has(entry.id));
+        if (newlyQueuedEntries.length > 0) {
+            queueRankOrder.push(...newlyQueuedEntries.map((entry) => entry.id));
+            return newlyQueuedEntries[0] ?? null;
+        }
+
+        return null;
     }
 
     async function beginQueuedEntryRanking(entry: QueuedEntry) {
@@ -1450,8 +1486,10 @@ export function Dashboard({
     }
 
     async function handleStartQueueRank(categoryId?: string) {
+        const categoryScopeId = categoryId ?? null;
         skippedQueueRankIdsRef.current = new Set();
-        setQueueRankingActive(true, categoryId ?? null);
+        queueRankOrderRef.current = buildQueueRankOrder(dashboard.queuedEntries, categoryScopeId);
+        setQueueRankingActive(true, categoryScopeId);
         await startNextQueuedRank(dashboard.queuedEntries);
     }
 

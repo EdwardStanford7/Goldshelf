@@ -17,7 +17,7 @@ help:
 	@echo "  make dev                  Start local dev server"
 	@echo "  make check                Run tests, typecheck, e2e, audit, and build"
 	@echo "  make deploy               Check, migrate remote D1, then deploy"
-	@echo "  make audit-fix            Refresh dependency resolution and rerun audit"
+	@echo "  make audit-fix            Update vulnerable prod dependencies and rerun audit"
 	@echo ""
 	@echo "Checks:"
 	@echo "  make test                 Run Vitest unit tests"
@@ -79,8 +79,7 @@ audit:
 	node scripts/audit-prod.mjs
 
 audit-fix:
-	pnpm install --no-frozen-lockfile
-	$(MAKE) audit
+	node scripts/audit-fix.mjs
 
 build:
 	pnpm build
