@@ -116,16 +116,11 @@ export async function writeExportWorkbook(
             added_at: entry.createdAt
         }))
     );
-    const queueMetadata = [...queuedEntries]
-        .sort((left, right) =>
-            left.createdAt - right.createdAt ||
-            left.name.localeCompare(right.name)
-        )
-        .map((entry) => ({
-            category: entry.categoryName,
-            entry: entry.name,
-            added_at: entry.createdAt
-        }));
+    const queueMetadata = queuedEntries.map((entry) => ({
+        category: entry.categoryName,
+        entry: entry.name,
+        added_at: entry.createdAt
+    }));
 
     const workbook = writeXlsxFile([
         { sheet: "Sorted", data: sortedSheetData(categories) },

@@ -24,23 +24,31 @@ describe("xlsx export", () => {
         expect(rows[3]?.[1]).toBe("Heat");
     });
 
-    it("writes queued entries on a Queue sheet", async () => {
+    it("writes queued entries on a Queue sheet without reordering them", async () => {
         const blob = await writeExportWorkbook(
             [category("Books", [])],
-            [queuedEntry("Books", "Dune")]
+            [queuedEntry("Books", "Memento"), queuedEntry("Books", "Klute")]
         );
         const buffer = await blob.arrayBuffer();
         const rows = await readSheet(buffer, "Queue");
         const parsed = await parseLegacyWorkbook(buffer, null);
 
         expect(rows[0]).toEqual(["category", "entry", "added_at"]);
-        expect(rows[1]).toEqual(["Books", "Dune", 1000]);
+        expect(rows[1]).toEqual(["Books", "Memento", 1000]);
+        expect(rows[2]).toEqual(["Books", "Klute", 1000]);
         expect(parsed.entries).toEqual([]);
-        expect(parsed.queuedEntries).toEqual([{
-            categoryName: "Books",
-            name: "Dune",
-            createdAt: 1000
-        }]);
+        expect(parsed.queuedEntries).toEqual([
+            {
+                categoryName: "Books",
+                name: "Memento",
+                createdAt: 1000
+            },
+            {
+                categoryName: "Books",
+                name: "Klute",
+                createdAt: 1000
+            }
+        ]);
     });
 
     it("rejects exports with no ranked or queued entries", async () => {

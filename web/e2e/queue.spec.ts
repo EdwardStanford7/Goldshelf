@@ -275,6 +275,40 @@ test.describe("Queue", () => {
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
     });
 
+    test("queue ranking preserves same-day insertion order after reload", async ({
+        context,
+        page
+    }) => {
+        await seedUsers([{
+            email: "queue-insertion-order@e2e.test",
+            name: "Queue Insertion Order",
+            queueSettings: {
+                enabled: true,
+                promptForMissingImages: false,
+                randomizeReadyEntries: false
+            },
+            categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }]
+        }]);
+        await signInViaApi(context, "queue-insertion-order@e2e.test");
+        await gotoApp(page);
+
+        await page.getByPlaceholder("New entry").fill("Memento");
+        await page.getByPlaceholder("New entry").press("Enter");
+        await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
+
+        await page.getByPlaceholder("New entry").fill("Klute");
+        await page.getByPlaceholder("New entry").press("Enter");
+        await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
+
+        await gotoApp(page);
+        await expect(queueItem(page, "Memento")).toBeVisible();
+        await expect(queueItem(page, "Klute")).toBeVisible();
+
+        await page.getByRole("button", { name: "Rank Queue" }).click();
+        await expect(matchChoice(page, "Memento")).toBeVisible({ timeout: 15_000 });
+        await expect(matchChoice(page, "Klute")).toBeHidden();
+    });
+
     test("queue ranking preserves visible order when randomize is off", async ({
         context,
         page

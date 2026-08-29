@@ -165,14 +165,6 @@ function applyDragOrder<T extends { id: string }>(items: T[], order: string[] | 
     return ordered.length === items.length ? ordered : items;
 }
 
-function orderQueuedEntries(entries: QueuedEntry[]) {
-    return [...entries].sort((left, right) =>
-        left.createdAt - right.createdAt ||
-        left.name.localeCompare(right.name) ||
-        left.id.localeCompare(right.id)
-    );
-}
-
 function shuffledIds(entries: QueuedEntry[]) {
     const ids = entries.map((entry) => entry.id);
     for (let index = ids.length - 1; index > 0; index -= 1) {
@@ -1288,10 +1280,10 @@ export function Dashboard({
                 setMessage(`Queued ${cleanName} for ranking.`);
                 setDashboard((currentDashboard) => ({
                     ...currentDashboard,
-                    queuedEntries: orderQueuedEntries([
+                    queuedEntries: [
                         ...currentDashboard.queuedEntries.filter((entry) => entry.id !== result.queuedEntry.id),
                         result.queuedEntry
-                    ])
+                    ]
                 }));
                 if (queueSettings.promptForMissingImages) {
                     setImagePickerTarget({
