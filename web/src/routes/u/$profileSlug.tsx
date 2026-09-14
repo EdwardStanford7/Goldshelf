@@ -1,6 +1,6 @@
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { CopyPlus, Globe2, ListOrdered, Users } from "lucide-react";
+import { CopyPlus, Globe2, ListOrdered, Shield, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
     AlertDialog,
@@ -78,6 +78,7 @@ function PublicProfileRoute() {
     const [copyMode, setCopyMode] = useState<CopyMode>("new");
     const [copyCategoryName, setCopyCategoryName] = useState("");
     const [copyTargetCategoryId, setCopyTargetCategoryId] = useState("");
+    const [adminPrivacySaving, setAdminPrivacySaving] = useState(false);
     const entryScrollRef = useRef<HTMLDivElement | null>(null);
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
         loaderData?.categories[0]?.id ?? null
@@ -158,6 +159,43 @@ function PublicProfileRoute() {
     function selectCategory(categoryId: string) {
         setSelectedCategoryId(categoryId);
         entryScrollRef.current?.scrollTo({ top: 0 });
+    }
+
+    async function setAdminPrivacyOverride(enabled: boolean) {
+        if (!profileData || !profileData.viewer.canUseAdminPrivacyOverride) {
+            return;
+        }
+
+        setAdminPrivacySaving(true);
+        try {
+            const nextProfileData = await loadPublicProfile({
+                data: {
+                    profileSlug: profileData.profile.slug,
+                    adminViewPrivate: enabled
+                }
+            });
+            if (!nextProfileData) {
+                setProfileData(null);
+                return;
+            }
+
+            const currentSelectedCategoryId = selectedCategoryId;
+            const nextSelectedCategoryId = nextProfileData.categories.some((category) => category.id === currentSelectedCategoryId)
+                ? currentSelectedCategoryId
+                : nextProfileData.categories[0]?.id ?? null;
+            setProfileData(nextProfileData);
+            setSelectedCategoryId(nextSelectedCategoryId);
+            setCopyDialogCategory(null);
+            showToast(enabled ? "Admin private lists shown." : "Privacy-respecting view restored.", "default");
+        } catch (error) {
+            if (redirectIfUnauthorized(error)) {
+                return;
+            }
+
+            showToast(error instanceof Error ? error.message : String(error), "danger");
+        } finally {
+            setAdminPrivacySaving(false);
+        }
     }
 
     async function handleCopyCategory(sourceEntryIds: string[]) {
@@ -269,6 +307,12 @@ function PublicProfileRoute() {
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <h1 className="text-2xl font-bold">{profile.name}</h1>
                         <ProfileVisibilityBadge isPublic={profile.isPublic} />
+                        {viewer.adminPrivacyOverride ? (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-xs font-bold uppercase text-destructive">
+                                <Shield className="size-3" />
+                                Admin Privacy View
+                            </span>
+                        ) : null}
                     </div>
                     <p className="text-muted-foreground">
                         @{profile.slug}
@@ -277,7 +321,24 @@ function PublicProfileRoute() {
                             : null}
                     </p>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex flex-wrap justify-end gap-2">
+                    {viewer.canUseAdminPrivacyOverride ? (
+                        <Button
+                            disabled={adminPrivacySaving}
+                            type="button"
+                            variant={viewer.adminPrivacyOverride ? "default" : "outline"}
+                            onClick={() => void setAdminPrivacyOverride(!viewer.adminPrivacyOverride)}
+                        >
+                            <Shield data-icon="inline-start" />
+                            <span>
+                                {adminPrivacySaving
+                                    ? "Loading..."
+                                    : viewer.adminPrivacyOverride
+                                        ? "Respect Privacy"
+                                        : "Admin: View Private Lists"}
+                            </span>
+                        </Button>
+                    ) : null}
                     {viewer.isSelf ? (
                         <Button asChild variant="outline">
                             <Link to="/profile">Edit Profile</Link>

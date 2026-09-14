@@ -481,20 +481,26 @@ export const unblockProfile = createServerFn({ method: "POST" })
     });
 
 export const loadPublicProfile = createServerFn({ method: "GET" })
-    .inputValidator((data: { profileSlug: string }) => data)
-    .handler(({ data }) => loadPublicProfileFromCurrentRequest(data.profileSlug));
+    .inputValidator((data: { profileSlug: string; adminViewPrivate?: boolean }) => data)
+    .handler(({ data }) => loadPublicProfileFromCurrentRequest(data.profileSlug, {
+        adminViewPrivate: Boolean(data.adminViewPrivate)
+    }));
 
-async function loadPublicProfileFromCurrentRequest(profileSlug: string) {
+async function loadPublicProfileFromCurrentRequest(
+    profileSlug: string,
+    options: { adminViewPrivate?: boolean } = {}
+) {
     const headers = getRequestHeaders();
     const session = requestHasSessionCookie(headers)
         ? await auth.api.getSession({ headers })
         : null;
-    return loadPublicProfileForViewer(profileSlug, session?.user ?? null);
+    return loadPublicProfileForViewer(profileSlug, session?.user ?? null, options);
 }
 
 async function loadPublicProfileForViewer(
     profileSlug: string,
-    viewerUser: PublicProfileViewerUser | null | undefined
+    viewerUser: PublicProfileViewerUser | null | undefined,
+    options: { adminViewPrivate?: boolean } = {}
 ): Promise<PublicProfileData | null> {
     const viewerUserId = viewerUser?.id ?? null;
     const slug = parseProfileSlugInput(profileSlug);
@@ -508,17 +514,19 @@ async function loadPublicProfileForViewer(
         ? await getFollowRelationState(viewerUserId, profile.user_id)
         : "none";
     const isAdminViewer = hasAdminRole(viewerUser);
-    if (!isAdminViewer && !isSelf && viewerUserId) {
+    if (!isSelf && viewerUserId) {
         const blockRelation = await getBlockRelation(viewerUserId, profile.user_id);
         if (blockRelation.viewerBlockedTarget || blockRelation.targetBlockedViewer) {
             return null;
         }
     }
-    if (!isAdminViewer && !canViewProfile(Boolean(profile.is_public), isSelf, relationState)) {
+    if (!canViewProfile(Boolean(profile.is_public), isSelf, relationState)) {
         return null;
     }
 
-    const categories = await loadPublicCategories(profile.user_id, { includePrivate: isAdminViewer });
+    const canUseAdminPrivacyOverride = Boolean(isAdminViewer && !isSelf);
+    const adminPrivacyOverride = Boolean(options.adminViewPrivate && canUseAdminPrivacyOverride);
+    const categories = await loadPublicCategories(profile.user_id, { includePrivate: adminPrivacyOverride });
     const viewerCategories = viewerUserId
         ? await listCopyTargetCategories(viewerUserId)
         : [];
@@ -538,7 +546,9 @@ async function loadPublicProfileForViewer(
             isSignedIn: Boolean(viewerUserId),
             isSelf,
             relationState,
-            categories: viewerCategories
+            categories: viewerCategories,
+            canUseAdminPrivacyOverride,
+            adminPrivacyOverride
         }
     };
 }

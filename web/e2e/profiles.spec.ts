@@ -305,6 +305,13 @@ test.describe("Profiles", () => {
         const categoryNav = adminPage.getByRole("navigation", { name: "Categories" });
         const longCategoryButton = categoryNav.getByRole("button", { name: new RegExp(longCategoryName) });
         await expect(longCategoryButton).toBeVisible();
+        await expect(categoryNav.getByRole("button", { name: /Private Notes/ })).toBeHidden();
+        await expect(categoryNav.getByText("Private", { exact: true })).toBeHidden();
+
+        await adminPage.getByRole("button", { name: "Admin: View Private Lists" }).click();
+        await expect(adminPage.getByText("Admin Privacy View", { exact: true })).toBeVisible();
+        await expect(adminPage.getByRole("button", { name: "Respect Privacy" })).toBeVisible();
+        await expect(categoryNav.getByRole("button", { name: /Private Notes/ })).toBeVisible();
         await expect(categoryNav.getByText("Public", { exact: true })).toBeVisible();
         await expect(categoryNav.getByText("Private", { exact: true })).toBeVisible();
 

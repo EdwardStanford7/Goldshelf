@@ -125,6 +125,8 @@ export interface PublicProfileData {
         isSelf: boolean;
         relationState: FollowRelationState;
         categories: ProfileCopyTargetCategory[];
+        canUseAdminPrivacyOverride: boolean;
+        adminPrivacyOverride: boolean;
     };
 }
 
