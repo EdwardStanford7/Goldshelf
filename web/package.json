@@ -13,7 +13,9 @@
     "db:migrate:remote": "wrangler d1 migrations apply media-rating --remote",
     "test": "vitest run --config vitest.config.ts",
     "test:dev": "wrangler d1 migrations apply media-rating --local --config wrangler.e2e.jsonc --persist-to .wrangler/e2e-state && vite dev --config vite.config.e2e.ts",
-    "test:e2e": "playwright test",
+    "test:e2e": "pnpm run test:e2e:full",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:full": "playwright test",
     "typecheck": "tsr generate && tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json"
   },
   "dependencies": {

@@ -34,7 +34,7 @@ test.describe("Auth flows", () => {
         await expect(page.getByText("Create Your First Category")).toBeVisible({ timeout: 15_000 });
     });
 
-    test("seeded user can sign in and sees their data", async ({ page }) => {
+    test("seeded user can sign in and sees their data @smoke", async ({ page }) => {
         await seedUsers([
             {
                 email: "reader@e2e.test",

@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { gotoApp, openAccountMenu, seedUsers, signInViaApi, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, gotoApp, openAccountMenu, seedUsers, signInViaApi, winMatchups } from "./helpers";
 import { BASE_URL } from "./constants";
 
 const RANKER = {
@@ -9,7 +9,6 @@ const RANKER = {
     categories: [{ name: "Movies", entries: ["Alpha", "Beta", "Gamma"] }]
 };
 
-const ACTIVE_RANKING_LABEL = /Binary Rank|Placement Check|Local Repair/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function currentDateTimestamp() {
@@ -62,7 +61,7 @@ async function clickLowerRankedRepairChoice(panel: Locator, orderedNames: string
 }
 
 test.describe("Ranking", () => {
-    test("mobile dashboard opens on compact app content and drawer tools work", async ({
+    test("mobile dashboard opens on compact app content and drawer tools work @smoke", async ({
         page,
         context
     }) => {
@@ -574,7 +573,7 @@ test.describe("Ranking", () => {
         await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
     });
 
-    test("create a category and add the first entry", async ({ page, context }) => {
+    test("create a category and add the first entry @smoke", async ({ page, context }) => {
         await seedUsers([{ email: RANKER.email, name: RANKER.name }]);
         await signInViaApi(context, RANKER.email);
         await gotoApp(page);
@@ -588,7 +587,7 @@ test.describe("Ranking", () => {
         await expect(page.getByText("#1 Dune")).toBeVisible();
     });
 
-    test("new entry ranked via binary matchups lands at #1 when it always wins", async ({
+    test("new entry ranked via binary matchups lands at #1 when it always wins @smoke", async ({
         page,
         context
     }) => {

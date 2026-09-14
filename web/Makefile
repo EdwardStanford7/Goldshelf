@@ -1,7 +1,7 @@
 D1_NAME = media-rating
 R2_BUCKET = media-rating-images
 
-.PHONY: help bootstrap-help install dev preview test e2e typecheck audit audit-fix build check \
+.PHONY: help bootstrap-help install dev preview test e2e e2e-smoke e2e-full typecheck audit audit-fix build check check-full \
 	wrangler-auth migrate-local migrate-remote cf-migrate-local cf-migrate-remote \
 	password-reset-link password-reset-link-local \
 	admin-promote admin-promote-local admin-demote admin-demote-local \
@@ -15,13 +15,15 @@ help:
 	@echo "Daily:"
 	@echo "  make install              Install pnpm dependencies from the lockfile"
 	@echo "  make dev                  Start local dev server"
-	@echo "  make check                Run tests, typecheck, e2e, audit, and build"
-	@echo "  make deploy               Check, migrate remote D1, then deploy"
+	@echo "  make check                Run tests, typecheck, smoke e2e, audit, and build"
+	@echo "  make deploy               Smoke-check, migrate remote D1, then deploy"
 	@echo "  make audit-fix            Update vulnerable prod dependencies and rerun audit"
 	@echo ""
 	@echo "Checks:"
 	@echo "  make test                 Run Vitest unit tests"
-	@echo "  make e2e                  Run Playwright browser tests"
+	@echo "  make e2e-smoke            Run smoke Playwright browser tests"
+	@echo "  make e2e-full             Run the full Playwright browser suite"
+	@echo "  make e2e                  Alias for make e2e-full"
 	@echo "  make typecheck            Generate routes and run TypeScript checks"
 	@echo "  make audit                Run production dependency audit"
 	@echo "  make build                Build the Worker bundle"
@@ -69,8 +71,13 @@ preview:
 test:
 	pnpm test
 
-e2e:
-	pnpm test:e2e
+e2e: e2e-full
+
+e2e-smoke:
+	pnpm test:e2e:smoke
+
+e2e-full:
+	pnpm test:e2e:full
 
 typecheck:
 	pnpm typecheck
@@ -87,7 +94,14 @@ build:
 check:
 	$(MAKE) test
 	$(MAKE) typecheck
-	$(MAKE) e2e
+	$(MAKE) e2e-smoke
+	$(MAKE) audit
+	$(MAKE) build
+
+check-full:
+	$(MAKE) test
+	$(MAKE) typecheck
+	$(MAKE) e2e-full
 	$(MAKE) audit
 	$(MAKE) build
 

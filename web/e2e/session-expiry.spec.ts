@@ -1,7 +1,6 @@
-import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { gotoApp, isServerFnRequest, seedUsers, signInViaApi } from "./helpers";
+import { ACTIVE_RANKING_LABEL, gotoApp, seedUsers, signInViaApi, triggerResumeDashboardRefresh } from "./helpers";
 
 const USER = {
     email: "expiry@e2e.test",
@@ -9,33 +8,6 @@ const USER = {
     categories: [{ name: "Movies", entries: ["Alpha", "Beta"] }]
 };
 
-async function dispatchPersistedPageShow(page: Page) {
-    await page.evaluate(() => {
-        const event = new Event("pageshow") as PageTransitionEvent;
-        Object.defineProperty(event, "persisted", { value: true });
-        window.dispatchEvent(event);
-    });
-}
-
-async function triggerResumeDashboardRefresh(page: Page) {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-        const dashboardRefresh = page
-            .waitForResponse((response) => isServerFnRequest(response.url(), "loadDashboard"), {
-                timeout: 1_000
-            })
-            .catch(() => null);
-
-        await dispatchPersistedPageShow(page);
-        const response = await dashboardRefresh;
-        if (response) {
-            return response;
-        }
-
-        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
-    }
-
-    throw new Error("Dashboard resume event did not request fresh dashboard data");
-}
 
 test.describe("Session expiry", () => {
     test("restored dashboard tab refreshes an expired session", async ({
@@ -95,7 +67,7 @@ test.describe("Session expiry", () => {
 
         await page.getByPlaceholder("New entry").fill("Gamma");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
 
         const staleResponse = await page.request.post(`${BASE_URL}/api/test/stale-ranking`, {
             data: { email: "stale-ranking@e2e.test" }
@@ -107,7 +79,7 @@ test.describe("Session expiry", () => {
         await expect(page.getByText("That ranking is no longer active.")).toBeVisible({
             timeout: 15_000
         });
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeHidden();
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeHidden();
         await expect(page.getByText("#1 Alpha")).toBeVisible();
     });
 });

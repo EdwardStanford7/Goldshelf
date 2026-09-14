@@ -91,20 +91,25 @@ Before deploying, make sure there is no conflicting DNS record for the apex `gol
 
 ## Verification
 
+See [docs/testing.md](docs/testing.md) for the smoke/full browser-test split and Playwright determinism rules.
+
 ```sh
 pnpm typecheck
 pnpm test
-pnpm test:e2e
+pnpm test:e2e:smoke
+pnpm test:e2e:full
 pnpm build
 ```
 
 ## Make Targets
 
-The `Makefile` wraps the common local and deploy commands:
+The `Makefile` wraps the common local and deploy commands. `make check` runs the faster smoke browser suite used by deploy; use `make check-full` before larger releases or when you want every Playwright test:
 
 ```sh
 make check
-make e2e
+make check-full
+make e2e-smoke
+make e2e-full
 make migrate-local
 make deploy-first
 make deploy

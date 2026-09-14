@@ -36,7 +36,8 @@ npm i -g pnpm
 pnpm install
 pnpm dev
 pnpm test
-pnpm test:e2e
+pnpm test:e2e:smoke
+pnpm test:e2e:full
 pnpm typecheck
 pnpm build
 make deploy

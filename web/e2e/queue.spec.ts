@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { gotoApp, openAccountMenu, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, gotoApp, openAccountMenu, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
 
 const QUINN = {
     email: "quinn@e2e.test",
@@ -113,7 +113,7 @@ async function openImportToast(page: Page) {
 }
 
 test.describe("Queue", () => {
-    test("new accounts default to queue-on and settings apply before refresh", async ({
+    test("new accounts default to queue-on and settings apply before refresh @smoke", async ({
         page
     }) => {
         await gotoApp(page, "/signin");
@@ -152,7 +152,7 @@ test.describe("Queue", () => {
 
         await page.getByPlaceholder("New entry").fill("Hyperion");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
     });
 
     test("full queue lifecycle: enable, rename, rank now, undo delete, rank queue, disable", async ({
@@ -194,7 +194,7 @@ test.describe("Queue", () => {
         // --- "Rank Now" starts a binary session. ---
         await queueItem(page, "Stalker").click({ button: "right" });
         await page.getByRole("menuitem", { name: "Rank Now" }).click();
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Stalker");
 
         await expect(page.getByText("#1 Stalker")).toBeVisible({ timeout: 15_000 });
@@ -223,7 +223,7 @@ test.describe("Queue", () => {
 
         // --- "Rank Queue" chains ranking sessions for every queued entry. ---
         await page.getByRole("button", { name: "Rank Queue" }).click();
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Memento");
         // The second session starts automatically once the first finishes.
         await winMatchups(page, "Klute");
@@ -244,7 +244,7 @@ test.describe("Queue", () => {
 
         await page.getByPlaceholder("New entry").fill("Tron");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("Queue Empty")).toBeVisible();
         await winMatchups(page, "Tron");
         await expect(page.getByText("#1 Tron")).toBeVisible({ timeout: 15_000 });
@@ -477,7 +477,7 @@ test.describe("Queue", () => {
 
         await page.getByPlaceholder("New entry").fill("Zeta");
         await page.getByPlaceholder("New entry").press("Enter");
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("New Entry")).toBeVisible();
         await expect(page.getByRole("button", { name: "Queue", exact: true })).toBeVisible();
 
@@ -485,7 +485,7 @@ test.describe("Queue", () => {
         await page.getByPlaceholder("New entry").press("Enter");
         await expect(page.getByText("Queued Blade Runner for ranking.")).toBeVisible();
         await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible();
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible();
 
         await queueItem(page, "Blade Runner").click({ button: "right" });
         await expect(page.getByRole("menuitem", { name: "Rank Now" })).toBeDisabled();
@@ -497,12 +497,12 @@ test.describe("Queue", () => {
         await page.getByRole("button", { name: "Remove selected" }).click();
         await expect(page.getByText("Removed 1 queued entry.")).toBeVisible();
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible();
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible();
 
         await page.getByRole("button", { name: "Ranking actions" }).click();
         await page.getByRole("menuitem", { name: "Cancel and Queue Zeta" }).click();
         await expect(page.getByText("Cancelled adding Zeta and moved it to the queue.")).toBeVisible();
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeHidden();
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeHidden();
         await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
         await expect(queueItem(page, "Zeta")).toBeVisible();
         await expect(queueItem(page, "Blade Runner")).toBeHidden();

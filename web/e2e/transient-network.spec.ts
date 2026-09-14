@@ -1,31 +1,14 @@
-import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { gotoApp, isServerFnRequest, seedUsers, signInViaApi } from "./helpers";
+import { ACTIVE_RANKING_LABEL, abortNextServerFn, dispatchPersistedPageShow, gotoApp, seedUsers, signInViaApi } from "./helpers";
 
 const REQUEST_LOAD_FAILURE_MESSAGE = "Could not reach the server. Please try again.";
-const ACTIVE_RANKING_LABEL = /Binary Rank|Placement Check|Local Repair/;
-
 const USER = {
     email: "transient@e2e.test",
     name: "Transient",
     categories: [{ name: "Movies", entries: ["Alpha", "Beta"] }]
 };
 
-async function abortNextServerFn(page: Page, exportName: string) {
-    let aborted = false;
-    await page.route("**/_serverFn/**", async (route) => {
-        if (!aborted && isServerFnRequest(route.request().url(), exportName)) {
-            aborted = true;
-            await route.abort("failed");
-            return;
-        }
-
-        await route.continue();
-    });
-
-    return () => aborted;
-}
 
 test.describe("Transient network failures", () => {
     test("dashboard resume suppresses transient load failure and retries", async ({
@@ -49,14 +32,9 @@ test.describe("Transient network failures", () => {
         expect(staleResponse.ok()).toBe(true);
 
         const didAbortLoadDashboard = await abortNextServerFn(page, "loadDashboard");
-        await page.evaluate(() => {
-            const event = new Event("pageshow") as PageTransitionEvent;
-            Object.defineProperty(event, "persisted", { value: true });
-            window.dispatchEvent(event);
-        });
+        await dispatchPersistedPageShow(page);
 
-        await page.waitForTimeout(300);
-        expect(didAbortLoadDashboard()).toBe(true);
+        await expect.poll(didAbortLoadDashboard, { timeout: 2_000 }).toBe(true);
         await expect(page.getByText(REQUEST_LOAD_FAILURE_MESSAGE)).toBeHidden();
         await expect(page.getByText("That ranking is no longer active.")).toBeVisible({
             timeout: 15_000
@@ -97,8 +75,7 @@ test.describe("Transient network failures", () => {
         await page.getByPlaceholder("New category").fill("Books");
         await page.getByPlaceholder("New category").press("Enter");
 
-        await page.waitForTimeout(300);
-        expect(didAbortLoadDashboard()).toBe(true);
+        await expect.poll(didAbortLoadDashboard, { timeout: 2_000 }).toBe(true);
         await expect(page.getByText(REQUEST_LOAD_FAILURE_MESSAGE)).toBeHidden();
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible({
             timeout: 15_000

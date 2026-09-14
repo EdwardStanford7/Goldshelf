@@ -62,7 +62,7 @@ test.describe("Profiles", () => {
         await expect(page.getByRole("heading", { name: "Edit Photo" })).toBeHidden();
     });
 
-    test("signed-in viewers can copy a shared category into a new category", async ({
+    test("signed-in viewers can copy a shared category into a new category @smoke", async ({
         page: alicePage,
         context: aliceContext,
         browser
@@ -185,7 +185,7 @@ test.describe("Profiles", () => {
         await bobContext.close();
     });
 
-    test("category creation defaults private and can show a category on the profile", async ({
+    test("category creation defaults private and can show a category on the profile @smoke", async ({
         page,
         context
     }) => {

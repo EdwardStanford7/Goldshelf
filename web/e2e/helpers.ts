@@ -1,8 +1,10 @@
 import { expect } from "@playwright/test";
-import type { BrowserContext, Locator, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page, Response } from "@playwright/test";
 import { BASE_URL } from "./constants";
 
 export const TEST_PASSWORD = "goldshelf-e2e-password";
+
+export const ACTIVE_RANKING_LABEL = /Binary Rank|Placement Check|Local Repair/;
 
 /**
  * Navigates and waits for React hydration (marked on <html> by the root
@@ -170,6 +172,30 @@ export async function signInViaApi(
     }
 }
 
+export function rankedEntry(page: Page, rank: number, name: string) {
+    return page.getByText(`#${rank} ${name}`);
+}
+
+export async function expectRankedEntries(page: Page, entries: string[]) {
+    for (const [index, name] of entries.entries()) {
+        await expect(rankedEntry(page, index + 1, name)).toBeVisible({ timeout: 15_000 });
+    }
+}
+
+export async function chooseEntryMenuAction(
+    page: Page,
+    entry: { rank: number; name: string },
+    actionName: string
+) {
+    await rankedEntry(page, entry.rank, entry.name).click({ button: "right" });
+    await page.getByRole("menuitem", { name: actionName }).click();
+}
+
+export async function chooseCategoryMenuAction(page: Page, categoryName: string, actionName: string) {
+    await page.getByRole("button", { name: categoryName }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: actionName }).click();
+}
+
 /**
  * Plays out an active ranking session by always picking `winnerName` in every
  * matchup, so it must finish at #1. Covers the binary search and local repair
@@ -216,6 +242,20 @@ export function isServerFnRequest(url: string, exportName: string) {
     return serverFnExportName(url)?.startsWith(exportName) ?? false;
 }
 
+export function waitForServerFnResponse(
+    page: Page,
+    exportName: string,
+    options: { timeout?: number } = {}
+) {
+    const predicate = (response: Response) => isServerFnRequest(response.url(), exportName);
+
+    if (options.timeout === undefined) {
+        return page.waitForResponse(predicate);
+    }
+
+    return page.waitForResponse(predicate, { timeout: options.timeout });
+}
+
 /**
  * Resolves when a TanStack Start server function response arrives. Server fn
  * URLs encode `{file, export}` as base64url after `/_serverFn/`, so match on
@@ -226,9 +266,54 @@ export function isServerFnRequest(url: string, exportName: string) {
  * has landed, and Playwright can outrun it.
  */
 export function serverFnResponse(page: Page, exportName: string) {
-    return page.waitForResponse((response) => {
-        return isServerFnRequest(response.url(), exportName);
+    return waitForServerFnResponse(page, exportName);
+}
+
+export async function dispatchPersistedPageShow(page: Page) {
+    await page.evaluate(() => {
+        const event = new Event("pageshow") as PageTransitionEvent;
+        Object.defineProperty(event, "persisted", { value: true });
+        window.dispatchEvent(event);
     });
+}
+
+export async function triggerResumeDashboardRefresh(
+    page: Page,
+    options: { attempts?: number; perAttemptTimeout?: number } = {}
+) {
+    const attempts = options.attempts ?? 5;
+    const perAttemptTimeout = options.perAttemptTimeout ?? 1_000;
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const dashboardRefresh = waitForServerFnResponse(page, "loadDashboard", {
+            timeout: perAttemptTimeout
+        }).catch(() => null);
+
+        await dispatchPersistedPageShow(page);
+        const response = await dashboardRefresh;
+        if (response) {
+            return response;
+        }
+
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    }
+
+    throw new Error("Dashboard resume event did not request fresh dashboard data");
+}
+
+export async function abortNextServerFn(page: Page, exportName: string) {
+    let aborted = false;
+    await page.route("**/_serverFn/**", async (route) => {
+        if (!aborted && isServerFnRequest(route.request().url(), exportName)) {
+            aborted = true;
+            await route.abort("failed");
+            return;
+        }
+
+        await route.continue();
+    });
+
+    return () => aborted;
 }
 
 /** Polls for an auth URL captured server-side in TEST_MODE (e.g. password reset links). */

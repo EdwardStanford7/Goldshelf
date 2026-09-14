@@ -4,7 +4,7 @@ import { BASE_URL } from "./constants";
 import { getAdminAuditRows, gotoApp, seedUsers, signInViaApi, TEST_PASSWORD } from "./helpers";
 
 test.describe("Admin user support", () => {
-    test("anonymous visitors and normal users are denied", async ({ context, page }) => {
+    test("anonymous visitors and normal users are denied @smoke", async ({ context, page }) => {
         await gotoAdmin(page);
         await expect(page.getByRole("heading", { name: "Sign in required" })).toBeVisible();
 

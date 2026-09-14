@@ -1,5 +1,15 @@
 import { test, expect } from "./base";
-import { gotoApp, seedUsers, signInViaApi, winMatchups } from "./helpers";
+import {
+    ACTIVE_RANKING_LABEL,
+    chooseCategoryMenuAction,
+    chooseEntryMenuAction,
+    expectRankedEntries,
+    gotoApp,
+    rankedEntry,
+    seedUsers,
+    signInViaApi,
+    winMatchups
+} from "./helpers";
 import { BASE_URL } from "./constants";
 
 const ERIN = {
@@ -12,83 +22,82 @@ const ERIN = {
 };
 
 test.describe("Entry operations", () => {
-    test("rerank, cancel rerank, and category moves keep orderings consistent", async ({
+    test("reranking an entry to the top persists after reload", async ({
         page,
         context
     }) => {
-        test.setTimeout(120_000);
         await seedUsers([ERIN]);
         await signInViaApi(context, ERIN.email);
         await gotoApp(page);
-        await expect(page.getByText("#1 Arrival")).toBeVisible();
-        await expect(page.getByText("#4 Solaris")).toBeVisible();
+        await expectRankedEntries(page, ["Arrival", "Dune", "Heat", "Solaris"]);
 
-        // --- Reranking the last entry to the top reorders everything below it. ---
-        await page.getByText("#4 Solaris").click({ button: "right" });
-        await page.getByRole("menuitem", { name: "Rerank" }).click();
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await chooseEntryMenuAction(page, { rank: 4, name: "Solaris" }, "Rerank");
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Solaris");
 
-        await expect(page.getByText("#1 Solaris")).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByText("#2 Arrival")).toBeVisible();
-        await expect(page.getByText("#3 Dune")).toBeVisible();
-        await expect(page.getByText("#4 Heat")).toBeVisible();
+        await expectRankedEntries(page, ["Solaris", "Arrival", "Dune", "Heat"]);
 
-        // --- The new order survives a reload. ---
         await gotoApp(page);
-        await expect(page.getByText("#1 Solaris")).toBeVisible();
-        await expect(page.getByText("#4 Heat")).toBeVisible();
+        await expectRankedEntries(page, ["Solaris", "Arrival", "Dune", "Heat"]);
+    });
 
-        // --- Cancelling a rerank restores the entry to its old position. ---
-        await page.getByText("#2 Arrival").click({ button: "right" });
-        await page.getByRole("menuitem", { name: "Rerank" }).click();
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+    test("canceling a rerank restores the entry position", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([ERIN]);
+        await signInViaApi(context, ERIN.email);
+        await gotoApp(page);
+        await expectRankedEntries(page, ["Arrival", "Dune", "Heat", "Solaris"]);
+
+        await chooseEntryMenuAction(page, { rank: 2, name: "Dune" }, "Rerank");
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await page.getByRole("button", { name: "Ranking actions" }).click();
         await page.getByRole("menuitem", { name: "Cancel Rerank" }).click();
-        await expect(page.getByText("Cancelled reranking Arrival.")).toBeVisible();
-        await expect(page.getByText("#1 Solaris")).toBeVisible();
-        await expect(page.getByText("#2 Arrival")).toBeVisible();
-        await expect(page.getByText("#4 Heat")).toBeVisible();
 
-        // --- Moving an entry into an empty category places it directly at #1. ---
-        await page.getByText("#3 Dune").click({ button: "right" });
-        await page.getByRole("menuitem", { name: "Change Category" }).click();
+        await expect(page.getByText("Cancelled reranking Dune.")).toBeVisible();
+        await expectRankedEntries(page, ["Arrival", "Dune", "Heat", "Solaris"]);
+    });
+
+    test("moving entries between categories keeps both category orders consistent", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([ERIN]);
+        await signInViaApi(context, ERIN.email);
+        await gotoApp(page);
+        await expectRankedEntries(page, ["Arrival", "Dune", "Heat", "Solaris"]);
+
+        await chooseEntryMenuAction(page, { rank: 2, name: "Dune" }, "Change Category");
         await page.getByLabel("Move Dune").click();
         await page.getByRole("option", { name: "Books" }).click();
         await page.getByRole("button", { name: "Move", exact: true }).click();
 
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
-        await expect(page.getByText("#1 Dune")).toBeVisible();
+        await expect(rankedEntry(page, 1, "Dune")).toBeVisible();
 
         await page.getByRole("button", { name: "Movies" }).click();
-        await expect(page.getByText("#1 Solaris")).toBeVisible();
-        await expect(page.getByText("#2 Arrival")).toBeVisible();
-        await expect(page.getByText("#3 Heat")).toBeVisible();
-        await expect(page.getByText("Dune")).toBeHidden();
+        await expectRankedEntries(page, ["Arrival", "Heat", "Solaris"]);
+        await expect(rankedEntry(page, 1, "Dune")).toBeHidden();
 
-        // --- Moving into a non-empty category runs a ranking session there. ---
-        await page.getByText("#3 Heat").click({ button: "right" });
-        await page.getByRole("menuitem", { name: "Change Category" }).click();
+        await chooseEntryMenuAction(page, { rank: 2, name: "Heat" }, "Change Category");
         await page.getByLabel("Move Heat").click();
         await page.getByRole("option", { name: "Books" }).click();
         await page.getByRole("button", { name: "Move", exact: true }).click();
 
-        await expect(page.getByText(/Binary Rank|Placement Check|Local Repair/)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Heat");
 
+        await page.getByRole("button", { name: "Books" }).click();
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
-        await expect(page.getByText("#1 Heat")).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByText("#2 Dune")).toBeVisible();
+        await expectRankedEntries(page, ["Heat", "Dune"]);
 
-        // --- Final cross-category state survives a reload. ---
         await gotoApp(page);
         await page.getByRole("button", { name: "Movies" }).click();
-        await expect(page.getByText("#1 Solaris")).toBeVisible();
-        await expect(page.getByText("#2 Arrival")).toBeVisible();
-        await expect(page.getByText("Heat")).toBeHidden();
+        await expectRankedEntries(page, ["Arrival", "Solaris"]);
+        await expect(rankedEntry(page, 1, "Heat")).toBeHidden();
         await page.getByRole("button", { name: "Books" }).click();
-        await expect(page.getByText("#1 Heat")).toBeVisible();
-        await expect(page.getByText("#2 Dune")).toBeVisible();
+        await expectRankedEntries(page, ["Heat", "Dune"]);
     });
 
     test("categories can be renamed and deleted with confirmation", async ({ page, context }) => {
@@ -105,17 +114,13 @@ test.describe("Entry operations", () => {
         await signInViaApi(context, ERIN.email);
         await gotoApp(page);
 
-        // --- Rename a category from its context menu. ---
-        await page.getByRole("button", { name: "Books" }).click({ button: "right" });
-        await page.getByRole("menuitem", { name: "Rename" }).click();
+        await chooseCategoryMenuAction(page, "Books", "Rename");
         await page.getByLabel("Rename Books").fill("Novels");
         await page.getByRole("button", { name: "Save" }).click();
         await expect(page.getByRole("button", { name: "Novels" })).toBeVisible();
         await expect(page.getByRole("button", { name: "Books" })).toBeHidden();
 
-        // --- Deleting goes through a confirm dialog and removes its entries. ---
-        await page.getByRole("button", { name: "Novels" }).click({ button: "right" });
-        await page.getByRole("menuitem", { name: "Delete" }).click();
+        await chooseCategoryMenuAction(page, "Novels", "Delete");
         await expect(page.getByText("Delete Novels?")).toBeVisible();
         await expect(page.getByText(/permanently removes 1 ranked entry/)).toBeVisible();
         await page.getByRole("button", { name: "Delete Category" }).click();
@@ -123,7 +128,7 @@ test.describe("Entry operations", () => {
         await expect(page.getByText("Deleted Novels.")).toBeVisible();
         await expect(page.getByRole("button", { name: "Novels" })).toBeHidden();
         await expect(page.getByText("Hyperion")).toBeHidden();
-        await expect(page.getByText("#1 Arrival")).toBeVisible();
+        await expect(rankedEntry(page, 1, "Arrival")).toBeVisible();
     });
 
     test("missing stored image objects do not clear entry image keys on read", async ({ page, context }) => {
@@ -138,14 +143,14 @@ test.describe("Entry operations", () => {
         await signInViaApi(context, "missing-image@e2e.test");
         await gotoApp(page);
 
-        await expect(page.getByText("#1 Arrival")).toBeVisible();
+        await expect(rankedEntry(page, 1, "Arrival")).toBeVisible();
         const entryId = await page.locator("[data-entry-id]").first().getAttribute("data-entry-id");
         expect(entryId).toBeTruthy();
         const imageResponse = await page.request.get(`${BASE_URL}/api/images/${encodeURIComponent(entryId!)}`);
         expect(imageResponse.status()).toBe(404);
 
         await gotoApp(page);
-        await page.getByText("#1 Arrival").click({ button: "right" });
+        await rankedEntry(page, 1, "Arrival").click({ button: "right" });
         await expect(page.getByRole("menuitem", { name: "Change Image" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Pick Image" })).toBeHidden();
     });
