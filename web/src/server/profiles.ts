@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import { hasAdminRole } from "@/lib/admin";
 import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
 import { hasStoredImage } from "@/lib/images";
+import { PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import type {
     CategoryWithEntries,
@@ -39,7 +40,7 @@ import {
 import { type EntryRow, mapEntry } from "./stores/entryStore";
 
 const MAX_USER_NAME_LENGTH = 80;
-const COPY_PUBLIC_CATEGORY_IMAGE_CONCURRENCY = 4;
+const COPY_PUBLIC_CATEGORY_IMAGE_CONCURRENCY = 2;
 
 
 
@@ -744,8 +745,8 @@ function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[
     if (selectedEntryIds.length === 0) {
         throw new Error("Select at least one entry to copy");
     }
-    if (selectedEntryIds.length > 500) {
-        throw new Error("Select fewer entries to copy at once");
+    if (selectedEntryIds.length > PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE) {
+        throw new Error("Copy chunk is too large; try again.");
     }
 
     const selectedEntryIdSet = new Set(selectedEntryIds);
@@ -779,20 +780,20 @@ async function copyPublicCategoryEntriesToQueueImages(
                 continue;
             }
 
-            const copiedImageKey = await copyEntryImageToQueueImage(
+            const imageKey = await copyEntryImageToQueueImage(
                 userId,
                 input.queueId,
                 input.entry.imageKey,
                 input.createdAt
             );
-            if (hasStoredImage(copiedImageKey)) {
-                copiedImageKeys.push(copiedImageKey);
+            if (hasStoredImage(imageKey)) {
+                copiedImageKeys.push(imageKey);
             }
 
             queuedEntries[index] = {
                 id: input.queueId,
                 name: input.entry.name,
-                imageKey: copiedImageKey,
+                imageKey,
                 createdAt: input.createdAt
             };
         }

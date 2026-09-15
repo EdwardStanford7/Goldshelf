@@ -29,6 +29,7 @@ import { redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile, followButtonLabel, followRelationLabel } from "@/lib/follows";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import { nextMultiSelection } from "@/lib/multiSelect";
+import { PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import {
     approveFollowRequest,
@@ -43,6 +44,14 @@ import type { CategoryWithEntries, Entry, PublicProfileData } from "@/lib/types"
 const POSTER_CLASS =
     "aspect-[4/5] bg-[image:linear-gradient(135deg,var(--poster-start),var(--poster-end))] text-center text-muted-foreground";
 type CopyMode = "new" | "merge";
+
+function chunks<T>(items: T[], size: number) {
+    const result: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+        result.push(items.slice(index, index + size));
+    }
+    return result;
+}
 
 export const Route = createFileRoute("/u/$profileSlug")({
     loader: async ({ params }) => {
@@ -228,21 +237,36 @@ function PublicProfileRoute() {
         setCopyingCategoryId(copyDialogCategory.id);
 
         try {
-            const result = await copyPublicCategoryToQueue({
-                data: copyMode === "new"
-                    ? {
-                        sourceCategoryId: copyDialogCategory.id,
-                        mode: "new",
-                        categoryName: cleanCategoryName,
-                        sourceEntryIds
-                    }
-                    : {
-                        sourceCategoryId: copyDialogCategory.id,
-                        mode: "merge",
-                        targetCategoryId: copyTargetCategoryId,
-                        sourceEntryIds
-                    }
-            });
+            const sourceEntryIdChunks = chunks(sourceEntryIds, PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE);
+            let targetCategoryId = copyTargetCategoryId;
+            let targetCategoryName = copyMode === "new" ? cleanCategoryName : "";
+            let copiedCount = 0;
+            let skippedCount = 0;
+
+            for (let index = 0; index < sourceEntryIdChunks.length; index += 1) {
+                const chunk = sourceEntryIdChunks[index];
+                const result = await copyPublicCategoryToQueue({
+                    data: copyMode === "new" && index === 0
+                        ? {
+                            sourceCategoryId: copyDialogCategory.id,
+                            mode: "new",
+                            categoryName: cleanCategoryName,
+                            sourceEntryIds: chunk
+                        }
+                        : {
+                            sourceCategoryId: copyDialogCategory.id,
+                            mode: "merge",
+                            targetCategoryId,
+                            sourceEntryIds: chunk
+                        }
+                });
+
+                targetCategoryId = result.categoryId;
+                targetCategoryName = result.categoryName;
+                copiedCount += result.copiedCount;
+                skippedCount += result.skippedCount;
+            }
+
             if (copyMode === "new") {
                 setProfileData({
                     ...profileData,
@@ -250,21 +274,21 @@ function PublicProfileRoute() {
                         ...profileData.viewer,
                         categories: [
                             ...profileData.viewer.categories,
-                            { id: result.categoryId, name: result.categoryName }
+                            { id: targetCategoryId, name: targetCategoryName }
                         ]
                     }
                 });
             }
             setCopyDialogCategory(null);
-            const copyMessage = result.copiedCount > 0
-                ? `Copied ${result.copiedCount} ${result.copiedCount === 1 ? "entry" : "entries"} to ${result.categoryName}.`
-                : `No new entries copied to ${result.categoryName}.`;
-            const skippedMessage = result.skippedCount > 0
-                ? ` Skipped ${result.skippedCount} duplicate${result.skippedCount === 1 ? "" : "s"}.`
+            const copyMessage = copiedCount > 0
+                ? `Copied ${copiedCount} ${copiedCount === 1 ? "entry" : "entries"} to ${targetCategoryName}.`
+                : `No new entries copied to ${targetCategoryName}.`;
+            const skippedMessage = skippedCount > 0
+                ? ` Skipped ${skippedCount} duplicate${skippedCount === 1 ? "" : "s"}.`
                 : "";
             showToast(
                 `${copyMessage}${skippedMessage}`,
-                result.copiedCount > 0 ? "success" : "default"
+                copiedCount > 0 ? "success" : "default"
             );
         } catch (copyError) {
             if (redirectIfUnauthorized(copyError)) {

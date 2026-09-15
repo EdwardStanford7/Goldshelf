@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import type { ParsedImport } from "@/lib/types";
 import { all, getDb, newId, now, runBatches } from "@/server/lib/db";
 import { MAX_CATEGORY_NAME_LENGTH, MAX_ENTRY_NAME_LENGTH, isWithinTextLimit } from "@/server/lib/validation";
@@ -22,6 +23,9 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
         const createdAt = now();
         const rankedImportEntries = parsedImport.entries ?? [];
         const queuedImportEntries = parsedImport.queuedEntries ?? [];
+        if (rankedImportEntries.length + queuedImportEntries.length > SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE) {
+            throw new Error(`Import chunk is too large; try again.`);
+        }
         const categoriesByName = new Map<string, string>();
         const importedByCategory = new Map<string, typeof rankedImportEntries>();
         const queuedByCategory = new Map<string, typeof queuedImportEntries>();

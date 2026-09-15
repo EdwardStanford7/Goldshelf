@@ -68,6 +68,7 @@ import {
 import { shouldPromptForImage } from "@/lib/images";
 import type { ImagePickerTarget } from "@/lib/posterImage";
 import { ONBOARDING_SAMPLE_PENDING_KEY } from "@/lib/onboarding";
+import { SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
 import { orderEntries } from "@/lib/ranking";
 import {
@@ -108,6 +109,7 @@ import type {
     CategoryWithEntries,
     DashboardData,
     Entry,
+    ParsedImport,
     QueuedEntry,
     QueueSettings,
     RepairSessionView
@@ -259,6 +261,51 @@ function importResultMessage(result: {
     return skippedParts.length > 0
         ? `${importedMessage} Skipped ${skippedParts.join(" and ")} duplicates.`
         : importedMessage;
+}
+
+type ImportResult = Parameters<typeof importResultMessage>[0];
+
+function emptyImportResult(): ImportResult {
+    return {
+        importedCount: 0,
+        skippedCount: 0,
+        rankedImportedCount: 0,
+        rankedSkippedCount: 0,
+        queuedImportedCount: 0,
+        queuedSkippedCount: 0
+    };
+}
+
+function addImportResult(total: ImportResult, next: ImportResult): ImportResult {
+    return {
+        importedCount: total.importedCount + next.importedCount,
+        skippedCount: total.skippedCount + next.skippedCount,
+        rankedImportedCount: total.rankedImportedCount + next.rankedImportedCount,
+        rankedSkippedCount: total.rankedSkippedCount + next.rankedSkippedCount,
+        queuedImportedCount: total.queuedImportedCount + next.queuedImportedCount,
+        queuedSkippedCount: total.queuedSkippedCount + next.queuedSkippedCount
+    };
+}
+
+function chunkParsedImport(parsed: ParsedImport, size: number): ParsedImport[] {
+    const chunks: ParsedImport[] = [];
+    let entryIndex = 0;
+    let queuedEntryIndex = 0;
+
+    while (entryIndex < parsed.entries.length || queuedEntryIndex < parsed.queuedEntries.length) {
+        const entries = parsed.entries.slice(entryIndex, entryIndex + size);
+        entryIndex += entries.length;
+
+        const remaining = size - entries.length;
+        const queuedEntries = remaining > 0
+            ? parsed.queuedEntries.slice(queuedEntryIndex, queuedEntryIndex + remaining)
+            : [];
+        queuedEntryIndex += queuedEntries.length;
+
+        chunks.push({ entries, queuedEntries });
+    }
+
+    return chunks;
 }
 
 function cancelBinarySessionMessage(
@@ -2035,9 +2082,17 @@ export function Dashboard({
             if (parsedCount === 0) {
                 throw new Error("Spreadsheet contains no importable entries. Put category names in the first row and entries below them.");
             }
-            setBusyLabel(`Importing ${parsedCount} entries...`);
-            await nextPaint();
-            const result = await importLegacyEntries({ data: parsed });
+            const importChunks = chunkParsedImport(parsed, SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE);
+            let result = emptyImportResult();
+            for (let index = 0; index < importChunks.length; index += 1) {
+                const chunk = importChunks[index];
+                const chunkCount = chunk.entries.length + chunk.queuedEntries.length;
+                setBusyLabel(importChunks.length > 1
+                    ? `Importing ${parsedCount} entries... ${index + 1}/${importChunks.length}`
+                    : `Importing ${chunkCount} entries...`);
+                await nextPaint();
+                result = addImportResult(result, await importLegacyEntries({ data: chunk }));
+            }
             setBusyLabel("Refreshing dashboard...");
             pushToast({
                 message: importResultMessage(result),
