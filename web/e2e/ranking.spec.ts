@@ -145,6 +145,7 @@ test.describe("Ranking", () => {
         await expect(mobilePanel).toBeHidden();
         const imagePicker = page.locator("section", { hasText: "Pick Image" }).first();
         await expect(imagePicker.getByRole("button", { name: "Close" })).toBeVisible();
+        await expect(imagePicker.getByRole("button", { name: "Paste Image" })).toBeVisible();
         await imagePicker.getByRole("button", { name: "Close" }).click();
         await expect(imagePicker).toBeHidden();
 

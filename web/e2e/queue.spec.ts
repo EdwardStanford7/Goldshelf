@@ -82,6 +82,11 @@ function matchChoice(page: Page, name: string) {
     return page.getByRole("button", { name: new RegExp(`^${name}\\b`) });
 }
 
+function todayDateInputValue() {
+    const today = new Date();
+    return new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())).toISOString().slice(0, 10);
+}
+
 async function clickUndoToast(page: Page, message: string) {
     await page
         .getByRole("listitem")
@@ -122,7 +127,8 @@ test.describe("Queue", () => {
         await page.getByLabel("Email").fill("queue-default@e2e.test");
         await page.getByRole("textbox", { name: /^Password/ }).fill(TEST_PASSWORD);
         await page.getByRole("button", { name: "Create account" }).click();
-        await expect(page.getByText("Create Your First Category")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("heading", { name: "Example Ranking" })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("#1 Example Item A")).toBeVisible();
 
         await openQueueSettings(page);
         await expect(page.getByRole("menuitemcheckbox", { name: "Queue entries" })).toHaveAttribute("aria-checked", "true");
@@ -541,6 +547,7 @@ test.describe("Queue", () => {
         await expect(page.getByText("Create Your First Category")).toBeVisible({ timeout: 15_000 });
 
         await openImportToast(page);
+        await expect(page.locator('input[name="addedAt"]')).toHaveValue(todayDateInputValue());
         await page.locator('input[name="workbook"]').setInputFiles(workbookPath);
         await page.getByRole("button", { name: "Import", exact: true }).click();
         await expect(page.getByText(/Imported 1 queued/)).toBeVisible({ timeout: 15_000 });

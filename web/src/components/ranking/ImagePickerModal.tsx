@@ -5,6 +5,7 @@ import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import {
+    imageBlobToPosterBlob,
     imageCandidateToPosterBlob,
     imageElementToPosterBlob,
     imageUrlToPosterBlob,
@@ -55,6 +56,42 @@ export function ImagePickerModal({
     function resetFileInput() {
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
+        }
+    }
+
+    function isTextEditingTarget(target: EventTarget | null) {
+        if (!(target instanceof HTMLElement)) {
+            return false;
+        }
+
+        return target instanceof HTMLInputElement ||
+            target instanceof HTMLTextAreaElement ||
+            target.isContentEditable;
+    }
+
+    function pastedImageFile(dataTransfer: DataTransfer | null) {
+        const files = Array.from(dataTransfer?.files ?? []);
+        const file = files.find((candidate) => candidate.type.startsWith("image/"));
+        if (file) {
+            return file;
+        }
+
+        const items = Array.from(dataTransfer?.items ?? []);
+        const imageItem = items.find((item) => item.kind === "file" && item.type.startsWith("image/"));
+        return imageItem?.getAsFile() ?? null;
+    }
+
+    function clipboardImageUrl(text: string) {
+        const trimmed = text.trim();
+        if (!trimmed) {
+            return null;
+        }
+
+        try {
+            const url = new URL(trimmed);
+            return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+        } catch {
+            return null;
         }
     }
 
@@ -217,6 +254,30 @@ export function ImagePickerModal({
         };
     }, [search]);
 
+    useEffect(() => {
+        function handlePaste(event: ClipboardEvent) {
+            if (savingCandidateId) {
+                return;
+            }
+
+            const file = pastedImageFile(event.clipboardData);
+            if (file) {
+                event.preventDefault();
+                void uploadLocalFile(file, "paste");
+                return;
+            }
+
+            const imageUrl = clipboardImageUrl(event.clipboardData?.getData("text/plain") ?? "");
+            if (imageUrl && !isTextEditingTarget(event.target)) {
+                event.preventDefault();
+                void uploadImageUrl(imageUrl);
+            }
+        }
+
+        window.addEventListener("paste", handlePaste);
+        return () => window.removeEventListener("paste", handlePaste);
+    }, [savingCandidateId, target]);
+
     async function selectCandidate(
         candidate: ImageSearchCandidate,
         renderedThumbnail: HTMLImageElement | null
@@ -250,24 +311,91 @@ export function ImagePickerModal({
             });
     }
 
-    async function uploadLocalFile(file: File) {
+    async function savePosterBlob(sourceId: string, posterBlob: Blob) {
         interruptSearch();
-        setSavingCandidateId("local");
+        setSavingCandidateId(sourceId);
         setError(null);
 
         try {
-            const objectUrl = URL.createObjectURL(file);
-            try {
-                const blob = await imageUrlToPosterBlob(objectUrl);
-                await uploadImageForTarget(target, blob);
-                await onSaved();
-            } finally {
-                URL.revokeObjectURL(objectUrl);
-            }
+            await uploadImageForTarget(target, posterBlob);
+            await onSaved();
         } catch (saveError) {
             setError(errorMessage(saveError));
         } finally {
             resetFileInput();
+            setSavingCandidateId(null);
+        }
+    }
+
+    async function uploadLocalFile(file: File, sourceId = "local") {
+        interruptSearch();
+        setSavingCandidateId(sourceId);
+        setError(null);
+
+        try {
+            const blob = await imageBlobToPosterBlob(file);
+            await uploadImageForTarget(target, blob);
+            await onSaved();
+        } catch (saveError) {
+            setError(errorMessage(saveError));
+        } finally {
+            resetFileInput();
+            setSavingCandidateId(null);
+        }
+    }
+
+    async function uploadImageUrl(imageUrl: string, sourceId = "paste") {
+        interruptSearch();
+        setSavingCandidateId(sourceId);
+        setError(null);
+
+        try {
+            const blob = await imageUrlToPosterBlob(imageUrl);
+            await uploadImageForTarget(target, blob);
+            await onSaved();
+        } catch (saveError) {
+            setError(errorMessage(saveError));
+        } finally {
+            resetFileInput();
+            setSavingCandidateId(null);
+        }
+    }
+
+    async function pasteFromClipboard() {
+        if (savingCandidateId) {
+            return;
+        }
+
+        const clipboard = navigator.clipboard;
+        if (!clipboard) {
+            setError("Clipboard access is not available in this browser. Use Cmd/Ctrl+V or Upload File.");
+            return;
+        }
+
+        setError(null);
+        try {
+            if ("read" in clipboard) {
+                const items = await clipboard.read();
+                for (const item of items) {
+                    const imageType = item.types.find((type) => type.startsWith("image/"));
+                    if (imageType) {
+                        const blob = await item.getType(imageType);
+                        await savePosterBlob("paste", await imageBlobToPosterBlob(blob));
+                        return;
+                    }
+                }
+            }
+
+            const text = "readText" in clipboard ? await clipboard.readText() : "";
+            const imageUrl = clipboardImageUrl(text);
+            if (imageUrl) {
+                await uploadImageUrl(imageUrl);
+                return;
+            }
+
+            setError("Clipboard does not contain an image or image URL.");
+        } catch (pasteError) {
+            setError(errorMessage(pasteError));
             setSavingCandidateId(null);
         }
     }
@@ -366,6 +494,15 @@ export function ImagePickerModal({
                             }}
                         />
                     </label>
+                    <Button
+                        className="max-[720px]:w-full"
+                        variant="outline"
+                        disabled={Boolean(savingCandidateId)}
+                        type="button"
+                        onClick={() => void pasteFromClipboard()}
+                    >
+                        {savingCandidateId === "paste" ? "Saving..." : "Paste Image"}
+                    </Button>
                     <Button
                         className="max-[720px]:w-full"
                         variant="outline"

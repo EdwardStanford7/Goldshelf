@@ -2,6 +2,8 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
+import { ONBOARDING_SAMPLE_PENDING_KEY } from '@/lib/onboarding';
+import { createOnboardingSampleRanking } from '@/server/onboarding';
 import { Input } from '@/components/ui/input';
 import { AuthLayout } from './AuthLayout';
 import { PasswordField } from './PasswordField';
@@ -37,6 +39,13 @@ export function SignUpForm({ authOptions }: { authOptions: AuthOptions }) {
         return;
       }
       await signUpWithEmail({ email, password, name });
+      try {
+        await createOnboardingSampleRanking();
+        window.localStorage.removeItem(ONBOARDING_SAMPLE_PENDING_KEY);
+      } catch (sampleError) {
+        console.warn('Onboarding sample creation will retry on the dashboard.', sampleError);
+        window.localStorage.setItem(ONBOARDING_SAMPLE_PENDING_KEY, '1');
+      }
       window.location.assign('/');
     } catch (authError) {
       setError(formatSignUpError(authError, authOptions.minPasswordLength));

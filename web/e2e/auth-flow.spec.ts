@@ -21,7 +21,7 @@ test.describe("Auth flows", () => {
         await expect(page.getByRole("heading", { name: "Rank everything you love." })).toBeVisible();
     });
 
-    test("sign up lands on an empty dashboard", async ({ page }) => {
+    test("sign up creates an example ranking", async ({ page }) => {
         await gotoApp(page, "/signin");
         await page.getByRole("link", { name: "Create an account" }).click();
         await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
@@ -31,7 +31,10 @@ test.describe("Auth flows", () => {
         await page.getByRole("textbox", { name: /^Password/ }).fill(TEST_PASSWORD);
         await page.getByRole("button", { name: "Create account" }).click();
 
-        await expect(page.getByText("Create Your First Category")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("heading", { name: "Example Ranking" })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByText("#1 Example Item A")).toBeVisible();
+        await expect(page.getByText("#2 Example Item B")).toBeVisible();
+        await expect(page.getByText("#3 Example Item C")).toBeVisible();
     });
 
     test("seeded user can sign in and sees their data @smoke", async ({ page }) => {

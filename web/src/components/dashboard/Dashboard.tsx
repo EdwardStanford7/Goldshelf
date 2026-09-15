@@ -67,6 +67,7 @@ import {
 } from "@/lib/format";
 import { shouldPromptForImage } from "@/lib/images";
 import type { ImagePickerTarget } from "@/lib/posterImage";
+import { ONBOARDING_SAMPLE_PENDING_KEY } from "@/lib/onboarding";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
 import { orderEntries } from "@/lib/ranking";
 import {
@@ -87,6 +88,7 @@ import {
     switchEntryCategory
 } from "@/server/entries";
 import { importLegacyEntries } from "@/server/legacyImport";
+import { createOnboardingSampleRanking } from "@/server/onboarding";
 import {
     createQueuedEntry,
     deleteQueuedEntry,
@@ -367,6 +369,7 @@ export function Dashboard({
     const locateEntryHighlightTimerRef = useRef<number | null>(null);
     const [locatedEntryId, setLocatedEntryId] = useState<string | null>(null);
     const reversibleActionIdRef = useRef(0);
+    const onboardingSampleAttemptedRef = useRef(false);
     const undoStackRef = useRef<ReversibleAction[]>([]);
     const redoStackRef = useRef<ReversibleAction[]>([]);
 
@@ -431,6 +434,29 @@ export function Dashboard({
     useEffect(() => {
         setEntryCategoryId(selectedCategory?.id ?? "");
     }, [selectedCategory?.id]);
+
+    useEffect(() => {
+        if (onboardingSampleAttemptedRef.current || dashboard.categories.length > 0) {
+            return;
+        }
+        if (window.localStorage.getItem(ONBOARDING_SAMPLE_PENDING_KEY) !== "1") {
+            return;
+        }
+
+        onboardingSampleAttemptedRef.current = true;
+        void (async () => {
+            try {
+                await createOnboardingSampleRanking();
+                window.localStorage.removeItem(ONBOARDING_SAMPLE_PENDING_KEY);
+                await refreshAfterMutation();
+            } catch (error) {
+                onboardingSampleAttemptedRef.current = false;
+                if (!isTransientRequestFailure(error)) {
+                    window.localStorage.removeItem(ONBOARDING_SAMPLE_PENDING_KEY);
+                }
+            }
+        })();
+    }, [dashboard.categories.length]);
 
     useEffect(() => {
         setActiveEntryId(null);
