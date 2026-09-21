@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { gotoApp, seedUsers, signInViaApi } from "./helpers";
+import { gotoApp, openNewCategoryDialog, seedUsers, signInViaApi } from "./helpers";
 
 const ALICE = {
     email: "alice@e2e.test",
@@ -193,13 +193,15 @@ test.describe("Profiles", () => {
         await signInViaApi(context, "share@e2e.test");
         await gotoApp(page);
 
-        await page.getByPlaceholder("New category").fill("Private Shelf");
-        await page.getByPlaceholder("New category").press("Enter");
+        let categoryDialog = await openNewCategoryDialog(page);
+        await categoryDialog.getByPlaceholder("New category").fill("Private Shelf");
+        await categoryDialog.getByPlaceholder("New category").press("Enter");
         await expect(page.getByRole("heading", { name: "Private Shelf" })).toBeVisible();
 
-        await page.getByLabel("Show on profile").check();
-        await page.getByPlaceholder("New category").fill("Shared Shelf");
-        await page.getByPlaceholder("New category").press("Enter");
+        categoryDialog = await openNewCategoryDialog(page);
+        await categoryDialog.getByLabel("Show on profile").check();
+        await categoryDialog.getByPlaceholder("New category").fill("Shared Shelf");
+        await categoryDialog.getByPlaceholder("New category").press("Enter");
         await expect(page.getByRole("heading", { name: "Shared Shelf" })).toBeVisible();
 
         await gotoApp(page, "/profile");

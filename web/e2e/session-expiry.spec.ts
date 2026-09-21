@@ -1,6 +1,6 @@
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { ACTIVE_RANKING_LABEL, gotoApp, seedUsers, signInViaApi, triggerResumeDashboardRefresh } from "./helpers";
+import { ACTIVE_RANKING_LABEL, gotoApp, openNewCategoryDialog, seedUsers, signInViaApi, triggerResumeDashboardRefresh } from "./helpers";
 
 const USER = {
     email: "expiry@e2e.test",
@@ -43,8 +43,9 @@ test.describe("Session expiry", () => {
         // the dashboard, but the next server action must fail with 401.
         await context.clearCookies();
 
-        await page.getByPlaceholder("New category").fill("Books");
-        await page.getByPlaceholder("New category").press("Enter");
+        const categoryDialog = await openNewCategoryDialog(page);
+        await categoryDialog.getByPlaceholder("New category").fill("Books");
+        await categoryDialog.getByPlaceholder("New category").press("Enter");
 
         // The UnauthorizedError funnel should send the user to the sign-in
         // screen instead of surfacing an opaque error toast.

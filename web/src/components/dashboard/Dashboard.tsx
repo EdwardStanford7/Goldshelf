@@ -27,6 +27,15 @@ import { BusyOverlay } from "@/components/ui/BusyOverlay";
 import { CategoryDragOverlay, CategoryListItem } from "@/components/dashboard/CategoryListItem";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from "@/components/ui/dialog";
 import { EntryCard, EntryDragOverlay } from "@/components/dashboard/EntryCard";
 import { ImagePickerModal } from "@/components/ranking/ImagePickerModal";
 import { ImportSpreadsheetToast } from "@/components/queue/ImportSpreadsheetToast";
@@ -133,7 +142,7 @@ const ACTIVE_FLOW_RESUME_REFRESH_AFTER_MS = 2_000;
 const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 const SIDEBAR_PANEL_CLASS =
     "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
-type MobilePanel = "newCategory" | "newEntry" | "queue";
+type MobilePanel = "newEntry" | "queue";
 type EntryDateFilterPreset = "all" | "today" | "last7" | "last30" | "year" | "custom";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -379,6 +388,7 @@ export function Dashboard({
     const skippedQueueRankIdsRef = useRef<Set<string>>(new Set());
     const queueRankOrderRef = useRef<string[] | null>(null);
     const [categoryDraftName, setCategoryDraftName] = useState("");
+    const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
     const [entryDraftName, setEntryDraftName] = useState("");
     const [entryCategoryId, setEntryCategoryId] = useState(
         initialDashboard.activeBinarySession?.categoryId ??
@@ -1192,6 +1202,7 @@ export function Dashboard({
             });
             formElement.reset();
             setCategoryDraftName("");
+            setCategoryDialogOpen(false);
             setSelectedCategoryId(categoryId);
             await refreshAfterMutation();
         } catch (error) {
@@ -2294,10 +2305,13 @@ export function Dashboard({
         scheduleAfterMobileLayerClose(() => setMobilePanel(panel));
     }
 
-    async function handleCreateCategoryFromMobilePanel(event: FormEvent<HTMLFormElement>) {
-        setMobilePanel(null);
-        await handleCreateCategory(event);
-        scrollMainToTop();
+    function openCategoryDialog(closeDrawer = false) {
+        if (closeDrawer) {
+            setMobileDrawerOpen(false);
+            scheduleAfterMobileLayerClose(() => setCategoryDialogOpen(true));
+            return;
+        }
+        setCategoryDialogOpen(true);
     }
 
     async function handleCreateEntryFromMobilePanel(event: FormEvent<HTMLFormElement>) {
@@ -2481,16 +2495,29 @@ export function Dashboard({
         );
     }
 
-    function renderNewCategoryPanel(onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>) {
+    function renderNewCategoryDialog() {
         return (
-            <section className={SIDEBAR_PANEL_CLASS}>
-                <strong className="min-w-0 max-w-full">New Category</strong>
-                <form
-                    className="grid min-w-0 gap-[0.7rem] *:max-w-full *:min-w-0"
-                    onSubmit={onSubmit}
-                >
-                    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 max-[720px]:grid-cols-1">
+            <Dialog
+                open={categoryDialogOpen}
+                onOpenChange={(open) => {
+                    if (busy) {
+                        return;
+                    }
+                    setCategoryDialogOpen(open);
+                    if (!open) {
+                        setCategoryDraftName("");
+                    }
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>New Category</DialogTitle>
+                        <DialogDescription>Create another ranked list.</DialogDescription>
+                    </DialogHeader>
+                    <form className="grid min-w-0 gap-4" onSubmit={handleCreateCategory}>
                         <Input
+                            autoFocus
+                            aria-label="Category name"
                             disabled={busy}
                             name="name"
                             placeholder="New category"
@@ -2498,44 +2525,61 @@ export function Dashboard({
                             value={categoryDraftName}
                             onChange={(event) => setCategoryDraftName(event.target.value)}
                         />
-                        <Button
-                            size="lg"
-                            disabled={busy || !canCreateCategory}
-                            type="submit"
-                        >
-                            Add
-                        </Button>
-                    </div>
-                    <label className="inline-flex w-fit items-center gap-[0.45rem] text-[0.86rem] text-muted-foreground">
-                        <input
-                            className="w-auto"
-                            disabled={busy}
-                            name="isPublic"
-                            type="checkbox"
-                        />
-                        <span>Show on profile</span>
-                    </label>
-                </form>
-            </section>
+                        <label className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground">
+                            <input
+                                className="w-auto"
+                                disabled={busy}
+                                name="isPublic"
+                                type="checkbox"
+                            />
+                            <span>Show on profile</span>
+                        </label>
+                        <DialogFooter>
+                            <DialogClose asChild>
+                                <Button disabled={busy} type="button" variant="outline">Cancel</Button>
+                            </DialogClose>
+                            <Button disabled={busy || !canCreateCategory} type="submit">
+                                Create Category
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         );
     }
 
     function renderCategoryList(closeOnSelect = false, closeOnRepair = false) {
         return (
-            <section className={SIDEBAR_PANEL_CLASS}>
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <section
+                className={`${SIDEBAR_PANEL_CLASS} !h-full !min-h-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] max-[720px]:!h-fit max-[720px]:!min-h-max max-[720px]:overflow-visible max-[720px]:[scrollbar-gutter:auto]`}
+                data-testid="category-panel"
+            >
+                <div className="sticky top-0 z-10 flex min-w-0 flex-wrap items-center justify-between gap-2 bg-card max-[720px]:static">
                     <strong className="min-w-0 max-w-full">Categories</strong>
                     {!categorySelectionMode ? (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busy || activeFlowLocked || dashboard.categories.length === 0}
-                            type="button"
-                            onClick={() => setCategorySelectionMode(true)}
-                        >
-                            <ListChecks data-icon="inline-start" />
-                            <span>Select</span>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                aria-label="New category"
+                                disabled={busy}
+                                size="icon-sm"
+                                title="New category"
+                                type="button"
+                                variant="outline"
+                                onClick={() => openCategoryDialog(closeOnSelect)}
+                            >
+                                <Plus className="size-4" />
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy || activeFlowLocked || dashboard.categories.length === 0}
+                                type="button"
+                                onClick={() => setCategorySelectionMode(true)}
+                            >
+                                <ListChecks data-icon="inline-start" />
+                                <span>Select</span>
+                            </Button>
+                        </div>
                     ) : null}
                 </div>
                 {categorySelectionMode ? (
@@ -2628,7 +2672,7 @@ export function Dashboard({
                         items={orderedCategories.map((category) => category.id)}
                         strategy={verticalListSortingStrategy}
                     >
-                        <div className="m-0 grid max-h-[min(26vh,18rem)] min-h-0 min-w-0 gap-[0.45rem] overflow-x-hidden overflow-y-auto pr-[0.15rem] max-[720px]:max-h-none max-[720px]:overflow-y-visible max-[720px]:pr-0">
+                        <div className="m-0 grid min-h-0 min-w-0 gap-[0.45rem] pr-[0.15rem] max-[720px]:pr-0">
                             {orderedCategories.map((category) => (
                                 <CategoryListItem
                                     category={category}
@@ -2763,7 +2807,6 @@ export function Dashboard({
                     <BrandLink />
                 </div>
 
-                {renderNewCategoryPanel(handleCreateCategory)}
                 {renderCategoryList(false)}
                 {renderNewEntryPanel(handleCreateEntry)}
                 {renderQueuePanel()}
@@ -2800,16 +2843,6 @@ export function Dashboard({
                             <span>Queue</span>
                             <span className="ml-auto text-muted-foreground">{dashboard.queuedEntries.length} queued</span>
                         </Button>
-                        <Button
-                            className="justify-start"
-                            disabled={busy}
-                            type="button"
-                            variant={hasCategories ? "outline" : "default"}
-                            onClick={() => openMobilePanelFromDrawer("newCategory")}
-                        >
-                            <Plus data-icon="inline-start" />
-                            <span>New Category</span>
-                        </Button>
                     </div>
                 </section>
                 {!hasCategories ? renderCategoryList(true, true) : null}
@@ -2818,16 +2851,10 @@ export function Dashboard({
     }
 
     function renderMobilePanelSheet() {
-        const title = mobilePanel === "newEntry"
-            ? "New Entry"
-            : mobilePanel === "queue"
-                ? "Queue"
-                : "New Category";
+        const title = mobilePanel === "newEntry" ? "New Entry" : "Queue";
         const description = mobilePanel === "newEntry"
             ? "Add an entry to the selected category."
-            : mobilePanel === "queue"
-                ? "Manage queued entries."
-                : "Create a category.";
+            : "Manage queued entries.";
 
         return (
             <Sheet
@@ -2848,7 +2875,6 @@ export function Dashboard({
                         <div className="grid content-start gap-3">
                             {mobilePanel === "newEntry" ? renderNewEntryPanel(handleCreateEntryFromMobilePanel) : null}
                             {mobilePanel === "queue" ? renderQueuePanel({ mobilePanel: true }) : null}
-                            {mobilePanel === "newCategory" ? renderNewCategoryPanel(handleCreateCategoryFromMobilePanel) : null}
                         </div>
                     </SheetBody>
                 </SheetContent>
@@ -2884,6 +2910,7 @@ export function Dashboard({
                 />
             ) : null}
             {renderCategoryStatsSheet()}
+            {renderNewCategoryDialog()}
             {renderMobilePanelSheet()}
             {categoryQueueTargets ? (
                 <ConfirmDialog
@@ -2911,7 +2938,7 @@ export function Dashboard({
                 </ConfirmDialog>
             ) : null}
             <aside
-                className="grid h-dvh max-h-dvh min-h-0 min-w-0 auto-rows-max content-start gap-[1.15rem] overflow-x-hidden overflow-y-auto border-r border-border bg-sidebar p-4 max-[720px]:hidden"
+                className="grid h-dvh max-h-dvh min-h-0 min-w-0 grid-rows-[auto_clamp(11rem,31vh,21rem)_auto_minmax(0,1fr)] gap-[0.9rem] overflow-hidden border-r border-border bg-sidebar p-4 max-[720px]:hidden"
                 data-testid="dashboard-sidebar"
             >
                 {renderDesktopSidebar()}
@@ -2998,7 +3025,10 @@ export function Dashboard({
                             icon={Library}
                             title="Create Your First Category"
                         >
-                            Categories keep each ranked list separate. Use the sidebar form to add one.
+                            <Button type="button" onClick={() => setCategoryDialogOpen(true)}>
+                                <Plus data-icon="inline-start" />
+                                Create category
+                            </Button>
                         </EmptyState>
                     ) : null}
 

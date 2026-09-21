@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { ACTIVE_RANKING_LABEL, gotoApp, openAccountMenu, seedUsers, signInViaApi, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, gotoApp, openAccountMenu, openNewCategoryDialog, seedUsers, signInViaApi, winMatchups } from "./helpers";
 import { BASE_URL } from "./constants";
 
 const RANKER = {
@@ -408,7 +408,7 @@ test.describe("Ranking", () => {
         await expect(stats.locator("dt", { hasText: "Added last 30 days" }).locator("xpath=following-sibling::dd").getByText("3", { exact: true })).toBeVisible();
     });
 
-    test("desktop sidebar scrolls instead of collapsing controls on short viewports", async ({
+    test("desktop sidebar stays fixed while category and queue panels scroll", async ({
         page,
         context
     }) => {
@@ -435,40 +435,38 @@ test.describe("Ranking", () => {
         await signInViaApi(context, "short-sidebar@e2e.test");
         await gotoApp(page);
 
-        const metrics = await page.getByTestId("dashboard-sidebar").evaluate((sidebar) => {
-            const controls = Array.from(sidebar.querySelectorAll<HTMLElement>("input, button, [role='combobox']"));
-            const sections = Array.from(sidebar.querySelectorAll<HTMLElement>("section"));
-            const protrudingControls = controls.filter((control) => {
-                const section = control.closest("section");
-                if (!section) {
-                    return false;
-                }
+        const sidebar = page.getByTestId("dashboard-sidebar");
+        const categoryPanel = page.getByTestId("category-panel");
+        const queuePanel = page.getByTestId("queue-panel");
+        const metrics = await sidebar.evaluate((element) => ({
+            clientHeight: element.clientHeight,
+            overflowY: getComputedStyle(element).overflowY,
+            scrollHeight: element.scrollHeight
+        }));
+        const categoryMetrics = await categoryPanel.evaluate((element) => ({
+            clientHeight: element.clientHeight,
+            overflowY: getComputedStyle(element).overflowY,
+            scrollHeight: element.scrollHeight
+        }));
+        const queueMetrics = await queuePanel.evaluate((element) => ({
+            clientHeight: element.clientHeight,
+            overflowY: getComputedStyle(element).overflowY,
+            scrollHeight: element.scrollHeight
+        }));
+        const sidebarBox = await sidebar.boundingBox();
+        const categoryBox = await categoryPanel.boundingBox();
+        const queueBox = await queuePanel.boundingBox();
 
-                let ancestor = control.parentElement;
-                while (ancestor && ancestor !== section) {
-                    const overflowY = getComputedStyle(ancestor).overflowY;
-                    if (overflowY === "auto" || overflowY === "scroll") {
-                        return false;
-                    }
-                    ancestor = ancestor.parentElement;
-                }
-
-                const controlBox = control.getBoundingClientRect();
-                const sectionBox = section.getBoundingClientRect();
-                return controlBox.top < sectionBox.top - 1 || controlBox.bottom > sectionBox.bottom + 1;
-            });
-
-            return {
-                clientHeight: sidebar.clientHeight,
-                minSectionHeight: Math.min(...sections.map((section) => section.getBoundingClientRect().height)),
-                protrudingControlCount: protrudingControls.length,
-                scrollHeight: sidebar.scrollHeight
-            };
-        });
-
-        expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
-        expect(metrics.minSectionHeight).toBeGreaterThan(80);
-        expect(metrics.protrudingControlCount).toBe(0);
+        expect(metrics.overflowY).toBe("hidden");
+        expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1);
+        expect(categoryMetrics.overflowY).toBe("auto");
+        expect(categoryMetrics.scrollHeight).toBeGreaterThan(categoryMetrics.clientHeight);
+        expect(queueMetrics.overflowY).toBe("auto");
+        expect(queueMetrics.scrollHeight).toBeGreaterThan(queueMetrics.clientHeight);
+        expect((categoryBox?.y ?? 0) + (categoryBox?.height ?? 0)).toBeLessThan(queueBox?.y ?? 0);
+        expect((queueBox?.y ?? 0) + (queueBox?.height ?? 0)).toBeLessThanOrEqual(
+            (sidebarBox?.y ?? 0) + (sidebarBox?.height ?? 0)
+        );
     });
 
     test("repair mode starts, skips, survives reload, and cancels", async ({
@@ -639,8 +637,9 @@ test.describe("Ranking", () => {
         await signInViaApi(context, RANKER.email);
         await gotoApp(page);
 
-        await page.getByPlaceholder("New category").fill("Books");
-        await page.getByPlaceholder("New category").press("Enter");
+        const categoryDialog = await openNewCategoryDialog(page);
+        await categoryDialog.getByPlaceholder("New category").fill("Books");
+        await categoryDialog.getByPlaceholder("New category").press("Enter");
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
 
         await page.getByPlaceholder("New entry").fill("Dune");

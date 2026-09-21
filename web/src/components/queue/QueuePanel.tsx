@@ -149,8 +149,11 @@ export function QueuePanel({
     }
 
     return (
-        <section className="grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.9rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15">
-            <div className="flex flex-wrap items-center justify-between gap-[0.7rem]">
+        <section
+            className="grid h-full min-h-0 min-w-0 max-w-full content-start gap-[0.9rem] overflow-x-hidden overflow-y-auto rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15 [scrollbar-gutter:stable] max-[720px]:h-fit max-[720px]:min-h-max max-[720px]:overflow-visible max-[720px]:[scrollbar-gutter:auto]"
+            data-testid="queue-panel"
+        >
+            <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-[0.7rem] bg-card max-[720px]:static">
                 <strong className="min-w-0 max-w-full">Queue</strong>
                 <div className="flex min-w-0 max-w-full flex-wrap justify-end gap-[0.4rem]">
                     <span className={METRIC_CLASS}>{queuedEntries.length} queued</span>
@@ -264,7 +267,7 @@ export function QueuePanel({
             )}
 
             {queuedEntries.length > 0 && displayedEntries.length > 0 ? (
-                <div className="grid max-h-[min(42vh,520px)] min-h-0 min-w-0 gap-[0.55rem] overflow-x-hidden overflow-y-auto pr-2 [scrollbar-gutter:stable] max-[720px]:max-h-none max-[720px]:overflow-y-visible max-[720px]:pr-0 max-[720px]:[scrollbar-gutter:auto]">
+                <div className="grid min-h-0 min-w-0 gap-[0.55rem] pr-1 max-[720px]:pr-0">
                     {visibleQueuedEntries.map((entry) => (
                         <QueuedEntryRow
                             metadataDisabled={busy}

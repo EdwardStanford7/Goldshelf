@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { ACTIVE_RANKING_LABEL, gotoApp, openAccountMenu, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, gotoApp, openAccountMenu, openNewCategoryDialog, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
 
 const QUINN = {
     email: "quinn@e2e.test",
@@ -137,8 +137,9 @@ test.describe("Queue", () => {
         await withSettingsSaved(page, () => page.getByRole("menuitemcheckbox", { name: "Randomize queue ranking" }).click());
         await closeAccountMenu(page);
 
-        await page.getByPlaceholder("New category").fill("Books");
-        await page.getByPlaceholder("New category").press("Enter");
+        const categoryDialog = await openNewCategoryDialog(page);
+        await categoryDialog.getByPlaceholder("New category").fill("Books");
+        await categoryDialog.getByPlaceholder("New category").press("Enter");
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
 
         await page.getByPlaceholder("New entry").fill("Dune");
@@ -433,21 +434,22 @@ test.describe("Queue", () => {
         }]);
         await signInViaApi(context, "queue-batch@e2e.test");
         await gotoApp(page);
-        await expect(page.getByText("4 queued", { exact: true })).toBeVisible();
+        const queuePanel = page.getByTestId("queue-panel");
+        await expect(queuePanel.getByText("4 queued", { exact: true })).toBeVisible();
 
-        await page.getByRole("button", { name: "Select", exact: true }).click();
-        await expect(page.getByText("0 selected")).toBeVisible();
-        await page.getByRole("checkbox", { name: "Select queued Memento" }).click();
-        await page.getByRole("checkbox", { name: "Select queued Solaris" }).click({ modifiers: ["Shift"] });
-        await expect(page.getByText("3 selected")).toBeVisible();
-        await page.getByRole("checkbox", { name: "Select queued Klute" }).click({ modifiers: ["Meta"] });
-        await expect(page.getByText("2 selected")).toBeVisible();
-        await page.getByRole("checkbox", { name: "Select queued Stalker" }).click();
-        await expect(page.getByText("3 selected")).toBeVisible();
-        await page.getByRole("checkbox", { name: "Select queued Stalker" }).click();
-        await expect(page.getByText("2 selected")).toBeVisible();
+        await queuePanel.getByRole("button", { name: "Select", exact: true }).click();
+        await expect(queuePanel.getByText("0 selected")).toBeVisible();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Memento" }).click();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Solaris" }).click({ modifiers: ["Shift"] });
+        await expect(queuePanel.getByText("3 selected")).toBeVisible();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Klute" }).click({ modifiers: ["Meta"] });
+        await expect(queuePanel.getByText("2 selected")).toBeVisible();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Stalker" }).click();
+        await expect(queuePanel.getByText("3 selected")).toBeVisible();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Stalker" }).click();
+        await expect(queuePanel.getByText("2 selected")).toBeVisible();
 
-        await page.getByRole("button", { name: "Remove selected" }).click();
+        await queuePanel.getByRole("button", { name: "Remove selected" }).click();
         await expect(page.getByText("Removed 2 queued entries.")).toBeVisible();
         await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
         await expect(queueItem(page, "Memento")).toBeHidden();
@@ -490,17 +492,18 @@ test.describe("Queue", () => {
         await page.getByPlaceholder("New entry").fill("Blade Runner");
         await page.getByPlaceholder("New entry").press("Enter");
         await expect(page.getByText("Queued Blade Runner for ranking.")).toBeVisible();
-        await expect(page.getByText("2 queued", { exact: true })).toBeVisible();
+        const queuePanel = page.getByTestId("queue-panel");
+        await expect(queuePanel.getByText("2 queued", { exact: true })).toBeVisible();
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible();
 
         await queueItem(page, "Blade Runner").click({ button: "right" });
         await expect(page.getByRole("menuitem", { name: "Rank Now" })).toBeDisabled();
         await expect(page.getByRole("menuitem", { name: "Remove" })).toBeEnabled();
         await page.keyboard.press("Escape");
-        await page.getByRole("button", { name: "Select", exact: true }).click();
-        await page.getByRole("checkbox", { name: "Select queued Blade Runner" }).click();
-        await expect(page.getByText("1 selected")).toBeVisible();
-        await page.getByRole("button", { name: "Remove selected" }).click();
+        await queuePanel.getByRole("button", { name: "Select", exact: true }).click();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Blade Runner" }).click();
+        await expect(queuePanel.getByText("1 selected")).toBeVisible();
+        await queuePanel.getByRole("button", { name: "Remove selected" }).click();
         await expect(page.getByText("Removed 1 queued entry.")).toBeVisible();
         await expect(page.getByText("1 queued", { exact: true })).toBeVisible();
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible();

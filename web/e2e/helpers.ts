@@ -20,6 +20,15 @@ export async function gotoApp(page: Page, path = "/") {
     await page.waitForSelector("html[data-hydrated]", { timeout: 15_000 });
 }
 
+export async function openNewCategoryDialog(page: Page): Promise<Locator> {
+    const dialog = page.getByRole("dialog", { name: "New Category" });
+    if (!await dialog.isVisible().catch(() => false)) {
+        await page.getByRole("button", { name: "New category" }).first().click();
+    }
+    await expect(dialog).toBeVisible();
+    return dialog;
+}
+
 /** Opens the account menu and waits for its content to be usable. */
 export async function openAccountMenu(page: Page): Promise<Locator> {
     const accountButton = page.getByRole("button", { name: "Account menu" });

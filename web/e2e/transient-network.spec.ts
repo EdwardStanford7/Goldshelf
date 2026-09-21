@@ -1,6 +1,6 @@
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { ACTIVE_RANKING_LABEL, abortNextServerFn, dispatchPersistedPageShow, gotoApp, seedUsers, signInViaApi } from "./helpers";
+import { ACTIVE_RANKING_LABEL, abortNextServerFn, dispatchPersistedPageShow, gotoApp, openNewCategoryDialog, seedUsers, signInViaApi } from "./helpers";
 
 const REQUEST_LOAD_FAILURE_MESSAGE = "Could not reach the server. Please try again.";
 const USER = {
@@ -53,8 +53,9 @@ test.describe("Transient network failures", () => {
         await gotoApp(page);
 
         const didAbortCreateCategory = await abortNextServerFn(page, "createCategory");
-        await page.getByPlaceholder("New category").fill("Books");
-        await page.getByPlaceholder("New category").press("Enter");
+        const categoryDialog = await openNewCategoryDialog(page);
+        await categoryDialog.getByPlaceholder("New category").fill("Books");
+        await categoryDialog.getByPlaceholder("New category").press("Enter");
 
         await expect(page.getByText(REQUEST_LOAD_FAILURE_MESSAGE)).toBeVisible({ timeout: 15_000 });
         expect(didAbortCreateCategory()).toBe(true);
@@ -72,8 +73,9 @@ test.describe("Transient network failures", () => {
         await gotoApp(page);
 
         const didAbortLoadDashboard = await abortNextServerFn(page, "loadDashboard");
-        await page.getByPlaceholder("New category").fill("Books");
-        await page.getByPlaceholder("New category").press("Enter");
+        const categoryDialog = await openNewCategoryDialog(page);
+        await categoryDialog.getByPlaceholder("New category").fill("Books");
+        await categoryDialog.getByPlaceholder("New category").press("Enter");
 
         await expect.poll(didAbortLoadDashboard, { timeout: 2_000 }).toBe(true);
         await expect(page.getByText(REQUEST_LOAD_FAILURE_MESSAGE)).toBeHidden();
