@@ -145,19 +145,32 @@ export async function getRepairSessionView(
 
 export async function startRepairSession(
     userId: string,
-    input: { categoryId?: string | null }
+    input: { categoryId?: string | null; categoryIds?: string[] }
 ) {
     await repairInterruptedRepairState(userId);
     await assertNoActiveBinaryRankingSession(userId);
     await assertNoActiveRepairSession(userId);
 
-    const scopeCategoryId = input.categoryId?.trim() || null;
-    if (scopeCategoryId) {
-        const category = await getOwnedCategory(userId, scopeCategoryId);
-        assertOwned(category, "Category");
+    const requestedCategoryIds = Array.from(new Set(
+        (input.categoryIds ?? (input.categoryId ? [input.categoryId] : []))
+            .map((categoryId) => categoryId.trim())
+            .filter(Boolean)
+    ));
+    if (requestedCategoryIds.length > 0) {
+        const ownedCategories = await all<{ id: string }>(
+            getDb()
+                .prepare(`SELECT id FROM categories WHERE user_id = ?`)
+                .bind(userId)
+        );
+        const ownedCategoryIds = new Set(ownedCategories.map((category) => category.id));
+        if (requestedCategoryIds.some((categoryId) => !ownedCategoryIds.has(categoryId))) {
+            throw new Error("One or more categories could not be found");
+        }
     }
 
-    const state = emptyRepairOperationState();
+    const scopeCategoryId = requestedCategoryIds.length === 1 ? requestedCategoryIds[0] : null;
+    const categoryScopeIds = requestedCategoryIds.length > 1 ? requestedCategoryIds : null;
+    const state = emptyRepairOperationState(categoryScopeIds);
     const scope: RepairScope = scopeCategoryId ? "category" : "all";
     const matchup = await chooseNextRepairMatchup(userId, scope, scopeCategoryId, state);
     if (!matchup) {
@@ -618,7 +631,7 @@ async function chooseNextRepairMatchup(
             : null;
     }
 
-    const candidates = await all<RepairCategoryCandidate>(
+    let candidates = await all<RepairCategoryCandidate>(
         getDb()
             .prepare(
                 `SELECT categories.id, categories.name, COUNT(entries.id) AS entryCount
@@ -634,6 +647,10 @@ async function chooseNextRepairMatchup(
             )
             .bind(userId)
     );
+    if (state.categoryScopeIds) {
+        const selectedCategoryIds = new Set(state.categoryScopeIds);
+        candidates = candidates.filter((category) => selectedCategoryIds.has(category.id));
+    }
     if (candidates.length === 0) {
         return null;
     }

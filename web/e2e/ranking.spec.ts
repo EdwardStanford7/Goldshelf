@@ -487,7 +487,10 @@ test.describe("Ranking", () => {
         await signInViaApi(context, "repair-loop@e2e.test");
         await gotoApp(page);
 
-        await page.getByRole("button", { name: "Repair Mode" }).click();
+        const categoryPanel = page.getByTestId("dashboard-sidebar").locator("section").filter({ hasText: "Categories" }).first();
+        await categoryPanel.getByRole("button", { name: "Select", exact: true }).click();
+        await categoryPanel.getByRole("button", { name: "Select all" }).click();
+        await categoryPanel.getByRole("button", { name: "Repair selected" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("New Entry")).toBeVisible();
         await expect(page.getByRole("button", { name: "Queue", exact: true })).toBeVisible();
@@ -507,6 +510,63 @@ test.describe("Ranking", () => {
         await page.getByRole("button", { name: "Exit Repair Mode" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeHidden({ timeout: 15_000 });
         await expect(page.getByText("New Entry")).toBeVisible();
+    });
+
+    test("category selection supports scoped repair and batch rerank actions", async ({
+        page,
+        context
+    }) => {
+        await seedUsers([{
+            email: "category-batch@e2e.test",
+            name: "Category Batch",
+            queueSettings: {
+                enabled: false,
+                promptForMissingImages: false
+            },
+            categories: [
+                { name: "Books", entries: ["Dune", "Foundation"] },
+                { name: "Movies", entries: ["Arrival", "Heat", "Memento"] },
+                { name: "Music", entries: ["Blue", "Kind of Blue"] }
+            ]
+        }]);
+        await signInViaApi(context, "category-batch@e2e.test");
+        await gotoApp(page);
+
+        const categoryPanel = page.getByTestId("dashboard-sidebar").locator("section").filter({ hasText: "Categories" }).first();
+        await categoryPanel.getByRole("button", { name: "Select", exact: true }).click();
+        await categoryPanel.getByRole("checkbox", { name: "Select category Books" }).click();
+        await categoryPanel.getByRole("checkbox", { name: "Select category Movies" }).click();
+        await expect(categoryPanel.getByText("2 selected")).toBeVisible();
+
+        await categoryPanel.getByRole("button", { name: "Repair selected" }).click();
+        await expect(page.getByText(/Repair Check · (Books|Movies)/)).toBeVisible({ timeout: 15_000 });
+        await page.getByRole("button", { name: "Exit Repair Mode" }).click();
+
+        await categoryPanel.getByRole("button", { name: "Select", exact: true }).click();
+        await categoryPanel.getByRole("checkbox", { name: "Select category Books" }).click();
+        await categoryPanel.getByRole("checkbox", { name: "Select category Movies" }).click();
+        await categoryPanel.getByRole("button", { name: "Show", exact: true }).click();
+        await expect(page.getByText("Showing 2 selected categories on your profile.")).toBeVisible();
+        await categoryPanel.getByRole("button", { name: "Done" }).click();
+
+        await page.locator("[data-category-id]").filter({ hasText: "Books" }).click({ button: "right" });
+        await expect(page.getByRole("menuitem", { name: "Hide from Profile" })).toBeVisible();
+        await page.keyboard.press("Escape");
+
+        await categoryPanel.getByRole("button", { name: "Select", exact: true }).click();
+        await categoryPanel.getByRole("checkbox", { name: "Select category Books" }).click();
+        await categoryPanel.getByRole("checkbox", { name: "Select category Movies" }).click();
+        await categoryPanel.getByRole("button", { name: "Move to queue" }).click();
+
+        await expect(page.getByRole("alertdialog")).toContainText("Rerank 2 categories?");
+        await expect(page.getByRole("alertdialog")).toContainText("5 entries");
+        await page.getByRole("button", { name: "Move to Queue" }).click();
+
+        await expect(page.getByText("Moved 5 ranked entries to the queue.")).toBeVisible({ timeout: 15_000 });
+        await expect(categoryPanel.getByRole("button", { name: /Books · 0/ })).toBeVisible();
+        await expect(categoryPanel.getByRole("button", { name: /Movies · 0/ })).toBeVisible();
+        await expect(page.getByText("5 queued")).toBeVisible();
+        await expect(categoryPanel.getByRole("button", { name: /Music · 2/ })).toBeVisible();
     });
 
     test("repair anomaly enters local repair and active choices expose metadata actions", async ({

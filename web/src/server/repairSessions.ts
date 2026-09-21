@@ -11,7 +11,7 @@ import {
 
 export const startRepairSession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryId?: string | null }) => data)
+    .inputValidator((data: { categoryId?: string | null; categoryIds?: string[] }) => data)
     .handler(({ context, data }) => startRepairSessionForUser(context.user.id, data));
 
 export const getRepairSession = createServerFn({ method: "GET" })

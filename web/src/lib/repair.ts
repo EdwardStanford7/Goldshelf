@@ -58,6 +58,7 @@ export type PairRepairState = AdjacentRepairState | BinaryReinsertRepairState;
 
 export interface RepairOperationState {
     kind: "repair_operation_state";
+    categoryScopeIds: string[] | null;
     recentPairs: string[];
     comparisons: RankingComparison[];
     currentCheck: RepairCurrentCheck | null;
@@ -80,9 +81,10 @@ export interface PairRepairAdvanceResult {
     complete: boolean;
 }
 
-export function emptyRepairOperationState(): RepairOperationState {
+export function emptyRepairOperationState(categoryScopeIds: string[] | null = null): RepairOperationState {
     return {
         kind: "repair_operation_state",
+        categoryScopeIds: normalizeCategoryScopeIds(categoryScopeIds),
         recentPairs: [],
         comparisons: [],
         currentCheck: null,
@@ -107,6 +109,7 @@ export function parseRepairOperationState(value: string | null | undefined): Rep
 
         return {
             kind: "repair_operation_state",
+            categoryScopeIds: normalizeCategoryScopeIds(parsed.categoryScopeIds),
             recentPairs: normalizeRecentPairs(parsed.recentPairs),
             comparisons: normalizeComparisons(parsed.comparisons),
             currentCheck: normalizeCurrentCheck(parsed.currentCheck),
@@ -115,6 +118,20 @@ export function parseRepairOperationState(value: string | null | undefined): Rep
     } catch {
         return emptyRepairOperationState();
     }
+}
+
+function normalizeCategoryScopeIds(value: unknown): string[] | null {
+    if (!Array.isArray(value)) {
+        return null;
+    }
+
+    const ids = Array.from(new Set(
+        value
+            .filter((id): id is string => typeof id === "string")
+            .map((id) => id.trim())
+            .filter(Boolean)
+    ));
+    return ids.length > 0 ? ids : null;
 }
 
 export function addRepairComparison(

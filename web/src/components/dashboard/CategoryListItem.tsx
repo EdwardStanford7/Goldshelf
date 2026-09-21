@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -33,10 +33,13 @@ export function CategoryListItem({
     busy,
     canDragReorder,
     listLocked,
+    selectionMode = false,
+    selected = false,
     onDelete,
     onRename,
     onRepair,
     onSelect,
+    onSelection,
     onToggleVisibility
 }: {
     category: CategoryWithEntries;
@@ -44,10 +47,13 @@ export function CategoryListItem({
     busy: boolean;
     canDragReorder: boolean;
     listLocked: boolean;
+    selectionMode?: boolean;
+    selected?: boolean;
     onDelete: () => void;
     onRename: (name: string) => Promise<void>;
     onRepair: () => void;
     onSelect: () => void;
+    onSelection?: (event: MouseEvent<HTMLElement>, options?: { forceAdditive?: boolean }) => void;
     onToggleVisibility: () => void;
 }) {
     const [isRenaming, setIsRenaming] = useState(false);
@@ -62,7 +68,7 @@ export function CategoryListItem({
     // inner category button e2e selects by name).
     const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: category.id,
-        disabled: !canDragReorder || isRenaming || menuOpen
+        disabled: !canDragReorder || selectionMode || isRenaming || menuOpen
     });
 
     useEffect(() => {
@@ -116,22 +122,31 @@ export function CategoryListItem({
 
     return (
         <ContextMenu onOpenChange={setMenuOpen}>
-            <ContextMenuTrigger asChild disabled={busy}>
+            <ContextMenuTrigger asChild disabled={busy || selectionMode}>
                 <div
                     ref={setNodeRef}
-                    className={`relative min-w-0 ${canDragReorder ? "cursor-grab" : ""} ${isDragging ? "opacity-40" : ""}`.trim()}
+                    className={`relative min-w-0 ${canDragReorder && !selectionMode ? "cursor-grab" : ""} ${selectionMode ? "cursor-pointer" : ""} ${isDragging ? "opacity-40" : ""}`.trim()}
+                    onClick={(event) => {
+                        if (selectionMode) {
+                            onSelection?.(event);
+                        }
+                    }}
                     data-category-id={category.id}
                     style={{ transform: CSS.Transform.toString(transform), transition }}
                     {...listeners}
                 >
                     <button
-                        className={`${categoryButtonClass(isActive)} ${canDragReorder ? "pr-9" : ""} max-[720px]:pr-10`.trim()}
+                        className={`${categoryButtonClass(isActive)} ${selectionMode ? "pl-9" : ""} ${canDragReorder && !selectionMode ? "pr-9" : ""} ${selectionMode ? "" : "max-[720px]:pr-10"}`.trim()}
                         disabled={busy}
                         title="Double-click to rename · Right-click for actions"
                         type="button"
-                        onClick={onSelect}
+                        onClick={() => {
+                            if (!selectionMode) {
+                                onSelect();
+                            }
+                        }}
                         onDoubleClick={() => {
-                            if (!busy) {
+                            if (!busy && !selectionMode) {
                                 startRename();
                             }
                         }}
@@ -139,7 +154,20 @@ export function CategoryListItem({
                         <strong>{category.name}</strong>
                         <span className="text-muted-foreground"> · {category.entries.length}</span>
                     </button>
-                    {canDragReorder ? (
+                    {selectionMode ? (
+                        <input
+                            aria-label={`Select category ${category.name}`}
+                            checked={selected}
+                            className="absolute top-1/2 left-2 z-10 w-auto -translate-y-1/2"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onSelection?.(event, { forceAdditive: !event.shiftKey });
+                            }}
+                            readOnly
+                            type="checkbox"
+                        />
+                    ) : null}
+                    {canDragReorder && !selectionMode ? (
                         <span
                             aria-hidden="true"
                             className="pointer-events-none absolute top-1/2 right-2 flex -translate-y-1/2 items-center justify-center text-muted-foreground max-[720px]:hidden"
@@ -147,7 +175,7 @@ export function CategoryListItem({
                             <GripVertical className="size-4" />
                         </span>
                     ) : null}
-                    <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
+                    {!selectionMode ? <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 aria-label={`Actions for ${category.name}`}
@@ -184,7 +212,7 @@ export function CategoryListItem({
                                 <Trash2 />Delete
                             </DropdownMenuItem>
                         </DropdownMenuContent>
-                    </DropdownMenu>
+                    </DropdownMenu> : null}
                 </div>
             </ContextMenuTrigger>
             <ContextMenuContent>

@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -17,7 +17,7 @@ import {
     rectSortingStrategy,
     verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { BarChart3, CalendarDays, Library, ListPlus, Menu, Plus, Search, Swords, Wrench } from "lucide-react";
+import { BarChart3, CalendarDays, Globe2, Library, ListChecks, ListPlus, Lock, Menu, Plus, Search, Swords, Wrench, X } from "lucide-react";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { BinaryRankPanel } from "@/components/ranking/BinaryRankPanel";
 import { RepairRankPanel } from "@/components/ranking/RepairRankPanel";
@@ -68,14 +68,17 @@ import {
 import { shouldPromptForImage } from "@/lib/images";
 import type { ImagePickerTarget } from "@/lib/posterImage";
 import { ONBOARDING_SAMPLE_PENDING_KEY } from "@/lib/onboarding";
+import { nextMultiSelection } from "@/lib/multiSelect";
 import { SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
 import { orderEntries } from "@/lib/ranking";
 import {
     createCategory,
     deleteCategory,
+    moveCategoriesToQueue,
     moveCategoryRelativeToCategory,
     renameCategory,
+    updateCategoriesVisibility,
     updateCategoryVisibility
 } from "@/server/categories";
 import { loadDashboard } from "@/server/dashboard";
@@ -389,6 +392,10 @@ export function Dashboard({
     const [imagePickerTarget, setImagePickerTarget] = useState<ImagePickerTarget | null>(null);
     const [importToastOpen, setImportToastOpen] = useState(false);
     const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<CategoryWithEntries | null>(null);
+    const [categoryQueueTargets, setCategoryQueueTargets] = useState<CategoryWithEntries[] | null>(null);
+    const [categorySelectionMode, setCategorySelectionMode] = useState(false);
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(new Set());
+    const [categorySelectionAnchorId, setCategorySelectionAnchorId] = useState<string | null>(null);
     const [imageRefreshVersion, setImageRefreshVersion] = useState(0);
     const [autoImagePromptedIds, setAutoImagePromptedIds] = useState<Set<string>>(() => new Set());
     const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialThemeMode());
@@ -435,6 +442,18 @@ export function Dashboard({
         () => applyDragOrder(dashboard.categories, categoryDragOrder),
         [categoryDragOrder, dashboard.categories]
     );
+    const selectedCategories = useMemo(
+        () => orderedCategories.filter((category) => selectedCategoryIds.has(category.id)),
+        [orderedCategories, selectedCategoryIds]
+    );
+    const selectedRepairCategories = useMemo(
+        () => selectedCategories.filter((category) => category.entries.length >= 2),
+        [selectedCategories]
+    );
+    const selectedRankedEntryCount = useMemo(
+        () => selectedCategories.reduce((count, category) => count + category.entries.length, 0),
+        [selectedCategories]
+    );
     const entryDateRange = useMemo(
         () => entryDateFilterRange(entryDateFilterPreset, customDateFrom, customDateTo),
         [customDateFrom, customDateTo, entryDateFilterPreset]
@@ -469,7 +488,7 @@ export function Dashboard({
     const activeFlowId = activeSessionId ?? activeRepairSessionId;
     const activeFlowLocked = Boolean(activeFlowId);
     const forceQueueNewEntry = activeFlowLocked || queueRankMode;
-    const canDragReorderCategories = !busy && !activeFlowLocked && dashboard.categories.length > 1;
+    const canDragReorderCategories = !busy && !activeFlowLocked && !categorySelectionMode && dashboard.categories.length > 1;
     const canCreateCategory = categoryDraftName.trim().length > 0;
     const canCreateEntry = entryDraftName.trim().length > 0;
     const entryCountSummary = selectedCategory
@@ -481,6 +500,27 @@ export function Dashboard({
     useEffect(() => {
         setEntryCategoryId(selectedCategory?.id ?? "");
     }, [selectedCategory?.id]);
+
+    useEffect(() => {
+        if ((activeFlowLocked || queueRankMode) && categorySelectionMode) {
+            setCategorySelectionMode(false);
+            setSelectedCategoryIds(new Set());
+            setCategorySelectionAnchorId(null);
+        }
+    }, [activeFlowLocked, categorySelectionMode, queueRankMode]);
+
+    useEffect(() => {
+        const currentCategoryIds = new Set(dashboard.categories.map((category) => category.id));
+        setSelectedCategoryIds((currentSelectedIds) => new Set(
+            [...currentSelectedIds].filter((categoryId) => currentCategoryIds.has(categoryId))
+        ));
+        if (categorySelectionAnchorId && !currentCategoryIds.has(categorySelectionAnchorId)) {
+            setCategorySelectionAnchorId(null);
+        }
+        if (dashboard.categories.length === 0) {
+            setCategorySelectionMode(false);
+        }
+    }, [categorySelectionAnchorId, dashboard.categories]);
 
     useEffect(() => {
         if (onboardingSampleAttemptedRef.current || dashboard.categories.length > 0) {
@@ -1315,6 +1355,81 @@ export function Dashboard({
         }
     }
 
+    function closeCategorySelectionMode() {
+        setCategorySelectionMode(false);
+        setSelectedCategoryIds(new Set());
+        setCategorySelectionAnchorId(null);
+    }
+
+    function handleCategorySelection(
+        category: CategoryWithEntries,
+        event: MouseEvent<HTMLElement>,
+        options: { forceAdditive?: boolean } = {}
+    ) {
+        if (!categorySelectionMode || busy) {
+            return;
+        }
+
+        const nextSelection = nextMultiSelection({
+            anchorId: categorySelectionAnchorId,
+            clickedId: category.id,
+            ctrlKey: options.forceAdditive ? true : event.ctrlKey,
+            metaKey: event.metaKey,
+            orderedIds: orderedCategories.map((candidate) => candidate.id),
+            plainBehavior: "focus-or-toggle",
+            selectedIds: selectedCategoryIds,
+            shiftKey: event.shiftKey
+        });
+        setSelectedCategoryIds(nextSelection.selectedIds);
+        setCategorySelectionAnchorId(nextSelection.anchorId);
+    }
+
+    async function handleUpdateSelectedCategoryVisibility(isPublic: boolean) {
+        if (selectedCategories.length === 0) {
+            return;
+        }
+
+        startBusy(isPublic ? "Showing selected categories..." : "Hiding selected categories...");
+        setMessage(null);
+        try {
+            await updateCategoriesVisibility({
+                data: {
+                    categoryIds: selectedCategories.map((category) => category.id),
+                    isPublic
+                }
+            });
+            const count = selectedCategories.length;
+            await refreshAfterMutation();
+            setMessage(
+                isPublic
+                    ? `Showing ${count} selected ${count === 1 ? "category" : "categories"} on your profile.`
+                    : `Hiding ${count} selected ${count === 1 ? "category" : "categories"} from your profile.`
+            );
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
+    async function handleMoveSelectedCategoriesToQueue(categories: CategoryWithEntries[]) {
+        setCategoryQueueTargets(null);
+        startBusy("Moving ranked entries to the queue...");
+        setMessage(null);
+        try {
+            const result = await moveCategoriesToQueue({
+                data: { categoryIds: categories.map((category) => category.id) }
+            });
+            closeCategorySelectionMode();
+            await refreshAfterMutation();
+            setMessage(`Moved ${result.movedCount} ranked ${result.movedCount === 1 ? "entry" : "entries"} to the queue.`);
+        } catch (error) {
+            setErrorMessage(error);
+        } finally {
+            finishBusy();
+        }
+    }
+
     async function handleCreateEntry(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const formElement = event.currentTarget;
@@ -1932,13 +2047,18 @@ export function Dashboard({
         }
     }
 
-    async function handleStartRepair(categoryId: string | null, closeDrawer = false) {
+    async function handleStartRepair(
+        categoryId: string | null,
+        closeDrawer = false,
+        categoryIds?: string[]
+    ) {
         setQueueRankingActive(false);
-        startBusy(categoryId ? "Starting category repair..." : "Starting repair mode...");
+        startBusy(categoryIds ? "Starting selected category repair..." : categoryId ? "Starting category repair..." : "Starting repair mode...");
         setMessage(null);
 
         try {
-            const result = await startRepairSession({ data: { categoryId } });
+            const result = await startRepairSession({ data: { categoryId, categoryIds } });
+            closeCategorySelectionMode();
             setActiveRepairSessionId(result.sessionId);
             setSelectedCategoryId(result.categoryId);
             if (closeDrawer) {
@@ -2401,22 +2521,103 @@ export function Dashboard({
     }
 
     function renderCategoryList(closeOnSelect = false, closeOnRepair = false) {
-        const hasRepairableCategory = dashboard.categories.some((category) => category.entries.length >= 2);
         return (
             <section className={SIDEBAR_PANEL_CLASS}>
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                     <strong className="min-w-0 max-w-full">Categories</strong>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy || activeFlowLocked || !hasRepairableCategory}
-                        type="button"
-                        onClick={() => void handleStartRepair(null, closeOnRepair)}
-                    >
-                        <Wrench data-icon="inline-start" />
-                        <span>Repair Mode</span>
-                    </Button>
+                    {!categorySelectionMode ? (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || activeFlowLocked || dashboard.categories.length === 0}
+                            type="button"
+                            onClick={() => setCategorySelectionMode(true)}
+                        >
+                            <ListChecks data-icon="inline-start" />
+                            <span>Select</span>
+                        </Button>
+                    ) : null}
                 </div>
+                {categorySelectionMode ? (
+                    <div className="grid gap-2 rounded-sm border border-border bg-muted p-2">
+                        <div className="text-sm text-muted-foreground">
+                            {selectedCategories.length} selected
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                disabled={busy || selectedRepairCategories.length === 0}
+                                size="sm"
+                                type="button"
+                                onClick={() => void handleStartRepair(
+                                    null,
+                                    closeOnRepair,
+                                    selectedRepairCategories.map((category) => category.id)
+                                )}
+                            >
+                                <Wrench data-icon="inline-start" />
+                                <span>Repair selected</span>
+                            </Button>
+                            <Button
+                                disabled={busy || selectedRankedEntryCount === 0}
+                                size="sm"
+                                type="button"
+                                variant="destructive"
+                                onClick={() => setCategoryQueueTargets(selectedCategories)}
+                            >
+                                <ListPlus data-icon="inline-start" />
+                                <span>Move to queue</span>
+                            </Button>
+                            <Button
+                                disabled={busy || selectedCategories.length === 0}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => void handleUpdateSelectedCategoryVisibility(true)}
+                            >
+                                <Globe2 data-icon="inline-start" />
+                                <span>Show</span>
+                            </Button>
+                            <Button
+                                disabled={busy || selectedCategories.length === 0}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => void handleUpdateSelectedCategoryVisibility(false)}
+                            >
+                                <Lock data-icon="inline-start" />
+                                <span>Hide</span>
+                            </Button>
+                            <Button
+                                disabled={busy || selectedCategories.length === orderedCategories.length}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setSelectedCategoryIds(new Set(orderedCategories.map((category) => category.id)));
+                                    setCategorySelectionAnchorId(orderedCategories[0]?.id ?? null);
+                                }}
+                            >
+                                Select all
+                            </Button>
+                            <Button
+                                disabled={busy || selectedCategories.length === 0}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setSelectedCategoryIds(new Set());
+                                    setCategorySelectionAnchorId(null);
+                                }}
+                            >
+                                Clear
+                            </Button>
+                            <Button disabled={busy} size="sm" type="button" variant="outline" onClick={closeCategorySelectionMode}>
+                                <X data-icon="inline-start" />
+                                <span>Done</span>
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
                 <DndContext
                     sensors={sensors}
                     onDragStart={handleCategoryDragStart}
@@ -2436,10 +2637,13 @@ export function Dashboard({
                                     busy={busy}
                                     canDragReorder={canDragReorderCategories}
                                     listLocked={activeFlowLocked}
+                                    selectionMode={categorySelectionMode}
+                                    selected={selectedCategoryIds.has(category.id)}
                                     onDelete={() => setCategoryDeleteTarget(category)}
                                     onRename={(name) => handleRenameCategory(category.id, name)}
                                     onRepair={() => void handleStartRepair(category.id, closeOnRepair)}
                                     onSelect={() => selectCategory(category.id, closeOnSelect)}
+                                    onSelection={(event, options) => handleCategorySelection(category, event, options)}
                                     onToggleVisibility={() => void handleToggleCategoryVisibility(category)}
                                 />
                             ))}
@@ -2681,6 +2885,17 @@ export function Dashboard({
             ) : null}
             {renderCategoryStatsSheet()}
             {renderMobilePanelSheet()}
+            {categoryQueueTargets ? (
+                <ConfirmDialog
+                    confirmLabel="Move to Queue"
+                    title={`Rerank ${categoryQueueTargets.length === 1 ? categoryQueueTargets[0]?.name : `${categoryQueueTargets.length} categories`}?`}
+                    variant="danger"
+                    onCancel={() => setCategoryQueueTargets(null)}
+                    onConfirm={() => void handleMoveSelectedCategoriesToQueue(categoryQueueTargets)}
+                >
+                    This removes the current ranked order for {categoryQueueTargets.reduce((count, category) => count + category.entries.length, 0)} entries and moves them into the queue to be ranked again. This cannot be undone.
+                </ConfirmDialog>
+            ) : null}
             {categoryDeleteTarget ? (
                 <ConfirmDialog
                     confirmLabel="Delete Category"

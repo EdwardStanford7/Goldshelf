@@ -198,3 +198,142 @@ export const updateCategoryVisibility = createServerFn({ method: "POST" })
 
         return { categoryId: input.categoryId, isPublic: input.isPublic };
     });
+
+function normalizeCategoryIds(value: unknown) {
+    if (!Array.isArray(value)) {
+        throw new Error("Categories are required");
+    }
+
+    const categoryIds = Array.from(new Set(
+        value
+            .filter((id): id is string => typeof id === "string")
+            .map((id) => id.trim())
+            .filter(Boolean)
+    ));
+    if (categoryIds.length === 0) {
+        throw new Error("Choose at least one category");
+    }
+    return categoryIds;
+}
+
+async function assertOwnedCategoryIds(userId: string, categoryIds: string[]) {
+    const result = await first<{ category_count: number }>(
+        getDb()
+            .prepare(
+                `SELECT COUNT(*) AS category_count
+                 FROM categories
+                 WHERE user_id = ?
+                   AND id IN (SELECT value FROM json_each(?))`
+            )
+            .bind(userId, JSON.stringify(categoryIds))
+    );
+    if ((result?.category_count ?? 0) !== categoryIds.length) {
+        throw new Error("One or more categories could not be found");
+    }
+}
+
+export const updateCategoriesVisibility = createServerFn({ method: "POST" })
+    .middleware([authMiddleware])
+    .inputValidator((data: { categoryIds: string[]; isPublic: boolean }) => data)
+    .handler(async ({ context, data: input }) => {
+        const userId = context.user.id;
+        const categoryIds = normalizeCategoryIds(input.categoryIds);
+        await assertOwnedCategoryIds(userId, categoryIds);
+
+        await getDb()
+            .prepare(
+                `UPDATE categories
+                 SET is_public = ?, updated_at = ?
+                 WHERE user_id = ?
+                   AND id IN (SELECT value FROM json_each(?))`
+            )
+            .bind(input.isPublic ? 1 : 0, now(), userId, JSON.stringify(categoryIds))
+            .run();
+
+        return { updatedCount: categoryIds.length, isPublic: input.isPublic };
+    });
+
+export const moveCategoriesToQueue = createServerFn({ method: "POST" })
+    .middleware([authMiddleware])
+    .inputValidator((data: { categoryIds: string[] }) => data)
+    .handler(async ({ context, data }) => {
+        const userId = context.user.id;
+        const categoryIds = normalizeCategoryIds(data.categoryIds);
+        await assertNoActiveBinarySession(userId);
+        await assertOwnedCategoryIds(userId, categoryIds);
+
+        const categoryIdsJson = JSON.stringify(categoryIds);
+        const result = await first<{ entry_count: number }>(
+            getDb()
+                .prepare(
+                    `SELECT COUNT(*) AS entry_count
+                     FROM entries
+                     WHERE user_id = ?
+                       AND status = 'active'
+                       AND category_id IN (SELECT value FROM json_each(?))`
+                )
+                .bind(userId, categoryIdsJson)
+        );
+        const movedCount = result?.entry_count ?? 0;
+        if (movedCount === 0) {
+            throw new Error("The selected categories have no ranked entries to move");
+        }
+
+        const updatedAt = now();
+        const db = getDb();
+        await db.batch([
+            db
+                .prepare(
+                    `UPDATE entry_queue
+                     SET image_key = COALESCE(
+                           image_key,
+                           (
+                             SELECT entries.image_key
+                             FROM entries
+                             WHERE entries.user_id = entry_queue.user_id
+                               AND entries.category_id = entry_queue.category_id
+                               AND entries.name = entry_queue.name
+                               AND entries.status = 'active'
+                           )
+                         ),
+                         updated_at = ?
+                     WHERE user_id = ?
+                       AND status = 'queued'
+                       AND category_id IN (SELECT value FROM json_each(?))
+                       AND EXISTS (
+                         SELECT 1
+                         FROM entries
+                         WHERE entries.user_id = entry_queue.user_id
+                           AND entries.category_id = entry_queue.category_id
+                           AND entries.name = entry_queue.name
+                           AND entries.status = 'active'
+                       )`
+                )
+                .bind(updatedAt, userId, categoryIdsJson),
+            db
+                .prepare(
+                    `INSERT OR IGNORE INTO entry_queue (
+                       id, user_id, category_id, name, status,
+                       created_at, updated_at, image_key
+                     )
+                     SELECT 'queue_' || lower(hex(randomblob(16))), user_id, category_id,
+                            name, 'queued', created_at, ?, image_key
+                     FROM entries
+                     WHERE user_id = ?
+                       AND status = 'active'
+                       AND category_id IN (SELECT value FROM json_each(?))`
+                )
+                .bind(updatedAt, userId, categoryIdsJson),
+            db
+                .prepare(
+                    `UPDATE entries
+                     SET status = 'deleted', image_key = NULL, updated_at = ?
+                     WHERE user_id = ?
+                       AND status = 'active'
+                       AND category_id IN (SELECT value FROM json_each(?))`
+                )
+                .bind(updatedAt, userId, categoryIdsJson)
+        ]);
+
+        return { movedCount, categoryCount: categoryIds.length };
+    });

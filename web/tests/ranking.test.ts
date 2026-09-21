@@ -21,12 +21,14 @@ import {
     advancePairRepairState,
     chooseRepairMatchup,
     emptyRepairOperationState,
+    parseRepairOperationState,
     pickRepairCheckDisplayOrder,
     pickRepairFirstIndex,
     pickRepairGap,
     pickRepairSecondIndex,
     pickWeightedRepairCategory,
     repairPairKey,
+    serializeRepairOperationState,
     startAdjacentRepairState,
     startBinaryReinsertRepairState
 } from "../src/lib/repair";
@@ -240,6 +242,14 @@ describe("ranking comparison cache", () => {
 });
 
 describe("repair mode sampling", () => {
+    it("persists a selected category subset in operation state", () => {
+        const state = emptyRepairOperationState(["cat-a", "cat-b", "cat-a", "  cat-c  "]);
+        const parsed = parseRepairOperationState(serializeRepairOperationState(state));
+
+        expect(parsed.categoryScopeIds).toEqual(["cat-a", "cat-b", "cat-c"]);
+        expect(emptyRepairOperationState().categoryScopeIds).toBeNull();
+    });
+
     it("excludes categories with fewer than two entries and weights by entry count", () => {
         const category = pickWeightedRepairCategory(
             [
