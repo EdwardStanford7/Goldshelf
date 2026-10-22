@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { env } from "cloudflare:workers";
 import { hasStoredImage } from "@/lib/images";
 import { all, assertOwned, first, getDb, newId, now } from "@/server/lib/db";
+import { deleteLegacyImageObject } from "@/server/lib/imageAssets";
 import { MAX_CATEGORY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import {
@@ -176,7 +176,7 @@ export const deleteCategory = createServerFn({ method: "POST" })
                 .bind(now(), userId, category.sort_order)
         ]);
 
-        await Promise.all(imageKeys.map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined)));
+        await Promise.all(imageKeys.map(deleteLegacyImageObject));
     });
 
 export const updateCategoryVisibility = createServerFn({ method: "POST" })

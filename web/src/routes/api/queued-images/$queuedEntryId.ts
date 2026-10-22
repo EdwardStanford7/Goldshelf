@@ -2,6 +2,7 @@ import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
 import { isNoImageKey, hasStoredImage } from "@/lib/images";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
+import { deleteLegacyImageObject, storeContentAddressedImage } from "@/server/lib/imageAssets";
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 
@@ -92,12 +93,7 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                     return Response.json({ message: "Image is too large" }, { status: 413 });
                 }
 
-                const imageKey = `${session.user.id}/queue/${entry.id}-${now()}.jpg`;
-                await env.IMAGES.put(imageKey, image, {
-                    httpMetadata: {
-                        contentType
-                    }
-                });
+                const imageKey = await storeContentAddressedImage(image, contentType);
 
                 try {
                     await getDb()
@@ -109,12 +105,11 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                         .bind(imageKey, now(), entry.id, session.user.id)
                         .run();
                 } catch (error) {
-                    await env.IMAGES.delete(imageKey).catch(() => undefined);
                     throw error;
                 }
 
-                if (hasStoredImage(entry.image_key) && entry.image_key !== imageKey) {
-                    await env.IMAGES.delete(entry.image_key).catch(() => undefined);
+                if (entry.image_key !== imageKey) {
+                    await deleteLegacyImageObject(entry.image_key);
                 }
 
                 return Response.json({ imageKey });
@@ -158,9 +153,7 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                     .bind(now(), entry.id, session.user.id)
                     .run();
 
-                if (hasStoredImage(entry.image_key)) {
-                    await env.IMAGES.delete(entry.image_key).catch(() => undefined);
-                }
+                await deleteLegacyImageObject(entry.image_key);
 
                 return Response.json({ ok: true });
             }

@@ -10,9 +10,9 @@ import type {
     RankingOperationKind,
     RankingSource
 } from "@/lib/types";
-import { env } from "cloudflare:workers";
 import { hasStoredImage } from "@/lib/images";
 import { all, assertOwned, first, getDb, newId, now, runBatches } from "@/server/lib/db";
+import { deleteLegacyImageObject } from "@/server/lib/imageAssets";
 import { getOwnedCategory } from "../stores/categoryStore";
 import {
     getNextActiveRankPosition,
@@ -689,9 +689,7 @@ async function cancelStaleActiveRankingSessions(userId: string) {
     }
 
     await runBatches(db, statements);
-    await Promise.all(
-        Array.from(new Set(imageKeysToDelete)).map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined))
-    );
+    await Promise.all(Array.from(new Set(imageKeysToDelete)).map(deleteLegacyImageObject));
 }
 
 function canResumeActiveSession(session: ActiveSessionRepairRow) {
@@ -812,9 +810,7 @@ async function recoverInterruptedRankingEntries(userId: string) {
     }
 
     await runBatches(db, statements);
-    await Promise.all(
-        Array.from(new Set(imageKeysToDelete)).map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined))
-    );
+    await Promise.all(Array.from(new Set(imageKeysToDelete)).map(deleteLegacyImageObject));
 }
 
 export async function prepareBinarySession(

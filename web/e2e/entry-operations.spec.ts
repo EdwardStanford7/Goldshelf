@@ -154,4 +154,40 @@ test.describe("Entry operations", () => {
         await expect(page.getByRole("menuitem", { name: "Change Image" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Pick Image" })).toBeHidden();
     });
+
+    test("identical entry image uploads reuse one content-addressed object", async ({ page, context }) => {
+        await seedUsers([{
+            email: "deduplicated-images@e2e.test",
+            name: "Deduplicated Images",
+            categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }]
+        }]);
+        await signInViaApi(context, "deduplicated-images@e2e.test");
+        await gotoApp(page);
+
+        const entryIds = await page.locator("[data-entry-id]").evaluateAll((cards) =>
+            cards.map((card) => card.getAttribute("data-entry-id")).filter(Boolean) as string[]
+        );
+        expect(entryIds).toHaveLength(2);
+
+        const imageBytes = Buffer.from("deterministic-test-image-bytes");
+        const uploadedKeys: string[] = [];
+        for (const entryId of entryIds) {
+            const response = await page.request.post(
+                `${BASE_URL}/api/images/${encodeURIComponent(entryId)}`,
+                {
+                    data: imageBytes,
+                    headers: {
+                        "content-type": "image/jpeg",
+                        origin: BASE_URL
+                    }
+                }
+            );
+            expect(response.ok()).toBe(true);
+            const body = await response.json() as { imageKey: string };
+            uploadedKeys.push(body.imageKey);
+        }
+
+        expect(uploadedKeys[0]).toMatch(/^entry-images\/sha256\/[a-f0-9]{64}$/);
+        expect(uploadedKeys[1]).toBe(uploadedKeys[0]);
+    });
 });
