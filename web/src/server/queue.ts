@@ -16,7 +16,7 @@ const MAX_BATCH_QUEUE_ACTION_IDS = 200;
 
 export const createQueuedEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryId: string; name: string; createdAt?: number | null; }) => data)
+    .validator((data: { categoryId: string; name: string; createdAt?: number | null; }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const category = await getOwnedCategory(userId, input.categoryId);
@@ -92,7 +92,7 @@ function placeholders(length: number) {
 
 export const updateQueueSettings = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: {
+    .validator((data: {
         enabled: boolean;
         promptForMissingImages: boolean;
         randomizeReadyEntries: boolean;
@@ -128,7 +128,7 @@ export const updateQueueSettings = createServerFn({ method: "POST" })
 
 export const startQueuedEntryRanking = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { queuedEntryId: string }) => data)
+    .validator((data: { queuedEntryId: string }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const queuedEntry = await getOwnedQueuedEntry(userId, input.queuedEntryId);
@@ -152,7 +152,7 @@ export const startQueuedEntryRanking = createServerFn({ method: "POST" })
 
 export const deleteQueuedEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { queuedEntryId: string }) => data)
+    .validator((data: { queuedEntryId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { queuedEntryId } = data;
@@ -173,7 +173,7 @@ export const deleteQueuedEntry = createServerFn({ method: "POST" })
 
 export const deleteQueuedEntries = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { queuedEntryIds: string[] }) => data)
+    .validator((data: { queuedEntryIds: string[] }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const queuedEntryIds = normalizeQueueActionIds(data.queuedEntryIds);
@@ -207,7 +207,7 @@ export const deleteQueuedEntries = createServerFn({ method: "POST" })
 
 export const restoreQueuedEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { queuedEntryId: string }) => data)
+    .validator((data: { queuedEntryId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { queuedEntryId } = data;
@@ -237,7 +237,7 @@ export const restoreQueuedEntry = createServerFn({ method: "POST" })
 
 export const restoreQueuedEntries = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { queuedEntryIds: string[] }) => data)
+    .validator((data: { queuedEntryIds: string[] }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const queuedEntryIds = normalizeQueueActionIds(data.queuedEntryIds);
@@ -314,7 +314,7 @@ export const restoreQueuedEntries = createServerFn({ method: "POST" })
 
 export const renameQueuedEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { queuedEntryId: string; name: string }) => data)
+    .validator((data: { queuedEntryId: string; name: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { queuedEntryId, name } = data;

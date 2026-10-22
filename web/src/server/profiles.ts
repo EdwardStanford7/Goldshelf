@@ -97,7 +97,7 @@ type CopyPublicCategoryInput =
 
 export const updateUserProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { name: string; slug?: string; isPublic?: boolean }) => data)
+    .validator((data: { name: string; slug?: string; isPublic?: boolean }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const profile = await ensureUserProfile(userId);
@@ -191,7 +191,7 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
 
 export const searchPublicProfiles = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
-    .inputValidator((data: { query: string }) => data)
+    .validator((data: { query: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const cleanQuery = normalizeOptionalSearch(data.query, MAX_PROFILE_SEARCH_LENGTH).toLowerCase();
@@ -256,7 +256,7 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
 
 export const requestFollowByProfileSlug = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { profileSlugOrUrl: string }) => data)
+    .validator((data: { profileSlugOrUrl: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { profileSlugOrUrl } = data;
@@ -271,7 +271,7 @@ export const requestFollowByProfileSlug = createServerFn({ method: "POST" })
 
 export const followProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { profileUserId: string }) => data)
+    .validator((data: { profileUserId: string }) => data)
     .handler(async ({ context, data }) => followProfileForUser(context.user.id, data.profileUserId));
 
 async function followProfileForUser(userId: string, profileUserId: string) {
@@ -342,7 +342,7 @@ async function followProfileForUser(userId: string, profileUserId: string) {
 
 export const approveFollowRequest = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { followerUserId: string }) => data)
+    .validator((data: { followerUserId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { followerUserId } = data;
@@ -384,7 +384,7 @@ export const approveFollowRequest = createServerFn({ method: "POST" })
 
 export const declineFollowRequest = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { followerUserId: string }) => data)
+    .validator((data: { followerUserId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { followerUserId } = data;
@@ -401,7 +401,7 @@ export const declineFollowRequest = createServerFn({ method: "POST" })
 
 export const cancelFollowRequest = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { followedUserId: string }) => data)
+    .validator((data: { followedUserId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { followedUserId } = data;
@@ -418,7 +418,7 @@ export const cancelFollowRequest = createServerFn({ method: "POST" })
 
 export const removeFollow = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { followedUserId: string }) => data)
+    .validator((data: { followedUserId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { followedUserId } = data;
@@ -435,7 +435,7 @@ export const removeFollow = createServerFn({ method: "POST" })
 
 export const blockProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { profileUserId: string }) => data)
+    .validator((data: { profileUserId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { profileUserId } = data;
@@ -468,7 +468,7 @@ export const blockProfile = createServerFn({ method: "POST" })
 
 export const unblockProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { profileUserId: string }) => data)
+    .validator((data: { profileUserId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { profileUserId } = data;
@@ -484,7 +484,7 @@ export const unblockProfile = createServerFn({ method: "POST" })
     });
 
 export const loadPublicProfile = createServerFn({ method: "GET" })
-    .inputValidator((data: { profileSlug: string; adminViewPrivate?: boolean }) => data)
+    .validator((data: { profileSlug: string; adminViewPrivate?: boolean }) => data)
     .handler(({ data }) => loadPublicProfileFromCurrentRequest(data.profileSlug, {
         adminViewPrivate: Boolean(data.adminViewPrivate)
     }));
@@ -558,7 +558,7 @@ async function loadPublicProfileForViewer(
 
 export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: CopyPublicCategoryInput) => data)
+    .validator((data: CopyPublicCategoryInput) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const sourceCategoryId = data.sourceCategoryId.trim();

@@ -14,7 +14,7 @@ export function DefaultNotFound() {
 }
 
 /** Shown when a route throws (router `defaultErrorComponent`). */
-export function DefaultErrorComponent({ error }: { error: Error }) {
+export function DefaultErrorComponent({ error }: { error: unknown }) {
     return (
         <RouteFallbackShell
             title="Something went wrong"

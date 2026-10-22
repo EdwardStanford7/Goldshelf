@@ -23,13 +23,13 @@ import { assertEntryNameAvailable, createEntryWithBinaryRankingForUser } from ".
 
 export const createEntryWithBinaryRanking = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryId: string; name: string; createdAt?: number | null }) => data)
+    .validator((data: { categoryId: string; name: string; createdAt?: number | null }) => data)
     .handler(async ({ context, data }) =>
         createEntryWithBinaryRankingForUser(context.user.id, data));
 
 export const markImageUnavailable = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { targetKind: "entry" | "queue"; targetId: string }) => data)
+    .validator((data: { targetKind: "entry" | "queue"; targetId: string }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const updatedAt = now();
@@ -88,7 +88,7 @@ export const markImageUnavailable = createServerFn({ method: "POST" })
 
 export const startRerankEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { entryId: string }) => data)
+    .validator((data: { entryId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { entryId } = data;
@@ -136,7 +136,7 @@ export const startRerankEntry = createServerFn({ method: "POST" })
 
 export const moveEntryRelativeToEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { entryId: string; targetEntryId: string; placement: "before" | "after" }) => data)
+    .validator((data: { entryId: string; targetEntryId: string; placement: "before" | "after" }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         await assertNoActiveBinarySession(userId);
@@ -171,7 +171,7 @@ export const moveEntryRelativeToEntry = createServerFn({ method: "POST" })
 
 export const renameEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { entryId: string; name: string }) => data)
+    .validator((data: { entryId: string; name: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { entryId, name } = data;
@@ -193,7 +193,7 @@ export const renameEntry = createServerFn({ method: "POST" })
 
 export const deleteEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { entryId: string }) => data)
+    .validator((data: { entryId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { entryId } = data;
@@ -222,7 +222,7 @@ export const deleteEntry = createServerFn({ method: "POST" })
 
 export const restoreEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { entryId: string }) => data)
+    .validator((data: { entryId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { entryId } = data;
@@ -267,7 +267,7 @@ export const restoreEntry = createServerFn({ method: "POST" })
 
 export const switchEntryCategory = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { entryId: string; targetCategoryId: string }) => data)
+    .validator((data: { entryId: string; targetCategoryId: string }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const db = getDb();

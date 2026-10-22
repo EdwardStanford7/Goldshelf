@@ -53,7 +53,7 @@ interface AdminSessionRow {
 
 export const loadAdminUsers = createServerFn({ method: "POST" })
     .middleware([adminMiddleware])
-    .inputValidator((data: {
+    .validator((data: {
         search?: string;
         searchField?: AdminUserSearchField;
         limit?: number;
@@ -63,7 +63,7 @@ export const loadAdminUsers = createServerFn({ method: "POST" })
 
 export const loadAdminUserDetail = createServerFn({ method: "POST" })
     .middleware([adminMiddleware])
-    .inputValidator((data: { userId: string }) => data)
+    .validator((data: { userId: string }) => data)
     .handler(async ({ data }) => {
         const detail = await loadAdminUserDetailForId(data.userId);
         if (!detail) {
@@ -74,7 +74,7 @@ export const loadAdminUserDetail = createServerFn({ method: "POST" })
 
 export const banAdminUser = createServerFn({ method: "POST" })
     .middleware([adminMiddleware])
-    .inputValidator((data: { userId: string; reason: string }) => data)
+    .validator((data: { userId: string; reason: string }) => data)
     .handler(async ({ context, data }) => {
         const targetUserId = data.userId.trim();
         const reason = normalizeReason(data.reason);
@@ -116,7 +116,7 @@ export const banAdminUser = createServerFn({ method: "POST" })
 
 export const unbanAdminUser = createServerFn({ method: "POST" })
     .middleware([adminMiddleware])
-    .inputValidator((data: { userId: string }) => data)
+    .validator((data: { userId: string }) => data)
     .handler(async ({ context, data }) => {
         const targetUserId = data.userId.trim();
         if (!targetUserId) {
@@ -150,7 +150,7 @@ export const unbanAdminUser = createServerFn({ method: "POST" })
 
 export const revokeAdminUserSession = createServerFn({ method: "POST" })
     .middleware([adminMiddleware])
-    .inputValidator((data: { userId: string; sessionId: string }) => data)
+    .validator((data: { userId: string; sessionId: string }) => data)
     .handler(async ({ context, data }) => {
         const targetUserId = data.userId.trim();
         const sessionId = data.sessionId.trim();
@@ -184,7 +184,7 @@ export const revokeAdminUserSession = createServerFn({ method: "POST" })
 
 export const revokeAdminUserSessions = createServerFn({ method: "POST" })
     .middleware([adminMiddleware])
-    .inputValidator((data: { userId: string }) => data)
+    .validator((data: { userId: string }) => data)
     .handler(async ({ context, data }) => {
         const targetUserId = data.userId.trim();
         if (!targetUserId) {

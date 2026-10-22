@@ -13,7 +13,7 @@ import { assertNoActiveBinarySession } from "./engine/rankingSessions";
 
 export const createCategory = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { name: string; isPublic?: boolean }) => data)
+    .validator((data: { name: string; isPublic?: boolean }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const cleanName = normalizeRequiredText(data.name, "Category name", MAX_CATEGORY_NAME_LENGTH);
@@ -44,7 +44,7 @@ export const createCategory = createServerFn({ method: "POST" })
 
 export const renameCategory = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryId: string; name: string }) => data)
+    .validator((data: { categoryId: string; name: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const category = await getOwnedCategory(userId, data.categoryId);
@@ -65,7 +65,7 @@ export const renameCategory = createServerFn({ method: "POST" })
 
 export const moveCategoryRelativeToCategory = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator(
+    .validator(
         (data: { categoryId: string; targetCategoryId: string; placement: "before" | "after" }) => data
     )
     .handler(async ({ context, data: input }) => {
@@ -119,7 +119,7 @@ export const moveCategoryRelativeToCategory = createServerFn({ method: "POST" })
 
 export const deleteCategory = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryId: string }) => data)
+    .validator((data: { categoryId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { categoryId } = data;
@@ -181,7 +181,7 @@ export const deleteCategory = createServerFn({ method: "POST" })
 
 export const updateCategoryVisibility = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryId: string; isPublic: boolean }) => data)
+    .validator((data: { categoryId: string; isPublic: boolean }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const category = await getOwnedCategory(userId, input.categoryId);
@@ -234,7 +234,7 @@ async function assertOwnedCategoryIds(userId: string, categoryIds: string[]) {
 
 export const updateCategoriesVisibility = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryIds: string[]; isPublic: boolean }) => data)
+    .validator((data: { categoryIds: string[]; isPublic: boolean }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const categoryIds = normalizeCategoryIds(input.categoryIds);
@@ -255,7 +255,7 @@ export const updateCategoriesVisibility = createServerFn({ method: "POST" })
 
 export const moveCategoriesToQueue = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryIds: string[] }) => data)
+    .validator((data: { categoryIds: string[] }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const categoryIds = normalizeCategoryIds(data.categoryIds);

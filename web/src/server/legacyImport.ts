@@ -15,7 +15,7 @@ interface ExistingEntryRow {
 
 export const importLegacyEntries = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: ParsedImport) => data)
+    .validator((data: ParsedImport) => data)
     .handler(async ({ context, data: parsedImport }) => {
         const userId = context.user.id;
         const db = getDb();

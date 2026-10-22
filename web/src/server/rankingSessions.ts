@@ -51,7 +51,7 @@ import {
 
 export const getBinarySession = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string }) => data)
+    .validator((data: { sessionId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { sessionId } = data;
@@ -113,7 +113,7 @@ export const getBinarySession = createServerFn({ method: "GET" })
 
 export const cancelBinarySession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string; mode?: CancelBinarySessionMode }) => data)
+    .validator((data: { sessionId: string; mode?: CancelBinarySessionMode }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { sessionId } = data;
@@ -267,7 +267,7 @@ function normalizeCancelMode(mode: CancelBinarySessionMode | undefined): CancelB
 
 export const submitBinaryWinner = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string; winnerId: string }) => data)
+    .validator((data: { sessionId: string; winnerId: string }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const db = getDb();
@@ -377,7 +377,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
 
 export const undoBinaryMatch = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string }) => data)
+    .validator((data: { sessionId: string }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const db = getDb();

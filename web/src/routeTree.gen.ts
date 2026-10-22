@@ -9,49 +9,34 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as SigninRouteImport } from './routes/signin'
-import { Route as ProfileRouteImport } from './routes/profile'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as UProfileSlugRouteImport } from './routes/u/$profileSlug'
-import { Route as ApiProfileImageRouteImport } from './routes/api/profile-image'
-import { Route as ApiImageSearchRouteImport } from './routes/api/image-search'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as SigninRouteImport } from './routes/signin'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ApiImageProxyRouteImport } from './routes/api/image-proxy'
-import { Route as ApiTestStaleRankingRouteImport } from './routes/api/test/stale-ranking'
-import { Route as ApiTestSeedRouteImport } from './routes/api/test/seed'
-import { Route as ApiTestResetRouteImport } from './routes/api/test/reset'
-import { Route as ApiTestRankingDisplayPhaseRouteImport } from './routes/api/test/ranking-display-phase'
-import { Route as ApiTestImageRefsRouteImport } from './routes/api/test/image-refs'
-import { Route as ApiTestHealthRouteImport } from './routes/api/test/health'
-import { Route as ApiTestCleanupImageAssetsRouteImport } from './routes/api/test/cleanup-image-assets'
-import { Route as ApiTestAuthUrlRouteImport } from './routes/api/test/auth-url'
-import { Route as ApiTestAdminAuditRouteImport } from './routes/api/test/admin-audit'
-import { Route as ApiQueuedImagesQueuedEntryIdRouteImport } from './routes/api/queued-images/$queuedEntryId'
-import { Route as ApiPublicProfileImageUserIdRouteImport } from './routes/api/public-profile-image/$userId'
-import { Route as ApiPublicImagesEntryIdRouteImport } from './routes/api/public-images/$entryId'
-import { Route as ApiImagesEntryIdRouteImport } from './routes/api/images/$entryId'
+import { Route as ApiImageSearchRouteImport } from './routes/api/image-search'
+import { Route as ApiProfileImageRouteImport } from './routes/api/profile-image'
+import { Route as UProfileSlugRouteImport } from './routes/u/$profileSlug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiImagesEntryIdRouteImport } from './routes/api/images/$entryId'
+import { Route as ApiPublicImagesEntryIdRouteImport } from './routes/api/public-images/$entryId'
+import { Route as ApiPublicProfileImageUserIdRouteImport } from './routes/api/public-profile-image/$userId'
+import { Route as ApiQueuedImagesQueuedEntryIdRouteImport } from './routes/api/queued-images/$queuedEntryId'
+import { Route as ApiTestAdminAuditRouteImport } from './routes/api/test/admin-audit'
+import { Route as ApiTestAuthUrlRouteImport } from './routes/api/test/auth-url'
+import { Route as ApiTestCleanupImageAssetsRouteImport } from './routes/api/test/cleanup-image-assets'
+import { Route as ApiTestHealthRouteImport } from './routes/api/test/health'
+import { Route as ApiTestImageRefsRouteImport } from './routes/api/test/image-refs'
+import { Route as ApiTestRankingDisplayPhaseRouteImport } from './routes/api/test/ranking-display-phase'
+import { Route as ApiTestResetRouteImport } from './routes/api/test/reset'
+import { Route as ApiTestSeedRouteImport } from './routes/api/test/seed'
+import { Route as ApiTestStaleRankingRouteImport } from './routes/api/test/stale-ranking'
 
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SigninRoute = SigninRouteImport.update({
-  id: '/signin',
-  path: '/signin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProfileRoute = ProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutRoute = AboutRouteImport.update({
@@ -59,24 +44,24 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const UProfileSlugRoute = UProfileSlugRouteImport.update({
-  id: '/u/$profileSlug',
-  path: '/u/$profileSlug',
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiProfileImageRoute = ApiProfileImageRouteImport.update({
-  id: '/api/profile-image',
-  path: '/api/profile-image',
+const SigninRoute = SigninRouteImport.update({
+  id: '/signin',
+  path: '/signin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiImageSearchRoute = ApiImageSearchRouteImport.update({
-  id: '/api/image-search',
-  path: '/api/image-search',
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiImageProxyRoute = ApiImageProxyRouteImport.update({
@@ -84,35 +69,56 @@ const ApiImageProxyRoute = ApiImageProxyRouteImport.update({
   path: '/api/image-proxy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestStaleRankingRoute = ApiTestStaleRankingRouteImport.update({
-  id: '/api/test/stale-ranking',
-  path: '/api/test/stale-ranking',
+const ApiImageSearchRoute = ApiImageSearchRouteImport.update({
+  id: '/api/image-search',
+  path: '/api/image-search',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestSeedRoute = ApiTestSeedRouteImport.update({
-  id: '/api/test/seed',
-  path: '/api/test/seed',
+const ApiProfileImageRoute = ApiProfileImageRouteImport.update({
+  id: '/api/profile-image',
+  path: '/api/profile-image',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestResetRoute = ApiTestResetRouteImport.update({
-  id: '/api/test/reset',
-  path: '/api/test/reset',
+const UProfileSlugRoute = UProfileSlugRouteImport.update({
+  id: '/u/$profileSlug',
+  path: '/u/$profileSlug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestRankingDisplayPhaseRoute =
-  ApiTestRankingDisplayPhaseRouteImport.update({
-    id: '/api/test/ranking-display-phase',
-    path: '/api/test/ranking-display-phase',
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiImagesEntryIdRoute = ApiImagesEntryIdRouteImport.update({
+  id: '/api/images/$entryId',
+  path: '/api/images/$entryId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicImagesEntryIdRoute = ApiPublicImagesEntryIdRouteImport.update({
+  id: '/api/public-images/$entryId',
+  path: '/api/public-images/$entryId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicProfileImageUserIdRoute =
+  ApiPublicProfileImageUserIdRouteImport.update({
+    id: '/api/public-profile-image/$userId',
+    path: '/api/public-profile-image/$userId',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiTestImageRefsRoute = ApiTestImageRefsRouteImport.update({
-  id: '/api/test/image-refs',
-  path: '/api/test/image-refs',
+const ApiQueuedImagesQueuedEntryIdRoute =
+  ApiQueuedImagesQueuedEntryIdRouteImport.update({
+    id: '/api/queued-images/$queuedEntryId',
+    path: '/api/queued-images/$queuedEntryId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiTestAdminAuditRoute = ApiTestAdminAuditRouteImport.update({
+  id: '/api/test/admin-audit',
+  path: '/api/test/admin-audit',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestHealthRoute = ApiTestHealthRouteImport.update({
-  id: '/api/test/health',
-  path: '/api/test/health',
+const ApiTestAuthUrlRoute = ApiTestAuthUrlRouteImport.update({
+  id: '/api/test/auth-url',
+  path: '/api/test/auth-url',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTestCleanupImageAssetsRoute =
@@ -121,41 +127,35 @@ const ApiTestCleanupImageAssetsRoute =
     path: '/api/test/cleanup-image-assets',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiTestAuthUrlRoute = ApiTestAuthUrlRouteImport.update({
-  id: '/api/test/auth-url',
-  path: '/api/test/auth-url',
+const ApiTestHealthRoute = ApiTestHealthRouteImport.update({
+  id: '/api/test/health',
+  path: '/api/test/health',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTestAdminAuditRoute = ApiTestAdminAuditRouteImport.update({
-  id: '/api/test/admin-audit',
-  path: '/api/test/admin-audit',
+const ApiTestImageRefsRoute = ApiTestImageRefsRouteImport.update({
+  id: '/api/test/image-refs',
+  path: '/api/test/image-refs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiQueuedImagesQueuedEntryIdRoute =
-  ApiQueuedImagesQueuedEntryIdRouteImport.update({
-    id: '/api/queued-images/$queuedEntryId',
-    path: '/api/queued-images/$queuedEntryId',
+const ApiTestRankingDisplayPhaseRoute =
+  ApiTestRankingDisplayPhaseRouteImport.update({
+    id: '/api/test/ranking-display-phase',
+    path: '/api/test/ranking-display-phase',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicProfileImageUserIdRoute =
-  ApiPublicProfileImageUserIdRouteImport.update({
-    id: '/api/public-profile-image/$userId',
-    path: '/api/public-profile-image/$userId',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPublicImagesEntryIdRoute = ApiPublicImagesEntryIdRouteImport.update({
-  id: '/api/public-images/$entryId',
-  path: '/api/public-images/$entryId',
+const ApiTestResetRoute = ApiTestResetRouteImport.update({
+  id: '/api/test/reset',
+  path: '/api/test/reset',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiImagesEntryIdRoute = ApiImagesEntryIdRouteImport.update({
-  id: '/api/images/$entryId',
-  path: '/api/images/$entryId',
+const ApiTestSeedRoute = ApiTestSeedRouteImport.update({
+  id: '/api/test/seed',
+  path: '/api/test/seed',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
+const ApiTestStaleRankingRoute = ApiTestStaleRankingRouteImport.update({
+  id: '/api/test/stale-ranking',
+  path: '/api/test/stale-ranking',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -348,32 +348,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signin': {
-      id: '/signin'
-      path: '/signin'
-      fullPath: '/signin'
-      preLoaderRoute: typeof SigninRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/profile': {
-      id: '/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof ProfileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -383,32 +362,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/u/$profileSlug': {
-      id: '/u/$profileSlug'
-      path: '/u/$profileSlug'
-      fullPath: '/u/$profileSlug'
-      preLoaderRoute: typeof UProfileSlugRouteImport
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/profile-image': {
-      id: '/api/profile-image'
-      path: '/api/profile-image'
-      fullPath: '/api/profile-image'
-      preLoaderRoute: typeof ApiProfileImageRouteImport
+    '/signin': {
+      id: '/signin'
+      path: '/signin'
+      fullPath: '/signin'
+      preLoaderRoute: typeof SigninRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/image-search': {
-      id: '/api/image-search'
-      path: '/api/image-search'
-      fullPath: '/api/image-search'
-      preLoaderRoute: typeof ApiImageSearchRouteImport
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/image-proxy': {
@@ -418,88 +397,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiImageProxyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/test/stale-ranking': {
-      id: '/api/test/stale-ranking'
-      path: '/api/test/stale-ranking'
-      fullPath: '/api/test/stale-ranking'
-      preLoaderRoute: typeof ApiTestStaleRankingRouteImport
+    '/api/image-search': {
+      id: '/api/image-search'
+      path: '/api/image-search'
+      fullPath: '/api/image-search'
+      preLoaderRoute: typeof ApiImageSearchRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/test/seed': {
-      id: '/api/test/seed'
-      path: '/api/test/seed'
-      fullPath: '/api/test/seed'
-      preLoaderRoute: typeof ApiTestSeedRouteImport
+    '/api/profile-image': {
+      id: '/api/profile-image'
+      path: '/api/profile-image'
+      fullPath: '/api/profile-image'
+      preLoaderRoute: typeof ApiProfileImageRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/test/reset': {
-      id: '/api/test/reset'
-      path: '/api/test/reset'
-      fullPath: '/api/test/reset'
-      preLoaderRoute: typeof ApiTestResetRouteImport
+    '/u/$profileSlug': {
+      id: '/u/$profileSlug'
+      path: '/u/$profileSlug'
+      fullPath: '/u/$profileSlug'
+      preLoaderRoute: typeof UProfileSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/test/ranking-display-phase': {
-      id: '/api/test/ranking-display-phase'
-      path: '/api/test/ranking-display-phase'
-      fullPath: '/api/test/ranking-display-phase'
-      preLoaderRoute: typeof ApiTestRankingDisplayPhaseRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/test/image-refs': {
-      id: '/api/test/image-refs'
-      path: '/api/test/image-refs'
-      fullPath: '/api/test/image-refs'
-      preLoaderRoute: typeof ApiTestImageRefsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/test/health': {
-      id: '/api/test/health'
-      path: '/api/test/health'
-      fullPath: '/api/test/health'
-      preLoaderRoute: typeof ApiTestHealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/test/cleanup-image-assets': {
-      id: '/api/test/cleanup-image-assets'
-      path: '/api/test/cleanup-image-assets'
-      fullPath: '/api/test/cleanup-image-assets'
-      preLoaderRoute: typeof ApiTestCleanupImageAssetsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/test/auth-url': {
-      id: '/api/test/auth-url'
-      path: '/api/test/auth-url'
-      fullPath: '/api/test/auth-url'
-      preLoaderRoute: typeof ApiTestAuthUrlRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/test/admin-audit': {
-      id: '/api/test/admin-audit'
-      path: '/api/test/admin-audit'
-      fullPath: '/api/test/admin-audit'
-      preLoaderRoute: typeof ApiTestAdminAuditRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/queued-images/$queuedEntryId': {
-      id: '/api/queued-images/$queuedEntryId'
-      path: '/api/queued-images/$queuedEntryId'
-      fullPath: '/api/queued-images/$queuedEntryId'
-      preLoaderRoute: typeof ApiQueuedImagesQueuedEntryIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public-profile-image/$userId': {
-      id: '/api/public-profile-image/$userId'
-      path: '/api/public-profile-image/$userId'
-      fullPath: '/api/public-profile-image/$userId'
-      preLoaderRoute: typeof ApiPublicProfileImageUserIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public-images/$entryId': {
-      id: '/api/public-images/$entryId'
-      path: '/api/public-images/$entryId'
-      fullPath: '/api/public-images/$entryId'
-      preLoaderRoute: typeof ApiPublicImagesEntryIdRouteImport
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/images/$entryId': {
@@ -509,11 +432,88 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiImagesEntryIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
+    '/api/public-images/$entryId': {
+      id: '/api/public-images/$entryId'
+      path: '/api/public-images/$entryId'
+      fullPath: '/api/public-images/$entryId'
+      preLoaderRoute: typeof ApiPublicImagesEntryIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public-profile-image/$userId': {
+      id: '/api/public-profile-image/$userId'
+      path: '/api/public-profile-image/$userId'
+      fullPath: '/api/public-profile-image/$userId'
+      preLoaderRoute: typeof ApiPublicProfileImageUserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/queued-images/$queuedEntryId': {
+      id: '/api/queued-images/$queuedEntryId'
+      path: '/api/queued-images/$queuedEntryId'
+      fullPath: '/api/queued-images/$queuedEntryId'
+      preLoaderRoute: typeof ApiQueuedImagesQueuedEntryIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/admin-audit': {
+      id: '/api/test/admin-audit'
+      path: '/api/test/admin-audit'
+      fullPath: '/api/test/admin-audit'
+      preLoaderRoute: typeof ApiTestAdminAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/auth-url': {
+      id: '/api/test/auth-url'
+      path: '/api/test/auth-url'
+      fullPath: '/api/test/auth-url'
+      preLoaderRoute: typeof ApiTestAuthUrlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/cleanup-image-assets': {
+      id: '/api/test/cleanup-image-assets'
+      path: '/api/test/cleanup-image-assets'
+      fullPath: '/api/test/cleanup-image-assets'
+      preLoaderRoute: typeof ApiTestCleanupImageAssetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/health': {
+      id: '/api/test/health'
+      path: '/api/test/health'
+      fullPath: '/api/test/health'
+      preLoaderRoute: typeof ApiTestHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/image-refs': {
+      id: '/api/test/image-refs'
+      path: '/api/test/image-refs'
+      fullPath: '/api/test/image-refs'
+      preLoaderRoute: typeof ApiTestImageRefsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/ranking-display-phase': {
+      id: '/api/test/ranking-display-phase'
+      path: '/api/test/ranking-display-phase'
+      fullPath: '/api/test/ranking-display-phase'
+      preLoaderRoute: typeof ApiTestRankingDisplayPhaseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/reset': {
+      id: '/api/test/reset'
+      path: '/api/test/reset'
+      fullPath: '/api/test/reset'
+      preLoaderRoute: typeof ApiTestResetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/seed': {
+      id: '/api/test/seed'
+      path: '/api/test/seed'
+      fullPath: '/api/test/seed'
+      preLoaderRoute: typeof ApiTestSeedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/test/stale-ranking': {
+      id: '/api/test/stale-ranking'
+      path: '/api/test/stale-ranking'
+      fullPath: '/api/test/stale-ranking'
+      preLoaderRoute: typeof ApiTestStaleRankingRouteImport
       parentRoute: typeof rootRouteImport
     }
   }

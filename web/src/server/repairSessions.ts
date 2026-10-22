@@ -11,30 +11,30 @@ import {
 
 export const startRepairSession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { categoryId?: string | null; categoryIds?: string[] }) => data)
+    .validator((data: { categoryId?: string | null; categoryIds?: string[] }) => data)
     .handler(({ context, data }) => startRepairSessionForUser(context.user.id, data));
 
 export const getRepairSession = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string }) => data)
+    .validator((data: { sessionId: string }) => data)
     .handler(({ context, data }) => getRepairSessionView(context.user.id, data.sessionId));
 
 export const submitRepairWinner = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string; winnerId: string }) => data)
+    .validator((data: { sessionId: string; winnerId: string }) => data)
     .handler(({ context, data }) => submitRepairWinnerForUser(context.user.id, data));
 
 export const skipRepairMatchup = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string }) => data)
+    .validator((data: { sessionId: string }) => data)
     .handler(({ context, data }) => skipRepairMatchupForUser(context.user.id, data));
 
 export const cancelRepairSession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string }) => data)
+    .validator((data: { sessionId: string }) => data)
     .handler(({ context, data }) => cancelRepairSessionForUser(context.user.id, data));
 
 export const undoRepairMatch = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .inputValidator((data: { sessionId: string }) => data)
+    .validator((data: { sessionId: string }) => data)
     .handler(({ context, data }) => undoRepairMatchForUser(context.user.id, data));
