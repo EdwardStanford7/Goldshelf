@@ -110,9 +110,10 @@ export function rewriteCategoryOrderStatements(
             .prepare(
                 `UPDATE entries
        SET status = 'active', rank_position = ?, updated_at = ?
-       WHERE user_id = ? AND category_id = ? AND id = ?`
+       WHERE user_id = ? AND category_id = ? AND id = ?
+         AND (status != 'active' OR rank_position != ?)`
             )
-            .bind(rankPosition, updatedAt, userId, categoryId, entryId)
+            .bind(rankPosition, updatedAt, userId, categoryId, entryId, rankPosition)
     );
 }
 
