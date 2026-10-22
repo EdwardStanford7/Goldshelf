@@ -130,8 +130,10 @@ export interface RepairUndoSourceRow {
 export async function saveRankingMatchUndoState(
     db: D1Database,
     userId: string,
-    session: RankingUndoSourceRow
+    session: RankingUndoSourceRow,
+    options: { includeDataSnapshot?: boolean } = {}
 ) {
+    const includeDataSnapshot = options.includeDataSnapshot ?? true;
     const operationState = parseRankingOperationState(session.operation_state);
     const undoState: RankingUndoSnapshot = {
         kind: "ranking_match_undo",
@@ -155,8 +157,10 @@ export async function saveRankingMatchUndoState(
             secondaryOriginalRankPosition: session.secondary_original_rank_position ?? null,
             operationState: session.operation_state ?? null
         },
-        entries: await snapshotCategoryEntries(db, userId, session.category_id),
-        queuedEntry: operationState.queuedEntryId
+        entries: includeDataSnapshot
+            ? await snapshotCategoryEntries(db, userId, session.category_id)
+            : [],
+        queuedEntry: includeDataSnapshot && operationState.queuedEntryId
             ? await snapshotQueuedEntry(db, userId, operationState.queuedEntryId)
             : null
     };
@@ -174,8 +178,10 @@ export async function saveRankingMatchUndoState(
 export async function saveRepairMatchUndoState(
     db: D1Database,
     userId: string,
-    session: RepairUndoSourceRow
+    session: RepairUndoSourceRow,
+    options: { includeDataSnapshot?: boolean } = {}
 ) {
+    const includeDataSnapshot = options.includeDataSnapshot ?? true;
     const undoState: RepairUndoSnapshot = {
         kind: "repair_match_undo",
         version: 1,
@@ -193,7 +199,9 @@ export async function saveRepairMatchUndoState(
             operationState: session.operation_state,
             updatedAt: session.updated_at
         },
-        entries: await snapshotCategoryEntries(db, userId, session.active_category_id)
+        entries: includeDataSnapshot
+            ? await snapshotCategoryEntries(db, userId, session.active_category_id)
+            : []
     };
 
     await db
@@ -394,9 +402,7 @@ async function assertSnapshotEntriesStillExist(
     userId: string,
     entries: EntryStateSnapshot[]
 ) {
-    if (entries.length === 0) {
-        throw new Error("That match can't be undone anymore.");
-    }
+    if (entries.length === 0) return;
 
     let foundCount = 0;
     for (const chunk of chunks(entries, MAX_EXISTENCE_CHECK_IDS)) {

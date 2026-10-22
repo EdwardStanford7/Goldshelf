@@ -90,7 +90,7 @@ import {
     updateCategoriesVisibility,
     updateCategoryVisibility
 } from "@/server/categories";
-import { loadDashboard } from "@/server/dashboard";
+import { loadDashboard, loadDashboardFreshness } from "@/server/dashboard";
 import {
     createEntryWithBinaryRanking,
     deleteEntry,
@@ -356,6 +356,7 @@ export function Dashboard({
     const initialActiveSessionId = initialDashboard.activeBinarySession?.id ?? null;
     const initialActiveRepairSessionId = initialDashboard.activeRepairSession?.id ?? null;
     const [dashboard, setDashboard] = useState(initialDashboard);
+    const dashboardRevisionRef = useRef(initialDashboard.revision);
     const [selectedCategoryId, setSelectedCategoryId] = useState(
         initialDashboard.activeBinarySession?.categoryId ??
         initialDashboard.activeRepairSession?.categoryId ??
@@ -735,6 +736,7 @@ export function Dashboard({
     async function refresh() {
         const nextDashboard = await loadDashboard();
         lastResumeRefreshAtRef.current = Date.now();
+        dashboardRevisionRef.current = nextDashboard.revision;
         queueSettingsRef.current = nextDashboard.queueSettings;
         setDashboard(nextDashboard);
         return nextDashboard;
@@ -872,6 +874,13 @@ export function Dashboard({
 
         resumeRefreshInFlightRef.current = true;
         try {
+            const freshness = await loadDashboardFreshness();
+            lastResumeRefreshAtRef.current = Date.now();
+            if (freshness.revision === dashboardRevisionRef.current) {
+                resetResumeRetry();
+                return;
+            }
+
             const nextDashboard = await refresh();
             resetResumeRetry();
             reconcileActiveRankingAfterResume(nextDashboard);

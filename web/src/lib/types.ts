@@ -44,12 +44,17 @@ export interface CurrentUserProfile {
 }
 
 export interface DashboardData {
+    revision: string;
     categories: CategoryWithEntries[];
     queueSettings: QueueSettings;
     queuedEntries: QueuedEntry[];
     activeBinarySession: ActiveBinarySession | null;
     activeRepairSession: ActiveRepairSession | null;
     profile: CurrentUserProfile;
+}
+
+export interface DashboardFreshness {
+    revision: string;
 }
 
 export interface ProfileSettingsCategory {

@@ -14,6 +14,67 @@ const LARGE_DASHBOARD_CATEGORY_COUNT = 100;
 const LARGE_DASHBOARD_ENTRY_COUNT = 1_000;
 const LARGE_DASHBOARD_QUEUE_COUNT = 500;
 
+interface DashboardFreshnessRow {
+    category_updated_at: number;
+    entry_updated_at: number;
+    queue_updated_at: number;
+    queue_settings_updated_at: number;
+    profile_updated_at: number;
+    ranking_state: string;
+    repair_state: string;
+}
+
+export async function getDashboardRevision(userId: string) {
+    const row = await getDb()
+        .prepare(
+            `SELECT
+               COALESCE((
+                 SELECT updated_at FROM categories
+                 WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1
+               ), 0) AS category_updated_at,
+               COALESCE((
+                 SELECT updated_at FROM entries
+                 WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1
+               ), 0) AS entry_updated_at,
+               COALESCE((
+                 SELECT updated_at FROM entry_queue
+                 WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1
+               ), 0) AS queue_updated_at,
+               COALESCE((
+                 SELECT updated_at FROM queue_settings WHERE user_id = ?
+               ), 0) AS queue_settings_updated_at,
+               COALESCE((
+                 SELECT updated_at FROM user_profiles WHERE user_id = ?
+               ), 0) AS profile_updated_at,
+               COALESCE((
+                 SELECT id || ':' || comparison_count || ':' || phase || ':' ||
+                        lower_bound || ':' || upper_bound || ':' ||
+                        COALESCE(pivot_entry_id, '')
+                 FROM ranking_sessions
+                 WHERE user_id = ? AND status = 'active'
+                 ORDER BY created_at DESC LIMIT 1
+               ), '') AS ranking_state,
+               COALESCE((
+                 SELECT id || ':' || updated_at
+                 FROM repair_sessions
+                 WHERE user_id = ? AND status = 'active'
+                 ORDER BY created_at DESC LIMIT 1
+               ), '') AS repair_state`
+        )
+        .bind(userId, userId, userId, userId, userId, userId, userId)
+        .first<DashboardFreshnessRow>();
+
+    return JSON.stringify([
+        row?.category_updated_at ?? 0,
+        row?.entry_updated_at ?? 0,
+        row?.queue_updated_at ?? 0,
+        row?.queue_settings_updated_at ?? 0,
+        row?.profile_updated_at ?? 0,
+        row?.ranking_state ?? "",
+        row?.repair_state ?? ""
+    ]);
+}
+
 /**
  * Assembles the full dashboard payload for a user: categories with ordered
  * entries, the ranking queue, any active binary-ranking session, and the
@@ -27,6 +88,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
     await repairInterruptedRepairState(userId);
     await purgeExpiredDeletedItems(userId);
     const profile = await ensureUserProfile(userId);
+    const revision = await getDashboardRevision(userId);
     const queueSettings = await getQueueSettings(userId);
     const queuedEntries = await listQueuedEntries(userId);
     const activeBinarySession = await getActiveBinarySession(userId);
@@ -44,6 +106,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
 
     if (categories.length === 0) {
         const dashboard = {
+            revision,
             categories: [],
             queueSettings,
             queuedEntries,
@@ -79,6 +142,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
     }
 
     const dashboard = {
+        revision,
         categories: categories.map((category) => ({
             id: category.id,
             name: category.name,

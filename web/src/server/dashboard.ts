@@ -1,14 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { hasAdminRole } from "@/lib/admin";
-import type { DashboardData } from "@/lib/types";
+import type { DashboardData, DashboardFreshness } from "@/lib/types";
 import { auth, requestHasSessionCookie } from "@/server/lib/auth";
 import { authMiddleware } from "@/server/middleware/auth";
-import { buildDashboard } from "@/server/engine/dashboard";
+import { buildDashboard, getDashboardRevision } from "@/server/engine/dashboard";
 
 export const loadDashboard = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
     .handler(({ context }): Promise<DashboardData> => buildDashboard(context.user.id));
+
+export const loadDashboardFreshness = createServerFn({ method: "GET" })
+    .middleware([authMiddleware])
+    .handler(async ({ context }): Promise<DashboardFreshness> => ({
+        revision: await getDashboardRevision(context.user.id)
+    }));
 
 export interface HomeData {
     dashboard: DashboardData | null;

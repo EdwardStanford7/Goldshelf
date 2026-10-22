@@ -316,9 +316,8 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
             throw new Error("Winner must be one of the active matchup entries");
         }
 
-        await saveRankingMatchUndoState(db, userId, session);
-
         if (session.phase === "repair_up" || session.phase === "repair_down") {
+            await saveRankingMatchUndoState(db, userId, session);
             return submitLocalRepairWinner(db, userId, session, input.winnerId, createdAt);
         }
 
@@ -331,6 +330,10 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
         const upperBound = subjectWon
             ? session.pivot_rank_position
             : session.upper_bound;
+
+        await saveRankingMatchUndoState(db, userId, session, {
+            includeDataSnapshot: lowerBound >= upperBound
+        });
 
         if (lowerBound < upperBound) {
             const opponents = await listActiveEntries(userId, session.category_id);

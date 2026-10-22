@@ -235,7 +235,11 @@ export async function submitRepairWinner(
         throw new Error("Winner must be one of the active repair entries");
     }
 
-    await saveRepairMatchUndoState(db, userId, row);
+    const mutatesEntries = row.phase !== "checking"
+        || input.winnerId === state.currentCheck?.lowerEntryId;
+    await saveRepairMatchUndoState(db, userId, row, {
+        includeDataSnapshot: mutatesEntries
+    });
 
     const loserId = input.winnerId === currentComparison.entryAId
         ? currentComparison.entryBId
