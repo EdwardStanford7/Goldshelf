@@ -189,5 +189,43 @@ test.describe("Entry operations", () => {
 
         expect(uploadedKeys[0]).toMatch(/^entry-images\/sha256\/[a-f0-9]{64}$/);
         expect(uploadedKeys[1]).toBe(uploadedKeys[0]);
+
+        const firstDelete = await page.request.delete(
+            `${BASE_URL}/api/images/${encodeURIComponent(entryIds[0]!)}`,
+            { headers: { origin: BASE_URL } }
+        );
+        expect(firstDelete.ok()).toBe(true);
+        const remainingImage = await page.request.get(
+            `${BASE_URL}/api/images/${encodeURIComponent(entryIds[1]!)}`
+        );
+        expect(remainingImage.ok()).toBe(true);
+
+        const secondDelete = await page.request.delete(
+            `${BASE_URL}/api/images/${encodeURIComponent(entryIds[1]!)}`,
+            { headers: { origin: BASE_URL } }
+        );
+        expect(secondDelete.ok()).toBe(true);
+        const refsResponse = await fetch(
+            `${BASE_URL}/api/test/image-refs?email=${encodeURIComponent("deduplicated-images@e2e.test")}`
+        );
+        const refsBody = await refsResponse.json() as {
+            assets: Array<{ object_key: string; unreferenced_at: number | null }>;
+        };
+        expect(refsBody.assets.find((asset) => asset.object_key === uploadedKeys[0])?.unreferenced_at)
+            .toEqual(expect.any(Number));
+
+        const cleanupResponse = await page.request.post(`${BASE_URL}/api/test/cleanup-image-assets`, {
+            data: { timestamp: Date.now() + 36 * 24 * 60 * 60 * 1000 }
+        });
+        expect(cleanupResponse.ok()).toBe(true);
+        expect(await cleanupResponse.json()).toMatchObject({ deletedCount: 1, examinedCount: 1 });
+
+        const cleanedRefsResponse = await fetch(
+            `${BASE_URL}/api/test/image-refs?email=${encodeURIComponent("deduplicated-images@e2e.test")}`
+        );
+        const cleanedRefsBody = await cleanedRefsResponse.json() as {
+            assets: Array<{ object_key: string }>;
+        };
+        expect(cleanedRefsBody.assets.some((asset) => asset.object_key === uploadedKeys[0])).toBe(false);
     });
 });

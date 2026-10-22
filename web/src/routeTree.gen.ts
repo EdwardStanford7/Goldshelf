@@ -25,6 +25,7 @@ import { Route as ApiTestResetRouteImport } from './routes/api/test/reset'
 import { Route as ApiTestRankingDisplayPhaseRouteImport } from './routes/api/test/ranking-display-phase'
 import { Route as ApiTestImageRefsRouteImport } from './routes/api/test/image-refs'
 import { Route as ApiTestHealthRouteImport } from './routes/api/test/health'
+import { Route as ApiTestCleanupImageAssetsRouteImport } from './routes/api/test/cleanup-image-assets'
 import { Route as ApiTestAuthUrlRouteImport } from './routes/api/test/auth-url'
 import { Route as ApiTestAdminAuditRouteImport } from './routes/api/test/admin-audit'
 import { Route as ApiQueuedImagesQueuedEntryIdRouteImport } from './routes/api/queued-images/$queuedEntryId'
@@ -114,6 +115,12 @@ const ApiTestHealthRoute = ApiTestHealthRouteImport.update({
   path: '/api/test/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTestCleanupImageAssetsRoute =
+  ApiTestCleanupImageAssetsRouteImport.update({
+    id: '/api/test/cleanup-image-assets',
+    path: '/api/test/cleanup-image-assets',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiTestAuthUrlRoute = ApiTestAuthUrlRouteImport.update({
   id: '/api/test/auth-url',
   path: '/api/test/auth-url',
@@ -170,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/api/queued-images/$queuedEntryId': typeof ApiQueuedImagesQueuedEntryIdRoute
   '/api/test/admin-audit': typeof ApiTestAdminAuditRoute
   '/api/test/auth-url': typeof ApiTestAuthUrlRoute
+  '/api/test/cleanup-image-assets': typeof ApiTestCleanupImageAssetsRoute
   '/api/test/health': typeof ApiTestHealthRoute
   '/api/test/image-refs': typeof ApiTestImageRefsRoute
   '/api/test/ranking-display-phase': typeof ApiTestRankingDisplayPhaseRoute
@@ -195,6 +203,7 @@ export interface FileRoutesByTo {
   '/api/queued-images/$queuedEntryId': typeof ApiQueuedImagesQueuedEntryIdRoute
   '/api/test/admin-audit': typeof ApiTestAdminAuditRoute
   '/api/test/auth-url': typeof ApiTestAuthUrlRoute
+  '/api/test/cleanup-image-assets': typeof ApiTestCleanupImageAssetsRoute
   '/api/test/health': typeof ApiTestHealthRoute
   '/api/test/image-refs': typeof ApiTestImageRefsRoute
   '/api/test/ranking-display-phase': typeof ApiTestRankingDisplayPhaseRoute
@@ -221,6 +230,7 @@ export interface FileRoutesById {
   '/api/queued-images/$queuedEntryId': typeof ApiQueuedImagesQueuedEntryIdRoute
   '/api/test/admin-audit': typeof ApiTestAdminAuditRoute
   '/api/test/auth-url': typeof ApiTestAuthUrlRoute
+  '/api/test/cleanup-image-assets': typeof ApiTestCleanupImageAssetsRoute
   '/api/test/health': typeof ApiTestHealthRoute
   '/api/test/image-refs': typeof ApiTestImageRefsRoute
   '/api/test/ranking-display-phase': typeof ApiTestRankingDisplayPhaseRoute
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/api/queued-images/$queuedEntryId'
     | '/api/test/admin-audit'
     | '/api/test/auth-url'
+    | '/api/test/cleanup-image-assets'
     | '/api/test/health'
     | '/api/test/image-refs'
     | '/api/test/ranking-display-phase'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/api/queued-images/$queuedEntryId'
     | '/api/test/admin-audit'
     | '/api/test/auth-url'
+    | '/api/test/cleanup-image-assets'
     | '/api/test/health'
     | '/api/test/image-refs'
     | '/api/test/ranking-display-phase'
@@ -298,6 +310,7 @@ export interface FileRouteTypes {
     | '/api/queued-images/$queuedEntryId'
     | '/api/test/admin-audit'
     | '/api/test/auth-url'
+    | '/api/test/cleanup-image-assets'
     | '/api/test/health'
     | '/api/test/image-refs'
     | '/api/test/ranking-display-phase'
@@ -324,6 +337,7 @@ export interface RootRouteChildren {
   ApiQueuedImagesQueuedEntryIdRoute: typeof ApiQueuedImagesQueuedEntryIdRoute
   ApiTestAdminAuditRoute: typeof ApiTestAdminAuditRoute
   ApiTestAuthUrlRoute: typeof ApiTestAuthUrlRoute
+  ApiTestCleanupImageAssetsRoute: typeof ApiTestCleanupImageAssetsRoute
   ApiTestHealthRoute: typeof ApiTestHealthRoute
   ApiTestImageRefsRoute: typeof ApiTestImageRefsRoute
   ApiTestRankingDisplayPhaseRoute: typeof ApiTestRankingDisplayPhaseRoute
@@ -446,6 +460,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTestHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/test/cleanup-image-assets': {
+      id: '/api/test/cleanup-image-assets'
+      path: '/api/test/cleanup-image-assets'
+      fullPath: '/api/test/cleanup-image-assets'
+      preLoaderRoute: typeof ApiTestCleanupImageAssetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/test/auth-url': {
       id: '/api/test/auth-url'
       path: '/api/test/auth-url'
@@ -516,6 +537,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiQueuedImagesQueuedEntryIdRoute: ApiQueuedImagesQueuedEntryIdRoute,
   ApiTestAdminAuditRoute: ApiTestAdminAuditRoute,
   ApiTestAuthUrlRoute: ApiTestAuthUrlRoute,
+  ApiTestCleanupImageAssetsRoute: ApiTestCleanupImageAssetsRoute,
   ApiTestHealthRoute: ApiTestHealthRoute,
   ApiTestImageRefsRoute: ApiTestImageRefsRoute,
   ApiTestRankingDisplayPhaseRoute: ApiTestRankingDisplayPhaseRoute,

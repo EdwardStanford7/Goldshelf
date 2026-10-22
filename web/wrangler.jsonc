@@ -5,7 +5,7 @@
     "compatibility_flags": [
         "nodejs_compat"
     ],
-    "main": "@tanstack/react-start/server-entry",
+    "main": "src/worker.ts",
     "workers_dev": false,
     "preview_urls": false,
     "observability": {
@@ -17,6 +17,11 @@
             "custom_domain": true
         }
     ],
+    "triggers": {
+        "crons": [
+            "17 4 * * *"
+        ]
+    },
     "d1_databases": [
         {
             "binding": "DB",

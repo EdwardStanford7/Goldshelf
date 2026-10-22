@@ -15,7 +15,7 @@ import type {
 } from "@/lib/types";
 import { hasStoredImage } from "@/lib/images";
 import { all, assertOwned, first, getDb, newId, now, runBatches } from "@/server/lib/db";
-import { deleteLegacyImageObject } from "@/server/lib/imageAssets";
+import { releaseImageReference } from "@/server/lib/imageAssets";
 import { authMiddleware } from "@/server/middleware/auth";
 import { getOwnedCategory } from "./stores/categoryStore";
 import {
@@ -258,7 +258,7 @@ export const cancelBinarySession = createServerFn({ method: "POST" })
         }
 
         await db.batch(statements);
-        await deleteLegacyImageObject(imageKeyToDelete);
+        await releaseImageReference(imageKeyToDelete);
     });
 
 function normalizeCancelMode(mode: CancelBinarySessionMode | undefined): CancelBinarySessionMode {

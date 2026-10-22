@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { orderEntries } from "@/lib/ranking";
 import { NO_IMAGE_KEY } from "@/lib/images";
 import { assertOwned, first, getDb, now } from "@/server/lib/db";
-import { deleteLegacyImageObject } from "@/server/lib/imageAssets";
+import { releaseImageReference } from "@/server/lib/imageAssets";
 import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import { getOwnedCategory } from "./stores/categoryStore";
@@ -56,7 +56,7 @@ export const markImageUnavailable = createServerFn({ method: "POST" })
                 .bind(NO_IMAGE_KEY, updatedAt, entry.id, userId)
                 .run();
 
-            await deleteLegacyImageObject(entry.image_key);
+            await releaseImageReference(entry.image_key);
 
             return { imageKey: NO_IMAGE_KEY };
         }
@@ -81,7 +81,7 @@ export const markImageUnavailable = createServerFn({ method: "POST" })
             .bind(NO_IMAGE_KEY, updatedAt, queuedEntry.id, userId)
             .run();
 
-        await deleteLegacyImageObject(queuedEntry.image_key);
+        await releaseImageReference(queuedEntry.image_key);
 
         return { imageKey: NO_IMAGE_KEY };
     });

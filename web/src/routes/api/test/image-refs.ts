@@ -8,6 +8,11 @@ interface ImageReferenceRow {
     image_key: string | null;
 }
 
+interface ImageAssetRow {
+    object_key: string;
+    unreferenced_at: number | null;
+}
+
 export const Route = createFileRoute("/api/test/image-refs")({
     server: {
         handlers: {
@@ -38,7 +43,16 @@ export const Route = createFileRoute("/api/test/image-refs")({
                         .bind(email, email)
                 );
 
-                return Response.json({ rows });
+                const assets = await all<ImageAssetRow>(
+                    getDb()
+                        .prepare(
+                            `SELECT object_key, unreferenced_at
+                             FROM image_assets
+                             ORDER BY object_key ASC`
+                        )
+                );
+
+                return Response.json({ assets, rows });
             }
         }
     }

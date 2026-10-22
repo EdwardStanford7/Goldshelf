@@ -28,7 +28,7 @@ import {
     normalizeRequiredText
 } from "@/server/lib/validation";
 import { auth, requestHasSessionCookie } from "@/server/lib/auth";
-import { storeContentAddressedImage } from "@/server/lib/imageAssets";
+import { releaseImageReferences, storeContentAddressedImage } from "@/server/lib/imageAssets";
 import { authMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow, getOwnedCategory } from "./stores/categoryStore";
 import {
@@ -703,7 +703,12 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             )
         ];
 
-        await runBatches(db, statements);
+        try {
+            await runBatches(db, statements);
+        } catch (error) {
+            await releaseImageReferences(queuedEntries.map((entry) => entry.imageKey));
+            throw error;
+        }
 
         return {
             categoryId: targetCategoryId,

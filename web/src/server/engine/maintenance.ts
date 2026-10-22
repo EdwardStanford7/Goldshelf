@@ -1,6 +1,6 @@
 import { hasStoredImage } from "@/lib/images";
 import { all, getDb, now } from "@/server/lib/db";
-import { deleteLegacyImageObject } from "@/server/lib/imageAssets";
+import { releaseImageReferences } from "@/server/lib/imageAssets";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DELETED_ITEM_RETENTION_MS = 30 * DAY_MS;
@@ -60,7 +60,6 @@ async function purgeDeletedRows({
             .map((row) => row.image_key)
             .filter((imageKey): imageKey is string => hasStoredImage(imageKey))
     ));
-    await Promise.all(imageKeys.map(deleteLegacyImageObject));
     await db.batch(
         deletedRows.map((row) =>
             db
@@ -71,4 +70,5 @@ async function purgeDeletedRows({
                 .bind(userId, row.id, cutoff)
         )
     );
+    await releaseImageReferences(imageKeys);
 }

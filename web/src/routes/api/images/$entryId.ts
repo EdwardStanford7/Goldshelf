@@ -2,7 +2,7 @@ import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
 import { isNoImageKey, hasStoredImage } from "@/lib/images";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
-import { deleteLegacyImageObject, storeContentAddressedImage } from "@/server/lib/imageAssets";
+import { releaseImageReference, storeContentAddressedImage } from "@/server/lib/imageAssets";
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 
@@ -105,11 +105,12 @@ export const Route = createFileRoute("/api/images/$entryId")({
                         .bind(imageKey, now(), entry.id, session.user.id)
                         .run();
                 } catch (error) {
+                    await releaseImageReference(imageKey);
                     throw error;
                 }
 
                 if (entry.image_key !== imageKey) {
-                    await deleteLegacyImageObject(entry.image_key);
+                    await releaseImageReference(entry.image_key);
                 }
 
                 return Response.json({ imageKey });
@@ -153,7 +154,7 @@ export const Route = createFileRoute("/api/images/$entryId")({
                     .bind(now(), entry.id, session.user.id)
                     .run();
 
-                await deleteLegacyImageObject(entry.image_key);
+                await releaseImageReference(entry.image_key);
 
                 return Response.json({ ok: true });
             }

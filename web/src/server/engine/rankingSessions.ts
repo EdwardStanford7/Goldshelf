@@ -12,7 +12,7 @@ import type {
 } from "@/lib/types";
 import { hasStoredImage } from "@/lib/images";
 import { all, assertOwned, first, getDb, newId, now, runBatches } from "@/server/lib/db";
-import { deleteLegacyImageObject } from "@/server/lib/imageAssets";
+import { releaseImageReferences } from "@/server/lib/imageAssets";
 import { getOwnedCategory } from "../stores/categoryStore";
 import {
     getNextActiveRankPosition,
@@ -689,7 +689,7 @@ async function cancelStaleActiveRankingSessions(userId: string) {
     }
 
     await runBatches(db, statements);
-    await Promise.all(Array.from(new Set(imageKeysToDelete)).map(deleteLegacyImageObject));
+    await releaseImageReferences(imageKeysToDelete);
 }
 
 function canResumeActiveSession(session: ActiveSessionRepairRow) {
@@ -810,7 +810,7 @@ async function recoverInterruptedRankingEntries(userId: string) {
     }
 
     await runBatches(db, statements);
-    await Promise.all(Array.from(new Set(imageKeysToDelete)).map(deleteLegacyImageObject));
+    await releaseImageReferences(imageKeysToDelete);
 }
 
 export async function prepareBinarySession(
