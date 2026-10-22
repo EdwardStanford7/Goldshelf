@@ -1,6 +1,7 @@
 import { hasStoredImage } from "@/lib/images";
 import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
+import { storedImageResponse } from "@/server/lib/imageResponse";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
@@ -27,17 +28,10 @@ export const Route = createFileRoute("/api/profile-image")({
                     return new Response("Not found", { status: 404 });
                 }
 
-                const image = await env.IMAGES.get(imageKey);
-                if (!image?.body) {
-                    return new Response("Not found", { status: 404 });
-                }
-
-                return new Response(image.body, {
-                    headers: {
-                        "content-type": image.httpMetadata?.contentType ?? "image/jpeg",
-                        "cache-control": "private, max-age=31536000, immutable"
-                    }
-                });
+                return await storedImageResponse(
+                    imageKey,
+                    "private, max-age=31536000, immutable"
+                ) ?? new Response("Not found", { status: 404 });
             },
             POST: async ({ request }: { request: Request }) => {
                 const session = await auth.api.getSession({ headers: request.headers });

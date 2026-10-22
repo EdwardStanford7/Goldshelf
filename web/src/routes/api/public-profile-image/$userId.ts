@@ -2,8 +2,8 @@ import { hasStoredImage } from "@/lib/images";
 import { hasAdminRole } from "@/lib/admin";
 import { auth } from "@/server/lib/auth";
 import { first, getDb } from "@/server/lib/db";
+import { storedImageResponse } from "@/server/lib/imageResponse";
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "cloudflare:workers";
 
 export const Route = createFileRoute("/api/public-profile-image/$userId")({
     server: {
@@ -65,17 +65,8 @@ export const Route = createFileRoute("/api/public-profile-image/$userId")({
                     return new Response("Not found", { status: 404 });
                 }
 
-                const image = await env.IMAGES.get(imageKey);
-                if (!image?.body) {
-                    return new Response("Not found", { status: 404 });
-                }
-
-                return new Response(image.body, {
-                    headers: {
-                        "content-type": image.httpMetadata?.contentType ?? "image/jpeg",
-                        "cache-control": "no-store"
-                    }
-                });
+                return await storedImageResponse(imageKey, "no-store")
+                    ?? new Response("Not found", { status: 404 });
             }
         }
     }

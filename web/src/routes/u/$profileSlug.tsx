@@ -891,8 +891,8 @@ function PublicEntryPoster({
     const [failed, setFailed] = useState(false);
     const src = hasStoredImage(entry.imageKey) && !failed
         ? usePrivateImages
-            ? `/api/images/${encodeURIComponent(entry.id)}`
-            : `/api/public-images/${encodeURIComponent(entry.id)}`
+            ? `/api/images/${encodeURIComponent(entry.id)}?v=${encodeURIComponent(entry.imageKey)}`
+            : `/api/public-images/${encodeURIComponent(entry.id)}?v=${encodeURIComponent(entry.imageKey)}`
         : null;
 
     if (!src) {
@@ -922,7 +922,7 @@ function PublicProfileAvatar({
     const src = hasStoredImage(imageKey)
         ? isSelf
             ? `/api/profile-image?v=${encodeURIComponent(imageKey ?? "")}`
-            : `/api/public-profile-image/${encodeURIComponent(userId)}`
+            : `/api/public-profile-image/${encodeURIComponent(userId)}?v=${encodeURIComponent(imageKey)}`
         : null;
 
     return (

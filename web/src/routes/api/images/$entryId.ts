@@ -3,8 +3,8 @@ import { first, getDb, now } from "@/server/lib/db";
 import { isNoImageKey, hasStoredImage } from "@/lib/images";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
 import { releaseImageReference, storeContentAddressedImage } from "@/server/lib/imageAssets";
+import { storedImageResponse } from "@/server/lib/imageResponse";
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "cloudflare:workers";
 
 const MAX_UPLOAD_IMAGE_BYTES = 3 * 1024 * 1024;
 
@@ -41,17 +41,11 @@ export const Route = createFileRoute("/api/images/$entryId")({
                     return new Response("No image saved", { status: 404 });
                 }
 
-                const image = await env.IMAGES.get(entry.image_key);
-                if (!image?.body) {
-                    return new Response("Not found", { status: 404 });
-                }
-
-                return new Response(image.body, {
-                    headers: {
-                        "content-type": image.httpMetadata?.contentType ?? "image/png",
-                        "cache-control": "private, max-age=31536000, immutable"
-                    }
-                });
+                return await storedImageResponse(
+                    entry.image_key,
+                    "private, max-age=31536000, immutable",
+                    "image/png"
+                ) ?? new Response("Not found", { status: 404 });
             },
             POST: async ({
                 request,

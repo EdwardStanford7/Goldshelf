@@ -910,7 +910,7 @@ function ProfileAvatar({
     const src = hasStoredImage(imageKey)
         ? currentUser
             ? `/api/profile-image?v=${encodeURIComponent(imageKey ?? "")}`
-            : `/api/public-profile-image/${encodeURIComponent(userId)}`
+            : `/api/public-profile-image/${encodeURIComponent(userId)}?v=${encodeURIComponent(imageKey)}`
         : null;
 
     return (
