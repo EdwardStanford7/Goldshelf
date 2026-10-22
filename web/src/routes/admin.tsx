@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from "react";
-import { Ban, RotateCcw, Search, Shield, ShieldOff, XCircle } from "lucide-react";
+import { Ban, HardDrive, RotateCcw, Search, Shield, ShieldOff, XCircle } from "lucide-react";
 import { BrandLink } from "@/components/ui/BrandLink";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,8 @@ import type {
     AdminUserDetailData,
     AdminUserListData,
     AdminUserSearchField,
-    AdminUserSummary
+    AdminUserSummary,
+    ImageStorageReconciliation
 } from "@/lib/types";
 import {
     banAdminUser,
@@ -23,6 +24,7 @@ import {
     revokeAdminUserSessions,
     unbanAdminUser
 } from "@/server/admin";
+import { loadImageStorageReconciliation } from "@/server/imageAdmin";
 import { getSession } from "@/server/session";
 
 const ADMIN_PAGE_SIZE = 20;
@@ -116,6 +118,8 @@ function AdminContent({
     const [loadingList, setLoadingList] = useState(false);
     const [loadingDetailUserId, setLoadingDetailUserId] = useState<string | null>(null);
     const [actionBusy, setActionBusy] = useState<string | null>(null);
+    const [imageReport, setImageReport] = useState<ImageStorageReconciliation | null>(null);
+    const [checkingImages, setCheckingImages] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const totalPages = Math.max(1, Math.ceil(listData.total / listData.limit));
     const currentPage = Math.floor(listData.offset / listData.limit) + 1;
@@ -236,6 +240,18 @@ function AdminContent({
         }
     }
 
+    async function checkImageStorage() {
+        setCheckingImages(true);
+        setError(null);
+        try {
+            setImageReport(await loadImageStorageReconciliation());
+        } catch (loadError) {
+            setError(errorMessage(loadError));
+        } finally {
+            setCheckingImages(false);
+        }
+    }
+
     function replaceListedUser(user: AdminUserSummary) {
         setListData((current) => ({
             ...current,
@@ -292,6 +308,46 @@ function AdminContent({
                     {error ? (
                         <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                             {error}
+                        </p>
+                    ) : null}
+                </Card>
+
+                <Card className="gap-3 rounded-lg px-4 shadow-panel">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <strong className="flex items-center gap-2">
+                                <HardDrive className="size-4 text-primary" />
+                                Image storage
+                            </strong>
+                            <span className="text-sm text-muted-foreground">
+                                Read-only comparison of D1 references and R2 objects.
+                            </span>
+                        </div>
+                        <Button
+                            disabled={checkingImages}
+                            type="button"
+                            variant="outline"
+                            onClick={() => void checkImageStorage()}
+                        >
+                            {checkingImages ? "Checking..." : "Check storage"}
+                        </Button>
+                    </div>
+                    {imageReport ? (
+                        <div className="grid gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+                            <StorageMetric label="R2 objects" value={imageReport.r2ObjectCount} />
+                            <StorageMetric label="Referenced" value={imageReport.referencedKeyCount} />
+                            <StorageMetric label="Shared assets" value={imageReport.trackedAssetCount} />
+                            <StorageMetric label="Legacy" value={imageReport.legacyReferenceCount} />
+                            <StorageMetric label="Missing" value={imageReport.missingObjectCount} danger={imageReport.missingObjectCount > 0} />
+                            <StorageMetric label="Orphaned" value={imageReport.orphanObjectCount} danger={imageReport.orphanObjectCount > 0} />
+                        </div>
+                    ) : null}
+                    {imageReport?.truncated ? (
+                        <p className="m-0 text-sm text-destructive">Report stopped at 50,000 R2 objects.</p>
+                    ) : null}
+                    {imageReport && imageReport.untrackedSharedReferenceCount > 0 ? (
+                        <p className="m-0 text-sm text-destructive">
+                            {imageReport.untrackedSharedReferenceCount} shared references have no asset record.
                         </p>
                     ) : null}
                 </Card>
@@ -374,6 +430,23 @@ function AdminContent({
                 </div>
             </div>
         </main>
+    );
+}
+
+function StorageMetric({
+    danger = false,
+    label,
+    value
+}: {
+    danger?: boolean;
+    label: string;
+    value: number;
+}) {
+    return (
+        <div className={`rounded-md border px-3 py-2 ${danger ? "border-destructive/40 bg-destructive/10" : "border-border bg-muted/35"}`}>
+            <span className="block text-xs text-muted-foreground">{label}</span>
+            <strong className={danger ? "text-destructive" : ""}>{value}</strong>
+        </div>
     );
 }
 

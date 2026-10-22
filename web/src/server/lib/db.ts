@@ -4,6 +4,10 @@ export function getDb() {
     return env.DB;
 }
 
+export function getImagesBucket() {
+    return env.IMAGES;
+}
+
 export function now() {
     return Date.now();
 }

@@ -243,3 +243,18 @@ export interface AdminUserDetailData {
     user: AdminUserSummary;
     sessions: AdminSessionSummary[];
 }
+
+export interface ImageStorageReconciliation {
+    checkedAt: number;
+    truncated: boolean;
+    r2ObjectCount: number;
+    referencedKeyCount: number;
+    trackedAssetCount: number;
+    legacyReferenceCount: number;
+    missingObjectCount: number;
+    orphanObjectCount: number;
+    untrackedSharedReferenceCount: number;
+    missingObjectSamples: string[];
+    orphanObjectSamples: string[];
+    untrackedSharedReferenceSamples: string[];
+}

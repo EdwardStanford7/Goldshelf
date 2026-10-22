@@ -49,6 +49,11 @@ test.describe("Admin user support", () => {
         await expect(page.getByText("target@e2e.test")).toBeVisible();
         await expect(page.getByText("1 categories")).toBeVisible();
         await expect(page.getByText("1 entries")).toBeVisible();
+
+        await page.getByRole("button", { name: "Check storage" }).click();
+        await expect(page.getByText("R2 objects")).toBeVisible();
+        await expect(page.getByText("Referenced", { exact: true })).toBeVisible();
+        await expect(page.getByText("Shared assets")).toBeVisible();
     });
 
     test("admin can ban and unban users with audit rows and session invalidation", async ({ browser, context, page }) => {
