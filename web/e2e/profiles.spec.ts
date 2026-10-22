@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
+import { BASE_URL } from "./constants";
 import { gotoApp, openNewCategoryDialog, seedUsers, signInViaApi } from "./helpers";
 
 const ALICE = {
@@ -80,6 +81,21 @@ test.describe("Profiles", () => {
         ]);
         await signInViaApi(aliceContext, ALICE.email);
 
+        await gotoApp(alicePage);
+        const arrivalEntryId = await alicePage
+            .locator("[data-entry-id]", { hasText: "#1 Arrival" })
+            .getAttribute("data-entry-id");
+        expect(arrivalEntryId).toBeTruthy();
+        const imageUpload = await alicePage.request.post(
+            `${BASE_URL}/api/images/${encodeURIComponent(arrivalEntryId!)}`,
+            {
+                data: Buffer.from("shared-copy-image"),
+                headers: { "content-type": "image/jpeg", origin: BASE_URL }
+            }
+        );
+        expect(imageUpload.ok()).toBe(true);
+        const sourceImageKey = ((await imageUpload.json()) as { imageKey: string }).imageKey;
+
         await gotoApp(alicePage, "/profile");
         const aliceSlug = await readOwnSlug(alicePage);
         await alicePage.getByLabel("Public profile").check();
@@ -120,6 +136,16 @@ test.describe("Profiles", () => {
         await expect(bobPage.getByText("Heat").first()).toBeVisible();
         await expect(bobPage.getByText("Solaris").first()).toBeVisible();
         await expect(bobPage.getByText("Dune").first()).toBeHidden();
+
+        const imageRefsResponse = await fetch(
+            `${BASE_URL}/api/test/image-refs?email=${encodeURIComponent(BOB.email)}`
+        );
+        expect(imageRefsResponse.ok).toBe(true);
+        const imageRefs = (await imageRefsResponse.json()) as {
+            rows: Array<{ kind: string; name: string; image_key: string | null }>;
+        };
+        expect(imageRefs.rows.find((row) => row.kind === "queue" && row.name === "Arrival")?.image_key)
+            .toBe(sourceImageKey);
 
         await bobContext.close();
     });

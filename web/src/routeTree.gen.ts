@@ -23,6 +23,7 @@ import { Route as ApiTestStaleRankingRouteImport } from './routes/api/test/stale
 import { Route as ApiTestSeedRouteImport } from './routes/api/test/seed'
 import { Route as ApiTestResetRouteImport } from './routes/api/test/reset'
 import { Route as ApiTestRankingDisplayPhaseRouteImport } from './routes/api/test/ranking-display-phase'
+import { Route as ApiTestImageRefsRouteImport } from './routes/api/test/image-refs'
 import { Route as ApiTestHealthRouteImport } from './routes/api/test/health'
 import { Route as ApiTestAuthUrlRouteImport } from './routes/api/test/auth-url'
 import { Route as ApiTestAdminAuditRouteImport } from './routes/api/test/admin-audit'
@@ -103,6 +104,11 @@ const ApiTestRankingDisplayPhaseRoute =
     path: '/api/test/ranking-display-phase',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiTestImageRefsRoute = ApiTestImageRefsRouteImport.update({
+  id: '/api/test/image-refs',
+  path: '/api/test/image-refs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTestHealthRoute = ApiTestHealthRouteImport.update({
   id: '/api/test/health',
   path: '/api/test/health',
@@ -165,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/api/test/admin-audit': typeof ApiTestAdminAuditRoute
   '/api/test/auth-url': typeof ApiTestAuthUrlRoute
   '/api/test/health': typeof ApiTestHealthRoute
+  '/api/test/image-refs': typeof ApiTestImageRefsRoute
   '/api/test/ranking-display-phase': typeof ApiTestRankingDisplayPhaseRoute
   '/api/test/reset': typeof ApiTestResetRoute
   '/api/test/seed': typeof ApiTestSeedRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/api/test/admin-audit': typeof ApiTestAdminAuditRoute
   '/api/test/auth-url': typeof ApiTestAuthUrlRoute
   '/api/test/health': typeof ApiTestHealthRoute
+  '/api/test/image-refs': typeof ApiTestImageRefsRoute
   '/api/test/ranking-display-phase': typeof ApiTestRankingDisplayPhaseRoute
   '/api/test/reset': typeof ApiTestResetRoute
   '/api/test/seed': typeof ApiTestSeedRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/api/test/admin-audit': typeof ApiTestAdminAuditRoute
   '/api/test/auth-url': typeof ApiTestAuthUrlRoute
   '/api/test/health': typeof ApiTestHealthRoute
+  '/api/test/image-refs': typeof ApiTestImageRefsRoute
   '/api/test/ranking-display-phase': typeof ApiTestRankingDisplayPhaseRoute
   '/api/test/reset': typeof ApiTestResetRoute
   '/api/test/seed': typeof ApiTestSeedRoute
@@ -240,6 +249,7 @@ export interface FileRouteTypes {
     | '/api/test/admin-audit'
     | '/api/test/auth-url'
     | '/api/test/health'
+    | '/api/test/image-refs'
     | '/api/test/ranking-display-phase'
     | '/api/test/reset'
     | '/api/test/seed'
@@ -264,6 +274,7 @@ export interface FileRouteTypes {
     | '/api/test/admin-audit'
     | '/api/test/auth-url'
     | '/api/test/health'
+    | '/api/test/image-refs'
     | '/api/test/ranking-display-phase'
     | '/api/test/reset'
     | '/api/test/seed'
@@ -288,6 +299,7 @@ export interface FileRouteTypes {
     | '/api/test/admin-audit'
     | '/api/test/auth-url'
     | '/api/test/health'
+    | '/api/test/image-refs'
     | '/api/test/ranking-display-phase'
     | '/api/test/reset'
     | '/api/test/seed'
@@ -313,6 +325,7 @@ export interface RootRouteChildren {
   ApiTestAdminAuditRoute: typeof ApiTestAdminAuditRoute
   ApiTestAuthUrlRoute: typeof ApiTestAuthUrlRoute
   ApiTestHealthRoute: typeof ApiTestHealthRoute
+  ApiTestImageRefsRoute: typeof ApiTestImageRefsRoute
   ApiTestRankingDisplayPhaseRoute: typeof ApiTestRankingDisplayPhaseRoute
   ApiTestResetRoute: typeof ApiTestResetRoute
   ApiTestSeedRoute: typeof ApiTestSeedRoute
@@ -419,6 +432,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTestRankingDisplayPhaseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/test/image-refs': {
+      id: '/api/test/image-refs'
+      path: '/api/test/image-refs'
+      fullPath: '/api/test/image-refs'
+      preLoaderRoute: typeof ApiTestImageRefsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/test/health': {
       id: '/api/test/health'
       path: '/api/test/health'
@@ -497,6 +517,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTestAdminAuditRoute: ApiTestAdminAuditRoute,
   ApiTestAuthUrlRoute: ApiTestAuthUrlRoute,
   ApiTestHealthRoute: ApiTestHealthRoute,
+  ApiTestImageRefsRoute: ApiTestImageRefsRoute,
   ApiTestRankingDisplayPhaseRoute: ApiTestRankingDisplayPhaseRoute,
   ApiTestResetRoute: ApiTestResetRoute,
   ApiTestSeedRoute: ApiTestSeedRoute,

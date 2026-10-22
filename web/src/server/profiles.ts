@@ -3,6 +3,7 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 import { env } from "cloudflare:workers";
 import { hasAdminRole } from "@/lib/admin";
 import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
+import { isContentAddressedImageKey } from "@/lib/imageAssets";
 import { hasStoredImage } from "@/lib/images";
 import { PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
@@ -27,6 +28,7 @@ import {
     normalizeRequiredText
 } from "@/server/lib/validation";
 import { auth, requestHasSessionCookie } from "@/server/lib/auth";
+import { storeContentAddressedImage } from "@/server/lib/imageAssets";
 import { authMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow, getOwnedCategory } from "./stores/categoryStore";
 import {
@@ -670,48 +672,38 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             throw new Error("Copy mode is required");
         }
 
-        const copiedImageKeys: string[] = [];
-        let queuedEntries: QueuedPublicCategoryCopyEntry[] = [];
+        const queuedEntries = await copyPublicCategoryEntriesToQueueImages(
+            entriesToQueue.map((entry, index) => ({
+                entry,
+                queueId: newId("queue"),
+                createdAt: createdAt + index
+            }))
+        );
 
-        try {
-            queuedEntries = await copyPublicCategoryEntriesToQueueImages(
-                userId,
-                entriesToQueue.map((entry, index) => ({
-                    entry,
-                    queueId: newId("queue"),
-                    createdAt: createdAt + index
-                })),
-                copiedImageKeys
-            );
-
-            const statements: D1PreparedStatement[] = [
-                ...(categoryInsertStatement ? [categoryInsertStatement] : []),
-                ...queuedEntries.map((entry) =>
-                    db
-                        .prepare(
-                            `INSERT INTO entry_queue (
+        const statements: D1PreparedStatement[] = [
+            ...(categoryInsertStatement ? [categoryInsertStatement] : []),
+            ...queuedEntries.map((entry) =>
+                db
+                    .prepare(
+                        `INSERT INTO entry_queue (
                        id, user_id, category_id, name, image_key,
                        status, created_at, updated_at
                      )
                      VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
-                        )
-                        .bind(
-                            entry.id,
-                            userId,
-                            targetCategoryId,
-                            entry.name,
-                            entry.imageKey,
-                            entry.createdAt,
-                            entry.createdAt
-                        )
-                )
-            ];
+                    )
+                    .bind(
+                        entry.id,
+                        userId,
+                        targetCategoryId,
+                        entry.name,
+                        entry.imageKey,
+                        entry.createdAt,
+                        entry.createdAt
+                    )
+            )
+        ];
 
-            await runBatches(db, statements);
-        } catch (error) {
-            await Promise.all(copiedImageKeys.map((imageKey) => env.IMAGES.delete(imageKey).catch(() => undefined)));
-            throw error;
-        }
+        await runBatches(db, statements);
 
         return {
             categoryId: targetCategoryId,
@@ -759,9 +751,7 @@ function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[
 }
 
 async function copyPublicCategoryEntriesToQueueImages(
-    userId: string,
-    inputs: PublicCategoryImageCopyInput[],
-    copiedImageKeys: string[]
+    inputs: PublicCategoryImageCopyInput[]
 ) {
     if (inputs.length === 0) {
         return [];
@@ -780,15 +770,7 @@ async function copyPublicCategoryEntriesToQueueImages(
                 continue;
             }
 
-            const imageKey = await copyEntryImageToQueueImage(
-                userId,
-                input.queueId,
-                input.entry.imageKey,
-                input.createdAt
-            );
-            if (hasStoredImage(imageKey)) {
-                copiedImageKeys.push(imageKey);
-            }
+            const imageKey = await copyEntryImageToQueueImage(input.entry.imageKey, input.createdAt);
 
             queuedEntries[index] = {
                 id: input.queueId,
@@ -839,12 +821,13 @@ async function assertCategoryNameAvailable(userId: string, categoryName: string)
 }
 
 async function copyEntryImageToQueueImage(
-    userId: string,
-    queueId: string,
     sourceImageKey: string | null,
     timestamp: number
 ) {
     if (!hasStoredImage(sourceImageKey)) {
+        return sourceImageKey;
+    }
+    if (isContentAddressedImageKey(sourceImageKey)) {
         return sourceImageKey;
     }
 
@@ -853,14 +836,11 @@ async function copyEntryImageToQueueImage(
         return null;
     }
 
-    const imageKey = `${userId}/queue/${queueId}-copy-${timestamp}.jpg`;
-    await env.IMAGES.put(imageKey, image.body, {
-        httpMetadata: {
-            contentType: image.httpMetadata?.contentType ?? "image/jpeg"
-        }
-    });
-
-    return imageKey;
+    return storeContentAddressedImage(
+        await image.arrayBuffer(),
+        image.httpMetadata?.contentType ?? "image/jpeg",
+        timestamp
+    );
 }
 
 async function listCopyTargetCategories(userId: string): Promise<ProfileCopyTargetCategory[]> {
