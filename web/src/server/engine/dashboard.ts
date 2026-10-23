@@ -7,7 +7,6 @@ import { getQueueSettings, listQueuedEntries } from "@/server/stores/queueStore"
 import { ensureUserProfile, mapCurrentUserProfile } from "@/server/stores/profileStore";
 import { getActiveBinarySession, repairInterruptedRankingState } from "@/server/engine/rankingSessions";
 import { getActiveRepairSession, repairInterruptedRepairState } from "@/server/engine/repairSessions";
-import { purgeExpiredDeletedItems } from "@/server/engine/maintenance";
 
 const SLOW_DASHBOARD_LOAD_MS = 750;
 const LARGE_DASHBOARD_CATEGORY_COUNT = 100;
@@ -86,7 +85,6 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
     const db = getDb();
     await repairInterruptedRankingState(userId);
     await repairInterruptedRepairState(userId);
-    await purgeExpiredDeletedItems(userId);
     const profile = await ensureUserProfile(userId);
     const revision = await getDashboardRevision(userId);
     const queueSettings = await getQueueSettings(userId);

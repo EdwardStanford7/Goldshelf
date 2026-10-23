@@ -11,44 +11,40 @@ interface DeletedImageRow {
     image_key: string | null;
 }
 
-export async function purgeExpiredDeletedItems(userId: string) {
+export async function purgeExpiredDeletedItems() {
     const cutoff = now() - DELETED_ITEM_RETENTION_MS;
     const db = getDb();
     await purgeDeletedRows({
         db,
         cutoff,
-        tableName: "entries",
-        userId
+        tableName: "entries"
     });
     await purgeDeletedRows({
         db,
         cutoff,
-        tableName: "entry_queue",
-        userId
+        tableName: "entry_queue"
     });
 }
 
 async function purgeDeletedRows({
     cutoff,
     db,
-    tableName,
-    userId
+    tableName
 }: {
     cutoff: number;
     db: D1Database;
     tableName: "entries" | "entry_queue";
-    userId: string;
 }) {
     const deletedRows = await all<DeletedImageRow>(
         db
             .prepare(
                 `SELECT id, image_key
          FROM ${tableName}
-         WHERE user_id = ? AND status = 'deleted' AND updated_at < ?
+         WHERE status = 'deleted' AND updated_at < ?
          ORDER BY updated_at ASC
          LIMIT ?`
             )
-            .bind(userId, cutoff, DELETED_CLEANUP_LIMIT)
+            .bind(cutoff, DELETED_CLEANUP_LIMIT)
     );
 
     if (deletedRows.length === 0) {
@@ -65,9 +61,9 @@ async function purgeDeletedRows({
             db
                 .prepare(
                     `DELETE FROM ${tableName}
-             WHERE user_id = ? AND id = ? AND status = 'deleted' AND updated_at < ?`
+             WHERE id = ? AND status = 'deleted' AND updated_at < ?`
                 )
-                .bind(userId, row.id, cutoff)
+                .bind(row.id, cutoff)
         )
     );
     await releaseImageReferences(imageKeys);

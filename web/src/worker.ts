@@ -1,4 +1,5 @@
 import startServer from "@tanstack/react-start/server-entry";
+import { purgeExpiredDeletedItems } from "@/server/engine/maintenance";
 import { purgeUnreferencedImageAssets } from "@/server/lib/imageAssets";
 import { themeInitScript } from "@/lib/theme";
 
@@ -45,6 +46,9 @@ export default {
         return withSecurityHeaders(await startServer.fetch(request));
     },
     scheduled(_controller: ScheduledController, _env: Cloudflare.Env, ctx: ExecutionContext) {
-        ctx.waitUntil(purgeUnreferencedImageAssets());
+        ctx.waitUntil(Promise.all([
+            purgeExpiredDeletedItems(),
+            purgeUnreferencedImageAssets()
+        ]));
     }
 } satisfies ExportedHandler<Cloudflare.Env>;

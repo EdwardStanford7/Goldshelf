@@ -20,6 +20,8 @@ The admin **Check storage** action compares D1 references and R2 objects. Run it
 
 Cloudflare bucket-size/object-count metadata can lag or disagree with direct object reads. Treat the reconciliation report and a direct object read as the source of truth during an incident.
 
+The daily Worker task also permanently removes deleted entries and queued entries after their 30-day retention period. Dashboard loads do not perform retention cleanup.
+
 ## DNS and public endpoints
 
 The canonical host is `goldshelf.net`. Maintain a Cloudflare redirect from `www.goldshelf.net/*` to `https://goldshelf.net/$1`, or deliberately provision `www` as a served host. Review HSTS, CSP, Referrer-Policy, and Permissions-Policy after any proxy or Worker routing change.
