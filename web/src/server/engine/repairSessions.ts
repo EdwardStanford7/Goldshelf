@@ -18,6 +18,7 @@ import {
 } from "@/lib/repair";
 import type { ActiveRepairSession, RepairSessionView } from "@/lib/types";
 import { all, assertOwned, first, getDb, newId, now } from "@/server/lib/db";
+import { claimActiveOperationStatement } from "@/server/lib/activeOperation";
 import { getOwnedCategory } from "@/server/stores/categoryStore";
 import {
     getOwnedEntry,
@@ -185,16 +186,16 @@ export async function startRepairSession(
     const sessionId = newId("repair");
     const createdAt = now();
     const displayOrder = pickRepairCheckDisplayOrder(matchup.higherEntryId, matchup.lowerEntryId);
-    await db
-        .prepare(
+    await db.batch([
+        claimActiveOperationStatement(db, userId, "repair", sessionId, createdAt),
+        db.prepare(
             `INSERT INTO repair_sessions (
                id, user_id, scope, scope_category_id, active_category_id,
                entry_a_id, entry_b_id, status, phase, strategy,
                comparison_count, repair_count, operation_state, created_at, updated_at
              )
              VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 'checking', 'none', 0, 0, ?, ?, ?)`
-        )
-        .bind(
+        ).bind(
             sessionId,
             userId,
             scope,
@@ -206,7 +207,7 @@ export async function startRepairSession(
             createdAt,
             createdAt
         )
-        .run();
+    ]);
 
     return {
         kind: "session" as const,

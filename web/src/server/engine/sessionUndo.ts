@@ -1,5 +1,6 @@
 import { parseRankingOperationState } from "./rankingState";
 import { all, first, runBatches } from "@/server/lib/db";
+import { claimActiveOperationStatement } from "@/server/lib/activeOperation";
 
 const MAX_EXISTENCE_CHECK_IDS = 90;
 const UNDO_RESTORE_BATCH_SIZE = 10;
@@ -222,6 +223,7 @@ export async function restoreRankingMatchUndoState(
     const undoState = parseRankingUndoState(undoStateValue);
     await assertSnapshotEntriesStillExist(db, userId, undoState.entries);
     const statements: D1PreparedStatement[] = [
+        claimActiveOperationStatement(db, userId, "ranking", undoState.session.id, Date.now()),
         ...restoreEntryStatements(db, userId, undoState.entries)
     ];
 
@@ -291,6 +293,7 @@ export async function restoreRepairMatchUndoState(
     const undoState = parseRepairUndoState(undoStateValue);
     await assertSnapshotEntriesStillExist(db, userId, undoState.entries);
     await runUndoRestoreBatches(db, [
+        claimActiveOperationStatement(db, userId, "repair", undoState.session.id, Date.now()),
         ...restoreEntryStatements(db, userId, undoState.entries),
         db
             .prepare(

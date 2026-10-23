@@ -114,6 +114,7 @@ export const startRerankEntry = createServerFn({ method: "POST" })
             createdAt: updatedAt
         });
         await db.batch([
+            session.operationClaim,
             db
                 .prepare(
                     `UPDATE entries
@@ -334,7 +335,7 @@ export const switchEntryCategory = createServerFn({ method: "POST" })
             opponentCount: targetCount,
             createdAt: updatedAt
         });
-        statements.push(session.statement);
+        statements.push(session.operationClaim, session.statement);
         await db.batch(statements);
 
         return { kind: "session" as const, entryId: entry.id, sessionId: session.sessionId };

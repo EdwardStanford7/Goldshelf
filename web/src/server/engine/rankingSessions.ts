@@ -35,6 +35,7 @@ import {
     serializeRankingOperationState
 } from "./rankingState";
 import { repairInterruptedRepairState } from "./repairSessions";
+import { claimActiveOperationStatement } from "@/server/lib/activeOperation";
 
 export interface SessionRow {
     id: string;
@@ -851,6 +852,13 @@ export async function prepareBinarySession(
     const sessionId = newId("rank");
     return {
         sessionId,
+        operationClaim: claimActiveOperationStatement(
+            db,
+            input.userId,
+            "ranking",
+            sessionId,
+            input.createdAt
+        ),
         statement: db
             .prepare(
                 `INSERT INTO ranking_sessions (

@@ -119,7 +119,7 @@ export async function createEntryWithBinaryRankingForUser(
             createdAt: operationCreatedAt
         });
         sessionId = session.sessionId;
-        statements.push(session.statement);
+        statements.push(session.operationClaim, session.statement);
     }
 
     if (input.queuedEntryId) {
