@@ -1,4 +1,5 @@
 import startServer from "@tanstack/react-start/server-entry";
+import { canonicalUrl } from "@/lib/canonicalHost";
 import { purgeExpiredDeletedItems } from "@/server/engine/maintenance";
 import { purgeUnreferencedImageAssets } from "@/server/lib/imageAssets";
 import { themeInitScript } from "@/lib/theme";
@@ -43,6 +44,10 @@ async function withSecurityHeaders(response: Response) {
 
 export default {
     async fetch(request: Request) {
+        const redirectUrl = canonicalUrl(request.url);
+        if (redirectUrl) {
+            return withSecurityHeaders(Response.redirect(redirectUrl, 308));
+        }
         return withSecurityHeaders(await startServer.fetch(request));
     },
     scheduled(_controller: ScheduledController, _env: Cloudflare.Env, ctx: ExecutionContext) {
