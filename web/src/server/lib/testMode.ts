@@ -3,7 +3,9 @@ import { env } from "cloudflare:workers";
 export type CapturedAuthUrlType = "reset-password";
 
 export function isTestMode() {
-    return env.TEST_MODE === "true";
+    // A mistakenly configured production Worker must not expose destructive
+    // e2e routes, even if TEST_MODE is accidentally added as a secret/var.
+    return env.TEST_MODE === "true" && env.BETTER_AUTH_URL !== "https://goldshelf.net";
 }
 
 export function testModeGate() {

@@ -92,11 +92,7 @@ build:
 	pnpm build
 
 check:
-	$(MAKE) test
-	$(MAKE) typecheck
-	$(MAKE) e2e-smoke
-	$(MAKE) audit
-	$(MAKE) build
+	pnpm run check
 
 check-full:
 	$(MAKE) test
@@ -179,8 +175,7 @@ verify-deploy-config:
 	node scripts/verify-deploy-config.mjs
 
 deploy: verify-deploy-config
-	$(MAKE) check
-	$(MAKE) migrate-remote
+	$(MAKE) wrangler-auth
 	pnpm run deploy
 
 deploy-first: install cf-login cf-create-d1 cf-create-r2 cf-secret-auth

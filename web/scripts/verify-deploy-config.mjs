@@ -48,6 +48,10 @@ if (!authUrl) {
   failures.push(`BETTER_AUTH_URL should be "https://goldshelf.net", found "${authUrl}".`);
 }
 
+if (config.vars?.TEST_MODE !== undefined) {
+  failures.push("TEST_MODE must never be set in the production Wrangler configuration.");
+}
+
 if (failures.length > 0) {
   console.error("Deploy config is not ready:");
   for (const failure of failures) {
