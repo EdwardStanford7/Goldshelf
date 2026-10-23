@@ -169,7 +169,7 @@ test.describe("Entry operations", () => {
         );
         expect(entryIds).toHaveLength(2);
 
-        const imageBytes = Buffer.from("deterministic-test-image-bytes");
+        const imageBytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
         const uploadedKeys: string[] = [];
         for (const entryId of entryIds) {
             const response = await page.request.post(

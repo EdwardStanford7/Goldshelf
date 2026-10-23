@@ -52,8 +52,8 @@ async function sendResetPasswordEmail({
     const resendApiKey = optionalEnv(env.RESEND_API_KEY);
     const fromEmail = optionalEnv(env.PASSWORD_RESET_FROM_EMAIL);
     if (!resendApiKey || !fromEmail) {
-        console.warn(`Password reset email is not configured. Reset link for ${user.email}: ${url}`);
-        return;
+        console.error("Password reset email is not configured");
+        throw new Error("Password reset email is not configured");
     }
 
     const response = await fetchWithTimeout(

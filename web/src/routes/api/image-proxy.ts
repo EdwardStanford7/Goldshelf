@@ -34,6 +34,7 @@ export const Route = createFileRoute("/api/image-proxy")({
                     response = await fetchWithTimeout(
                         imageUrl,
                         {
+                            redirect: "manual",
                             headers: {
                                 "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
                                 "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
@@ -44,6 +45,10 @@ export const Route = createFileRoute("/api/image-proxy")({
                     );
                 } catch {
                     return new Response("Image request failed", { status: 502 });
+                }
+
+                if (response.status >= 300 && response.status < 400) {
+                    return new Response("Image redirects are not allowed", { status: 422 });
                 }
 
                 if (!response.ok) {
@@ -68,7 +73,9 @@ export const Route = createFileRoute("/api/image-proxy")({
                 return new Response(image, {
                     headers: {
                         "cache-control": "private, no-store",
-                        "content-type": contentType
+                        "content-type": contentType,
+                        "content-security-policy": "sandbox; default-src 'none'",
+                        "x-content-type-options": "nosniff"
                     }
                 });
             }

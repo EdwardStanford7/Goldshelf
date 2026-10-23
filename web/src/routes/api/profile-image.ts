@@ -3,6 +3,7 @@ import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
 import { storedImageResponse } from "@/server/lib/imageResponse";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
+import { ImageUploadError, readValidatedImageUpload } from "@/server/lib/imageUpload";
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 
@@ -43,14 +44,14 @@ export const Route = createFileRoute("/api/profile-image")({
                     return originError;
                 }
 
-                const contentType = request.headers.get("content-type") ?? "";
-                if (!contentType.startsWith("image/")) {
-                    return Response.json({ message: "Expected an image upload" }, { status: 415 });
-                }
-
-                const image = await request.arrayBuffer();
-                if (image.byteLength > MAX_PROFILE_IMAGE_BYTES) {
-                    return Response.json({ message: "Image is too large" }, { status: 413 });
+                let image;
+                try {
+                    image = await readValidatedImageUpload(request, MAX_PROFILE_IMAGE_BYTES);
+                } catch (error) {
+                    if (error instanceof ImageUploadError) {
+                        return Response.json({ message: error.message }, { status: error.status });
+                    }
+                    throw error;
                 }
 
                 const user = await first<{ image: string | null }>(
@@ -63,10 +64,10 @@ export const Route = createFileRoute("/api/profile-image")({
                 }
                 const oldImageKey = user?.image ?? null;
 
-                const imageKey = `${session.user.id}/profile/avatar-${now()}.jpg`;
-                await env.IMAGES.put(imageKey, image, {
+                const imageKey = `${session.user.id}/profile/avatar-${now()}.${image.extension}`;
+                await env.IMAGES.put(imageKey, image.bytes, {
                     httpMetadata: {
-                        contentType
+                        contentType: image.contentType
                     }
                 });
 

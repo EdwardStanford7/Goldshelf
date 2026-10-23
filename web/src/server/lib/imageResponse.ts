@@ -47,7 +47,9 @@ export async function storedImageResponse(
             headers: {
                 "cache-control": `public, max-age=${IMAGE_OBJECT_CACHE_TTL_SECONDS}, immutable`,
                 "content-type": image.httpMetadata?.contentType ?? fallbackContentType,
-                "etag": image.httpEtag
+                "content-security-policy": "sandbox; default-src 'none'",
+                "etag": image.httpEtag,
+                "x-content-type-options": "nosniff"
             }
         });
         await cacheImage(imageKey, cached.clone());

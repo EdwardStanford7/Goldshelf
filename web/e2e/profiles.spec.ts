@@ -89,7 +89,7 @@ test.describe("Profiles", () => {
         const imageUpload = await alicePage.request.post(
             `${BASE_URL}/api/images/${encodeURIComponent(arrivalEntryId!)}`,
             {
-                data: Buffer.from("shared-copy-image"),
+                data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
                 headers: { "content-type": "image/jpeg", origin: BASE_URL }
             }
         );

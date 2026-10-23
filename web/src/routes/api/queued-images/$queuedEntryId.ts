@@ -4,6 +4,7 @@ import { isNoImageKey, hasStoredImage } from "@/lib/images";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
 import { releaseImageReference, storeContentAddressedImage } from "@/server/lib/imageAssets";
 import { storedImageResponse } from "@/server/lib/imageResponse";
+import { ImageUploadError, readValidatedImageUpload } from "@/server/lib/imageUpload";
 import { createFileRoute } from "@tanstack/react-router";
 
 const MAX_UPLOAD_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -77,17 +78,17 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
                     return Response.json({ message: "Queued entry not found" }, { status: 404 });
                 }
 
-                const contentType = request.headers.get("content-type") ?? "";
-                if (!contentType.startsWith("image/")) {
-                    return Response.json({ message: "Expected an image upload" }, { status: 415 });
+                let image;
+                try {
+                    image = await readValidatedImageUpload(request, MAX_UPLOAD_IMAGE_BYTES);
+                } catch (error) {
+                    if (error instanceof ImageUploadError) {
+                        return Response.json({ message: error.message }, { status: error.status });
+                    }
+                    throw error;
                 }
 
-                const image = await request.arrayBuffer();
-                if (image.byteLength > MAX_UPLOAD_IMAGE_BYTES) {
-                    return Response.json({ message: "Image is too large" }, { status: 413 });
-                }
-
-                const imageKey = await storeContentAddressedImage(image, contentType);
+                const imageKey = await storeContentAddressedImage(image.bytes, image.contentType);
 
                 try {
                     await getDb()

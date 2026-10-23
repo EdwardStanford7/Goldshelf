@@ -172,7 +172,7 @@ export function decodeImageUrl(value: string) {
 
 export function assertSafeImageUrl(value: string) {
     const url = new URL(value);
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
+    if (url.protocol !== "https:") {
         throw new Error("Unsupported image URL");
     }
 
