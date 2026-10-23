@@ -119,4 +119,4 @@ make password-reset-link EMAIL=user@example.com
 
 `make deploy-first` is only for one-time Cloudflare bootstrap on a new project or recreated resources. `wrangler.jsonc` is already pointed at `https://goldshelf.net`; after a Worker rename or intentional secret rotation, re-run `make cf-secret-auth` because Worker secrets are scoped to the Worker name. Use `make bootstrap-help` to see the rare setup targets. Both `make deploy` and `pnpm deploy` now run the smoke checks and remote migrations before deployment.
 
-See [docs/operations.md](docs/operations.md) for release, backup, storage reconciliation, and Cloudflare-access runbooks.
+For normal releases, `make deploy` is the only operational command you need. It runs the verification gate, applies remote D1 migrations, and deploys the Worker.

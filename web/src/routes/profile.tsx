@@ -15,6 +15,7 @@ import {
     unblockProfile,
     updateUserProfile
 } from "@/server/profiles";
+import { deleteCurrentUserAccount } from "@/server/account";
 import { getSession } from "@/server/session";
 import { Ban, Inbox, ListOrdered, Send, UserPlus, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -75,6 +76,8 @@ function ProfileRoute() {
     const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null);
     const [savingFollowId, setSavingFollowId] = useState<string | null>(null);
     const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
+    const [deleteConfirmation, setDeleteConfirmation] = useState("");
+    const [deletingAccount, setDeletingAccount] = useState(false);
     useEffect(() => {
         setSettings(loaderData.settings);
         setDisplayName(loaderData.settings?.user.name ?? "");
@@ -187,6 +190,21 @@ function ProfileRoute() {
             setActionError(profileError);
         } finally {
             setSavingProfile(false);
+        }
+    }
+
+    async function handleAccountDeletion(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setDeletingAccount(true);
+        setStatus(null);
+        setError(null);
+
+        try {
+            await deleteCurrentUserAccount({ data: { confirmation: deleteConfirmation } });
+            window.location.assign("/signin");
+        } catch (accountError) {
+            setActionError(accountError);
+            setDeletingAccount(false);
         }
     }
 
@@ -841,6 +859,34 @@ function ProfileRoute() {
                                 Accepted followers appear here.
                             </EmptyState>
                         )}
+                    </Card>
+
+                    <Card className="min-w-0 gap-4 border-destructive/40 px-4 shadow-panel">
+                        <div>
+                            <h2 className="m-0 text-lg font-semibold text-destructive">Delete Account</h2>
+                            <p className="mb-0 text-sm text-muted-foreground">
+                                Permanently deletes your profile, rankings, follow data, and uploaded images. This cannot be undone.
+                            </p>
+                        </div>
+                        <form className="grid gap-2" onSubmit={handleAccountDeletion}>
+                            <label className="grid gap-1 text-sm">
+                                <span>Type DELETE to confirm</span>
+                                <Input
+                                    aria-label="Delete account confirmation"
+                                    autoComplete="off"
+                                    disabled={deletingAccount}
+                                    value={deleteConfirmation}
+                                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                                />
+                            </label>
+                            <Button
+                                disabled={deletingAccount || deleteConfirmation.trim() !== "DELETE"}
+                                type="submit"
+                                variant="destructive"
+                            >
+                                {deletingAccount ? "Deleting..." : "Delete Account Permanently"}
+                            </Button>
+                        </form>
                     </Card>
                 </div>
             </div>

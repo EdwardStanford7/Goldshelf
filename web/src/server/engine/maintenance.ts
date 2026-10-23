@@ -5,6 +5,7 @@ import { releaseImageReferences } from "@/server/lib/imageAssets";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DELETED_ITEM_RETENTION_MS = 30 * DAY_MS;
 const DELETED_CLEANUP_LIMIT = 50;
+const TEMPORARY_DATA_RETENTION_MS = 7 * DAY_MS;
 
 interface DeletedImageRow {
     id: string;
@@ -24,6 +25,16 @@ export async function purgeExpiredDeletedItems() {
         cutoff,
         tableName: "entry_queue"
     });
+}
+
+export async function purgeExpiredTemporaryData(timestamp = now()) {
+    const cutoff = timestamp - TEMPORARY_DATA_RETENTION_MS;
+    const db = getDb();
+    await db.batch([
+        db.prepare(`DELETE FROM verification WHERE expiresAt < ?`).bind(timestamp),
+        db.prepare(`DELETE FROM rateLimit WHERE lastRequest < ?`).bind(cutoff),
+        db.prepare(`DELETE FROM api_rate_limits WHERE window_start < ?`).bind(cutoff)
+    ]);
 }
 
 async function purgeDeletedRows({

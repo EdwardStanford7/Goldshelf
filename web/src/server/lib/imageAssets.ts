@@ -83,6 +83,53 @@ export async function releaseImageReferences(imageKeys: Array<string | null>, ti
     await Promise.all(Array.from(new Set(imageKeys)).map((imageKey) => releaseImageReference(imageKey, timestamp)));
 }
 
+export async function deleteUnreferencedImageAssets(imageKeys: Array<string | null>) {
+    const objectKeys = Array.from(new Set(
+        imageKeys.filter((imageKey): imageKey is string => isContentAddressedImageKey(imageKey))
+    ));
+
+    for (const objectKey of objectKeys) {
+        const candidate = await getDb()
+            .prepare(
+                `SELECT object_key, content_type
+                 FROM image_assets
+                 WHERE object_key = ?
+                   AND NOT EXISTS (SELECT 1 FROM entries WHERE image_key = image_assets.object_key)
+                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = image_assets.object_key)`
+            )
+            .bind(objectKey)
+            .first<{ object_key: string; content_type: string }>();
+        if (!candidate) {
+            continue;
+        }
+
+        const object = await env.IMAGES.get(candidate.object_key);
+        const bytes = object?.body ? await object.arrayBuffer() : null;
+        if (object) {
+            await env.IMAGES.delete(candidate.object_key);
+        }
+
+        const deletion = await getDb()
+            .prepare(
+                `DELETE FROM image_assets
+                 WHERE object_key = ?
+                   AND NOT EXISTS (SELECT 1 FROM entries WHERE image_key = image_assets.object_key)
+                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = image_assets.object_key)`
+            )
+            .bind(candidate.object_key)
+            .run();
+        if ((deletion.meta.changes ?? 0) > 0 || !bytes) {
+            continue;
+        }
+
+        await env.IMAGES.put(candidate.object_key, bytes, {
+            httpMetadata: {
+                contentType: object?.httpMetadata?.contentType ?? candidate.content_type
+            }
+        });
+    }
+}
+
 export async function purgeUnreferencedImageAssets(timestamp = now()) {
     const db = getDb();
     const cutoff = timestamp - IMAGE_ASSET_GRACE_MS;

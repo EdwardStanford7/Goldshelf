@@ -63,6 +63,23 @@ test.describe("Profiles", () => {
         await expect(page.getByRole("heading", { name: "Edit Photo" })).toBeHidden();
     });
 
+    test("user can permanently delete their account", async ({ page, context }) => {
+        await seedUsers([{
+            email: "delete-account@e2e.test",
+            name: "Delete Account",
+            categories: [{ name: "Movies", entries: ["Arrival"] }]
+        }]);
+        await signInViaApi(context, "delete-account@e2e.test");
+        await gotoApp(page, "/profile");
+
+        await page.getByLabel("Delete account confirmation").fill("DELETE");
+        await Promise.all([
+            page.waitForURL(/\/signin$/),
+            page.getByRole("button", { name: "Delete Account Permanently" }).click()
+        ]);
+        await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    });
+
     test("signed-in viewers can copy a shared category into a new category @smoke", async ({
         page: alicePage,
         context: aliceContext,
