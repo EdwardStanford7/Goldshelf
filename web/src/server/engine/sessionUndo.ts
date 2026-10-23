@@ -218,14 +218,16 @@ export async function saveRepairMatchUndoState(
 export async function restoreRankingMatchUndoState(
     db: D1Database,
     userId: string,
-    undoStateValue: string
+    undoStateValue: string,
+    options: { claimActiveOperation?: boolean } = {}
 ) {
     const undoState = parseRankingUndoState(undoStateValue);
     await assertSnapshotEntriesStillExist(db, userId, undoState.entries);
-    const statements: D1PreparedStatement[] = [
-        claimActiveOperationStatement(db, userId, "ranking", undoState.session.id, Date.now()),
-        ...restoreEntryStatements(db, userId, undoState.entries)
-    ];
+    const statements: D1PreparedStatement[] = [];
+    if (options.claimActiveOperation) {
+        statements.push(claimActiveOperationStatement(db, userId, "ranking", undoState.session.id, Date.now()));
+    }
+    statements.push(...restoreEntryStatements(db, userId, undoState.entries));
 
     if (undoState.queuedEntry) {
         statements.push(upsertQueueSnapshotStatement(db, undoState.queuedEntry));
@@ -288,12 +290,16 @@ export async function restoreRankingMatchUndoState(
 export async function restoreRepairMatchUndoState(
     db: D1Database,
     userId: string,
-    undoStateValue: string
+    undoStateValue: string,
+    options: { claimActiveOperation?: boolean } = {}
 ) {
     const undoState = parseRepairUndoState(undoStateValue);
     await assertSnapshotEntriesStillExist(db, userId, undoState.entries);
-    await runUndoRestoreBatches(db, [
-        claimActiveOperationStatement(db, userId, "repair", undoState.session.id, Date.now()),
+    const statements: D1PreparedStatement[] = [];
+    if (options.claimActiveOperation) {
+        statements.push(claimActiveOperationStatement(db, userId, "repair", undoState.session.id, Date.now()));
+    }
+    statements.push(
         ...restoreEntryStatements(db, userId, undoState.entries),
         db
             .prepare(
@@ -329,7 +335,8 @@ export async function restoreRepairMatchUndoState(
                 undoState.session.id,
                 userId
             )
-    ]);
+    );
+    await runUndoRestoreBatches(db, statements);
 
     return {
         sessionId: undoState.session.id,

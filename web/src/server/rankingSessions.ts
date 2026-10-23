@@ -399,7 +399,9 @@ export const undoBinaryMatch = createServerFn({ method: "POST" })
             await assertNoOtherActiveFlowForUndo(db, userId, session.id);
         }
 
-        return restoreRankingMatchUndoState(db, userId, session.undo_state);
+        return restoreRankingMatchUndoState(db, userId, session.undo_state, {
+            claimActiveOperation: session.status === "completed"
+        });
     });
 
 async function assertNoOtherActiveFlowForUndo(

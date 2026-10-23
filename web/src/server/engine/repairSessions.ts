@@ -324,7 +324,9 @@ export async function undoRepairMatch(
         await assertNoOtherActiveFlowForRepairUndo(db, userId, row.id);
     }
 
-    return restoreRepairMatchUndoState(db, userId, row.undo_state);
+    return restoreRepairMatchUndoState(db, userId, row.undo_state, {
+        claimActiveOperation: row.status === "completed"
+    });
 }
 
 export async function repairInterruptedRepairState(userId: string) {
