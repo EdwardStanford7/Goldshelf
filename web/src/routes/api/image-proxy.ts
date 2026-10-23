@@ -1,4 +1,5 @@
 import { auth } from "@/server/lib/auth";
+import { enforceApiRateLimit } from "@/server/lib/apiRateLimit";
 import { assertSafeImageUrl, decodeImageUrl } from "@/server/lib/imageSearch";
 import { fetchWithTimeout } from "@/server/lib/network";
 import { createFileRoute } from "@tanstack/react-router";
@@ -13,6 +14,16 @@ export const Route = createFileRoute("/api/image-proxy")({
                 const session = await auth.api.getSession({ headers: request.headers });
                 if (!session?.user) {
                     return new Response("Unauthorized", { status: 401 });
+                }
+
+                const rateLimitResponse = await enforceApiRateLimit({
+                    scope: "image-proxy",
+                    subject: session.user.id,
+                    maxRequests: 60,
+                    windowMs: 60_000
+                });
+                if (rateLimitResponse) {
+                    return rateLimitResponse;
                 }
 
                 const encodedUrl = new URL(request.url).searchParams.get("u");

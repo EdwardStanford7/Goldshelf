@@ -1,4 +1,5 @@
 import { auth } from "@/server/lib/auth";
+import { enforceApiRateLimit } from "@/server/lib/apiRateLimit";
 import { first, getDb } from "@/server/lib/db";
 import { searchImageCandidates } from "@/server/lib/imageSearch";
 import { createFileRoute } from "@tanstack/react-router";
@@ -10,6 +11,16 @@ export const Route = createFileRoute("/api/image-search")({
                 const session = await auth.api.getSession({ headers: request.headers });
                 if (!session?.user) {
                     return Response.json({ message: "Unauthorized" }, { status: 401 });
+                }
+
+                const rateLimitResponse = await enforceApiRateLimit({
+                    scope: "image-search",
+                    subject: session.user.id,
+                    maxRequests: 6,
+                    windowMs: 60_000
+                });
+                if (rateLimitResponse) {
+                    return rateLimitResponse;
                 }
 
                 const url = new URL(request.url);
