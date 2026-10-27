@@ -4,13 +4,13 @@ import { Input } from "@/components/ui/input";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
+import { cacheImageSearch, getCachedImageSearch } from "@/lib/imagePickerSearchCache";
 import {
     imageBlobToPosterBlob,
     imageCandidateToPosterBlob,
     imageElementToPosterBlob,
     imageUrlToPosterBlob,
     uploadImageForTarget,
-    withCacheBust,
     type ImagePickerTarget,
     type ImageSearchCandidate
 } from "@/lib/posterImage";
@@ -36,7 +36,6 @@ export function ImagePickerModal({
     const [savingCandidateId, setSavingCandidateId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const candidatesRef = useRef<ImageSearchCandidate[]>([]);
-    const candidatesByQueryRef = useRef<Map<string, ImageSearchCandidate[]>>(new Map());
     const thumbnailPosterBlobsRef = useRef<Map<string, Blob>>(new Map());
     const displayedQueryRef = useRef<string | null>(null);
     const searchRequestIdRef = useRef(0);
@@ -106,7 +105,8 @@ export function ImagePickerModal({
         }
 
         pendingTransientSearchRef.current = null;
-        const cachedCandidates = candidatesByQueryRef.current.get(submittedQuery.toLowerCase());
+        const cacheTargetId = `${target.kind}:${target.item.id}`;
+        const cachedCandidates = getCachedImageSearch(cacheTargetId, submittedQuery);
         if (cachedCandidates && cachedCandidates.length > 0) {
             pendingTransientSearchRef.current = null;
             candidatesRef.current = cachedCandidates;
@@ -120,7 +120,6 @@ export function ImagePickerModal({
 
         setLoading(true);
         setError(null);
-        const cacheBust = crypto.randomUUID();
         activeSearchControllerRef.current?.abort();
         const controller = new AbortController();
         activeSearchControllerRef.current = controller;
@@ -130,9 +129,7 @@ export function ImagePickerModal({
             const url = new URL("/api/image-search", window.location.origin);
             url.searchParams.set(target.kind === "entry" ? "entryId" : "queuedEntryId", target.item.id);
             url.searchParams.set("query", submittedQuery);
-            url.searchParams.set("refresh", cacheBust);
             const response = await fetch(url, {
-                cache: "no-store",
                 signal: controller.signal
             });
             const body = await response.json().catch(() => ({})) as {
@@ -149,17 +146,13 @@ export function ImagePickerModal({
             }
 
             const candidates = Array.isArray(body.candidates) ? body.candidates : [];
-            const nextCandidates = candidates.map((candidate) => ({
-                ...candidate,
-                imageUrl: withCacheBust(candidate.imageUrl, cacheBust),
-                thumbnailUrl: withCacheBust(candidate.thumbnailUrl, cacheBust)
-            }));
+            const nextCandidates = candidates;
             if (nextCandidates.length === 0) {
                 throw new Error("No image candidates found");
             }
 
             candidatesRef.current = nextCandidates;
-            candidatesByQueryRef.current.set(submittedQuery.toLowerCase(), nextCandidates);
+            cacheImageSearch(cacheTargetId, submittedQuery, nextCandidates);
             thumbnailPosterBlobsRef.current.clear();
             displayedQueryRef.current = submittedQuery;
             pendingTransientSearchRef.current = null;
@@ -208,7 +201,6 @@ export function ImagePickerModal({
     useEffect(() => {
         setQuery(defaultQuery);
         candidatesRef.current = [];
-        candidatesByQueryRef.current.clear();
         thumbnailPosterBlobsRef.current.clear();
         displayedQueryRef.current = null;
         setCandidates([]);

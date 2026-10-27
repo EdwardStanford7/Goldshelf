@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from "./network";
+import { createImageProxyToken } from "./imageProxyToken";
 
 const SEARCH_RESULT_COUNT = 18;
 const MAX_SEARCH_QUERY_LENGTH = 120;
@@ -31,7 +32,11 @@ interface TextResponse {
     cookie: string | null;
 }
 
-export async function searchImageCandidates(query: string): Promise<ImageSearchCandidate[]> {
+export async function searchImageCandidates(
+    query: string,
+    userId: string,
+    signingSecret: string
+): Promise<ImageSearchCandidate[]> {
     const cleanQuery = query.trim();
     if (!cleanQuery) {
         throw new Error("Search query is required");
@@ -45,7 +50,7 @@ export async function searchImageCandidates(query: string): Promise<ImageSearchC
 
     for (const candidateQuery of queries) {
         try {
-            const candidates = await fetchImageCandidates(candidateQuery);
+            const candidates = await fetchImageCandidates(candidateQuery, userId, signingSecret);
             if (candidates.length > 0) {
                 return candidates;
             }
@@ -78,7 +83,11 @@ function buildSearchQueries(query: string) {
     return queries;
 }
 
-async function fetchImageCandidates(cleanQuery: string): Promise<ImageSearchCandidate[]> {
+async function fetchImageCandidates(
+    cleanQuery: string,
+    userId: string,
+    signingSecret: string
+): Promise<ImageSearchCandidate[]> {
     const htmlUrl = new URL("https://duckduckgo.com/");
     htmlUrl.searchParams.set("q", cleanQuery);
     htmlUrl.searchParams.set("iax", "images");
@@ -117,14 +126,20 @@ async function fetchImageCandidates(cleanQuery: string): Promise<ImageSearchCand
                 thumbnailUrl: result.thumbnail || result.image || "",
                 width: result.width ?? 0,
                 height: result.height ?? 0
-            }))
+            })),
+        userId,
+        signingSecret
     );
 }
 
-function sourcesToCandidates(sources: CandidateSource[]): ImageSearchCandidate[] {
+async function sourcesToCandidates(
+    sources: CandidateSource[],
+    userId: string,
+    signingSecret: string
+): Promise<ImageSearchCandidate[]> {
     const seen = new Set<string>();
 
-    return sources
+    const uniqueSources = sources
         .filter((source) => source.imageUrl && source.width > 0 && source.height > 0)
         .filter((source) => {
             if (seen.has(source.imageUrl)) {
@@ -133,18 +148,18 @@ function sourcesToCandidates(sources: CandidateSource[]): ImageSearchCandidate[]
             seen.add(source.imageUrl);
             return true;
         })
-        .slice(0, SEARCH_RESULT_COUNT)
-        .map((source) => {
+        .slice(0, SEARCH_RESULT_COUNT);
+
+    return Promise.all(uniqueSources.map(async (source) => {
             const imageId = encodeImageUrl(source.imageUrl);
-            const thumbnailId = encodeImageUrl(source.thumbnailUrl || source.imageUrl);
             return {
                 id: imageId,
-                imageUrl: `/api/image-proxy?u=${encodeURIComponent(imageId)}`,
-                thumbnailUrl: `/api/image-proxy?u=${encodeURIComponent(thumbnailId)}`,
+                imageUrl: `/api/image-proxy?t=${encodeURIComponent(await createImageProxyToken(source.imageUrl, userId, signingSecret))}`,
+                thumbnailUrl: `/api/image-proxy?t=${encodeURIComponent(await createImageProxyToken(source.thumbnailUrl || source.imageUrl, userId, signingSecret))}`,
                 width: source.width,
                 height: source.height
             };
-        });
+        }));
 }
 
 export function encodeImageUrl(value: string) {
@@ -158,16 +173,6 @@ export function encodeImageUrl(value: string) {
         .replaceAll("+", "-")
         .replaceAll("/", "_")
         .replace(/=+$/, "");
-}
-
-export function decodeImageUrl(value: string) {
-    const base64 = value
-        .replaceAll("-", "+")
-        .replaceAll("_", "/")
-        .padEnd(Math.ceil(value.length / 4) * 4, "=");
-    const binary = atob(base64);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
 }
 
 export function assertSafeImageUrl(value: string) {

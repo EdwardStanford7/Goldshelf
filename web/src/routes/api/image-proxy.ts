@@ -1,8 +1,10 @@
 import { auth } from "@/server/lib/auth";
-import { enforceApiRateLimit } from "@/server/lib/apiRateLimit";
-import { assertSafeImageUrl, decodeImageUrl } from "@/server/lib/imageSearch";
+import { cacheableImageResponse, cacheProxiedImage, proxiedImageResponse, readCachedProxiedImage } from "@/server/lib/imageProxyCache";
+import { readImageProxyToken } from "@/server/lib/imageProxyToken";
+import { assertSafeImageUrl } from "@/server/lib/imageSearch";
 import { fetchWithTimeout } from "@/server/lib/network";
 import { createFileRoute } from "@tanstack/react-router";
+import { env } from "cloudflare:workers";
 
 const MAX_PROXY_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_PROXY_TIMEOUT_MS = 8_000;
@@ -16,28 +18,27 @@ export const Route = createFileRoute("/api/image-proxy")({
                     return new Response("Unauthorized", { status: 401 });
                 }
 
-                const rateLimitResponse = await enforceApiRateLimit({
-                    scope: "image-proxy",
-                    subject: session.user.id,
-                    maxRequests: 60,
-                    windowMs: 60_000
-                });
-                if (rateLimitResponse) {
-                    return rateLimitResponse;
-                }
-
-                const encodedUrl = new URL(request.url).searchParams.get("u");
-                if (!encodedUrl) {
-                    return new Response("Missing image URL", { status: 400 });
+                const token = new URL(request.url).searchParams.get("t");
+                if (!token) {
+                    return new Response("Missing image token", { status: 400 });
                 }
 
                 let imageUrl: URL;
                 try {
-                    imageUrl = assertSafeImageUrl(decodeImageUrl(encodedUrl));
+                    const signedUrl = await readImageProxyToken(token, session.user.id, env.BETTER_AUTH_SECRET);
+                    if (!signedUrl) {
+                        return new Response("Image link has expired. Search again to refresh results.", { status: 403 });
+                    }
+                    imageUrl = assertSafeImageUrl(signedUrl);
                 } catch (error) {
                     return new Response(error instanceof Error ? error.message : "Invalid image URL", {
                         status: 400
                     });
+                }
+
+                const cached = await readCachedProxiedImage(imageUrl);
+                if (cached) {
+                    return proxiedImageResponse(cached);
                 }
 
                 let response: Response;
@@ -81,14 +82,9 @@ export const Route = createFileRoute("/api/image-proxy")({
                     return new Response("Image is too large", { status: 413 });
                 }
 
-                return new Response(image, {
-                    headers: {
-                        "cache-control": "private, no-store",
-                        "content-type": contentType,
-                        "content-security-policy": "sandbox; default-src 'none'",
-                        "x-content-type-options": "nosniff"
-                    }
-                });
+                const cacheableResponse = cacheableImageResponse(image, contentType);
+                await cacheProxiedImage(imageUrl, cacheableResponse.clone(), image.byteLength);
+                return proxiedImageResponse(cacheableResponse);
             }
         }
     }

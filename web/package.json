@@ -42,8 +42,8 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.39.0",
-    "@cloudflare/workers-types": "^4.20260529.1",
+    "@cloudflare/vite-plugin": "^1.65.0",
+    "@cloudflare/workers-types": "^5.20261027.1",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/router-cli": "^1.167.13",
@@ -56,7 +56,7 @@
     "typescript": "^6.0.3",
     "vite": "^8.3.5",
     "vitest": "^4.1.12",
-    "wrangler": "^4.95.0"
+    "wrangler": "^4.153.0"
   },
   "pnpm": {
     "overrides": {

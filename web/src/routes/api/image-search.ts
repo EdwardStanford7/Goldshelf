@@ -3,6 +3,7 @@ import { enforceApiRateLimit } from "@/server/lib/apiRateLimit";
 import { first, getDb } from "@/server/lib/db";
 import { searchImageCandidates } from "@/server/lib/imageSearch";
 import { createFileRoute } from "@tanstack/react-router";
+import { env } from "cloudflare:workers";
 
 export const Route = createFileRoute("/api/image-search")({
     server: {
@@ -59,7 +60,11 @@ export const Route = createFileRoute("/api/image-search")({
 
                 try {
                     return Response.json({
-                        candidates: await searchImageCandidates(searchQuery)
+                        candidates: await searchImageCandidates(
+                            searchQuery,
+                            session.user.id,
+                            env.BETTER_AUTH_SECRET
+                        )
                     }, {
                         headers: {
                             "cache-control": "private, no-store"
