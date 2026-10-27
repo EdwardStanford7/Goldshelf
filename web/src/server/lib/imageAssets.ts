@@ -70,6 +70,7 @@ export async function releaseImageReference(imageKey: string | null, timestamp =
              SET unreferenced_at = CASE
                WHEN EXISTS (SELECT 1 FROM entries WHERE image_key = ?)
                  OR EXISTS (SELECT 1 FROM entry_queue WHERE image_key = ?)
+                 OR EXISTS (SELECT 1 FROM "user" WHERE image = image_assets.object_key)
                THEN NULL
                ELSE COALESCE(unreferenced_at, ?)
              END
@@ -95,7 +96,8 @@ export async function deleteUnreferencedImageAssets(imageKeys: Array<string | nu
                  FROM image_assets
                  WHERE object_key = ?
                    AND NOT EXISTS (SELECT 1 FROM entries WHERE image_key = image_assets.object_key)
-                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = image_assets.object_key)`
+                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = image_assets.object_key)
+                   AND NOT EXISTS (SELECT 1 FROM "user" WHERE image = image_assets.object_key)`
             )
             .bind(objectKey)
             .first<{ object_key: string; content_type: string }>();
@@ -114,7 +116,8 @@ export async function deleteUnreferencedImageAssets(imageKeys: Array<string | nu
                 `DELETE FROM image_assets
                  WHERE object_key = ?
                    AND NOT EXISTS (SELECT 1 FROM entries WHERE image_key = image_assets.object_key)
-                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = image_assets.object_key)`
+                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = image_assets.object_key)
+                   AND NOT EXISTS (SELECT 1 FROM "user" WHERE image = image_assets.object_key)`
             )
             .bind(candidate.object_key)
             .run();
@@ -141,6 +144,7 @@ export async function purgeUnreferencedImageAssets(timestamp = now()) {
                AND unreferenced_at < ?
                AND NOT EXISTS (SELECT 1 FROM entries WHERE entries.image_key = image_assets.object_key)
                AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE entry_queue.image_key = image_assets.object_key)
+               AND NOT EXISTS (SELECT 1 FROM "user" WHERE image = image_assets.object_key)
              ORDER BY unreferenced_at ASC
              LIMIT ?`
         )
@@ -160,7 +164,8 @@ export async function purgeUnreferencedImageAssets(timestamp = now()) {
                 `DELETE FROM image_assets
                  WHERE object_key = ? AND unreferenced_at = ?
                    AND NOT EXISTS (SELECT 1 FROM entries WHERE image_key = ?)
-                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = ?)`
+                   AND NOT EXISTS (SELECT 1 FROM entry_queue WHERE image_key = ?)
+                   AND NOT EXISTS (SELECT 1 FROM "user" WHERE image = image_assets.object_key)`
             )
             .bind(
                 candidate.object_key,

@@ -26,13 +26,28 @@ export function rewriteUserCategoryOrderStatements(
     orderedCategoryIds: string[],
     updatedAt: number
 ) {
-    return orderedCategoryIds.map((categoryId, sortOrder) =>
+    return [
         db
             .prepare(
-                `UPDATE categories
-       SET sort_order = ?, updated_at = ?
-       WHERE user_id = ? AND id = ?`
+                `WITH requested_order AS (
+                   SELECT value AS id, CAST(key AS INTEGER) AS sort_order
+                   FROM json_each(?)
+                 )
+                 UPDATE categories
+                 SET sort_order = (
+                       SELECT requested_order.sort_order
+                       FROM requested_order
+                       WHERE requested_order.id = categories.id
+                     ),
+                     updated_at = ?
+                 WHERE user_id = ?
+                   AND id IN (SELECT id FROM requested_order)
+                   AND sort_order != (
+                     SELECT requested_order.sort_order
+                     FROM requested_order
+                     WHERE requested_order.id = categories.id
+                   )`
             )
-            .bind(sortOrder, updatedAt, userId, categoryId)
-    );
+            .bind(JSON.stringify(orderedCategoryIds), updatedAt, userId)
+    ];
 }

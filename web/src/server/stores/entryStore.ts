@@ -105,16 +105,37 @@ export function rewriteCategoryOrderStatements(
     orderedEntryIds: string[],
     updatedAt: number
 ) {
-    return orderedEntryIds.map((entryId, rankPosition) =>
+    // Keep a complete rank rewrite atomic without emitting one D1 statement per
+    // entry. JSON is one bind parameter, so this remains safe for large lists.
+    return [
         db
             .prepare(
-                `UPDATE entries
-       SET status = 'active', rank_position = ?, updated_at = ?
-       WHERE user_id = ? AND category_id = ? AND id = ?
-         AND (status != 'active' OR rank_position != ?)`
+                `WITH requested_order AS (
+                   SELECT value AS id, CAST(key AS INTEGER) AS rank_position
+                   FROM json_each(?)
+                 )
+                 UPDATE entries
+                 SET status = 'active',
+                     rank_position = (
+                       SELECT requested_order.rank_position
+                       FROM requested_order
+                       WHERE requested_order.id = entries.id
+                     ),
+                     updated_at = ?
+                 WHERE user_id = ?
+                   AND category_id = ?
+                   AND id IN (SELECT id FROM requested_order)
+                   AND (
+                     status != 'active'
+                     OR rank_position != (
+                       SELECT requested_order.rank_position
+                       FROM requested_order
+                       WHERE requested_order.id = entries.id
+                     )
+                   )`
             )
-            .bind(rankPosition, updatedAt, userId, categoryId, entryId, rankPosition)
-    );
+            .bind(JSON.stringify(orderedEntryIds), updatedAt, userId, categoryId)
+    ];
 }
 
 export function placeRankedEntryStatements(

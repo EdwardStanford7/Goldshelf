@@ -16,7 +16,7 @@ help:
 	@echo "  make install              Install pnpm dependencies from the lockfile"
 	@echo "  make dev                  Start local dev server"
 	@echo "  make check                Run tests, typecheck, smoke e2e, audit, and build"
-	@echo "  make deploy               Smoke-check, migrate remote D1, then deploy"
+	@echo "  make deploy               Verify, migrate D1, deploy, then finish legacy image migration"
 	@echo "  make audit-fix            Update vulnerable prod dependencies and rerun audit"
 	@echo ""
 	@echo "Checks:"
@@ -177,6 +177,7 @@ verify-deploy-config:
 deploy: verify-deploy-config
 	$(MAKE) wrangler-auth
 	pnpm run deploy
+	node scripts/migrate-legacy-images.mjs
 
 deploy-first: install cf-login cf-create-d1 cf-create-r2 cf-secret-auth
 	@echo ""

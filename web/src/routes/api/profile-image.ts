@@ -1,11 +1,11 @@
 import { hasStoredImage } from "@/lib/images";
 import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
+import { releaseImageReference, storeContentAddressedImage } from "@/server/lib/imageAssets";
 import { storedImageResponse } from "@/server/lib/imageResponse";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
 import { ImageUploadError, readValidatedImageUpload } from "@/server/lib/imageUpload";
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "cloudflare:workers";
 
 const MAX_PROFILE_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -64,12 +64,7 @@ export const Route = createFileRoute("/api/profile-image")({
                 }
                 const oldImageKey = user?.image ?? null;
 
-                const imageKey = `${session.user.id}/profile/avatar-${now()}.${image.extension}`;
-                await env.IMAGES.put(imageKey, image.bytes, {
-                    httpMetadata: {
-                        contentType: image.contentType
-                    }
-                });
+                const imageKey = await storeContentAddressedImage(image.bytes, image.contentType);
 
                 try {
                     await getDb()
@@ -81,12 +76,12 @@ export const Route = createFileRoute("/api/profile-image")({
                         .bind(imageKey, now(), session.user.id)
                         .run();
                 } catch (error) {
-                    await env.IMAGES.delete(imageKey).catch(() => undefined);
+                    await releaseImageReference(imageKey);
                     throw error;
                 }
 
                 if (hasStoredImage(oldImageKey) && oldImageKey !== imageKey) {
-                    await env.IMAGES.delete(oldImageKey).catch(() => undefined);
+                    await releaseImageReference(oldImageKey);
                 }
 
                 return Response.json({ imageKey });
@@ -120,9 +115,7 @@ export const Route = createFileRoute("/api/profile-image")({
                     .bind(now(), session.user.id)
                     .run();
 
-                if (hasStoredImage(imageKey)) {
-                    await env.IMAGES.delete(imageKey).catch(() => undefined);
-                }
+                await releaseImageReference(imageKey);
 
                 return Response.json({ ok: true });
             }

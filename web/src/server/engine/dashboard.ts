@@ -23,6 +23,12 @@ interface DashboardFreshnessRow {
     repair_state: string;
 }
 
+interface DashboardRecoveryCheckRow {
+    has_active_ranking_session: number;
+    has_active_repair_session: number;
+    has_orphaned_ranking_entry: number;
+}
+
 export async function getDashboardRevision(userId: string) {
     const row = await getDb()
         .prepare(
@@ -83,8 +89,7 @@ export async function getDashboardRevision(userId: string) {
 export async function buildDashboard(userId: string): Promise<DashboardData> {
     const startedAt = Date.now();
     const db = getDb();
-    await repairInterruptedRankingState(userId);
-    await repairInterruptedRepairState(userId);
+    await repairDashboardStateIfNeeded(userId);
     const profile = await ensureUserProfile(userId);
     const revision = await getDashboardRevision(userId);
     const queueSettings = await getQueueSettings(userId);
@@ -163,6 +168,39 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
         hasActiveRepairSession: Boolean(activeRepairSession)
     });
     return dashboard;
+}
+
+/**
+ * Recovery is essential when a prior ranking request was interrupted, but the
+ * detailed recovery joins are needlessly expensive for the normal dashboard
+ * path. A single indexed existence check lets ordinary page loads skip them.
+ */
+async function repairDashboardStateIfNeeded(userId: string) {
+    const row = await getDb()
+        .prepare(
+            `SELECT
+               EXISTS(
+                 SELECT 1 FROM ranking_sessions
+                 WHERE user_id = ? AND status = 'active'
+               ) AS has_active_ranking_session,
+               EXISTS(
+                 SELECT 1 FROM repair_sessions
+                 WHERE user_id = ? AND status = 'active'
+               ) AS has_active_repair_session,
+               EXISTS(
+                 SELECT 1 FROM entries
+                 WHERE user_id = ? AND status = 'ranking'
+               ) AS has_orphaned_ranking_entry`
+        )
+        .bind(userId, userId, userId)
+        .first<DashboardRecoveryCheckRow>();
+
+    if (row?.has_active_ranking_session || row?.has_orphaned_ranking_entry) {
+        await repairInterruptedRankingState(userId);
+    }
+    if (row?.has_active_repair_session) {
+        await repairInterruptedRepairState(userId);
+    }
 }
 
 function logDashboardLoadIfNeeded(

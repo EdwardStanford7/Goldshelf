@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { all, first, getDb } from "@/server/lib/db";
-import { deleteLegacyImageObject, deleteUnreferencedImageAssets, releaseImageReferences } from "@/server/lib/imageAssets";
+import { deleteUnreferencedImageAssets, releaseImageReferences } from "@/server/lib/imageAssets";
 import { authMiddleware } from "@/server/middleware/auth";
 
 const ACCOUNT_DELETION_CONFIRMATION = "DELETE";
@@ -34,7 +34,8 @@ export const deleteCurrentUserAccount = createServerFn({ method: "POST" })
 
         const imageKeys = [
             ...entryImages.map((row) => row.image_key),
-            ...queuedImages.map((row) => row.image_key)
+            ...queuedImages.map((row) => row.image_key),
+            user.image
         ];
         await db.batch([
             db.prepare(`DELETE FROM active_user_operations WHERE user_id = ?`).bind(userId),
@@ -52,6 +53,5 @@ export const deleteCurrentUserAccount = createServerFn({ method: "POST" })
 
         await releaseImageReferences(imageKeys);
         await deleteUnreferencedImageAssets(imageKeys);
-        await deleteLegacyImageObject(user.image);
         return { deleted: true };
     });
