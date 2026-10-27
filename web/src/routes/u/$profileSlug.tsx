@@ -28,8 +28,11 @@ import { showToast } from "@/lib/toast";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile, followButtonLabel, followRelationLabel } from "@/lib/follows";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
-import { nextMultiSelection } from "@/lib/multiSelect";
-import { PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
+import { nextLimitedMultiSelection } from "@/lib/multiSelect";
+import {
+    MAX_BATCH_QUEUE_ACTION_IDS,
+    PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE
+} from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import {
     approveFollowRequest,
@@ -214,6 +217,10 @@ function PublicProfileRoute() {
 
         if (sourceEntryIds.length === 0) {
             showToast("Select at least one entry to copy", "danger");
+            return;
+        }
+        if (sourceEntryIds.length > MAX_BATCH_QUEUE_ACTION_IDS) {
+            showToast(`You can copy up to ${MAX_BATCH_QUEUE_ACTION_IDS} entries at once.`, "danger");
             return;
         }
 
@@ -532,7 +539,9 @@ function CopyCategoryDialog({
 
         const nextEntries = orderEntries(category.entries);
         setEntrySearch("");
-        setSelectedEntryIds(new Set(nextEntries.map((entry) => entry.id)));
+        setSelectedEntryIds(new Set(
+            nextEntries.slice(0, MAX_BATCH_QUEUE_ACTION_IDS).map((entry) => entry.id)
+        ));
         setSelectionAnchorId(null);
     }, [category]);
 
@@ -569,7 +578,7 @@ function CopyCategoryDialog({
             return;
         }
 
-        const nextSelection = nextMultiSelection({
+        const nextSelection = nextLimitedMultiSelection({
             anchorId: selectionAnchorId,
             clickedId: entryId,
             ctrlKey: event.ctrlKey,
@@ -578,17 +587,33 @@ function CopyCategoryDialog({
             plainBehavior: "toggle",
             selectedIds: selectedEntryIds,
             shiftKey: event.shiftKey
-        });
+        }, MAX_BATCH_QUEUE_ACTION_IDS);
+        if (nextSelection.limitExceeded) {
+            showToast(`You can copy up to ${MAX_BATCH_QUEUE_ACTION_IDS} entries at once.`, "danger");
+            return;
+        }
         setSelectedEntryIds(nextSelection.selectedIds);
         setSelectionAnchorId(nextSelection.anchorId);
     }
 
     function selectVisible() {
-        setSelectedEntryIds((currentSelectedIds) => new Set([
-            ...currentSelectedIds,
-            ...orderedEntryIds
-        ]));
+        const nextSelectedIds = new Set(selectedEntryIds);
+        let limitExceeded = false;
+        for (const entryId of orderedEntryIds) {
+            if (nextSelectedIds.has(entryId)) {
+                continue;
+            }
+            if (nextSelectedIds.size >= MAX_BATCH_QUEUE_ACTION_IDS) {
+                limitExceeded = true;
+                break;
+            }
+            nextSelectedIds.add(entryId);
+        }
+        setSelectedEntryIds(nextSelectedIds);
         setSelectionAnchorId(orderedEntryIds.at(-1) ?? selectionAnchorId);
+        if (limitExceeded) {
+            showToast(`You can copy up to ${MAX_BATCH_QUEUE_ACTION_IDS} entries at once.`, "danger");
+        }
     }
 
     function deselectVisible() {
@@ -696,7 +721,7 @@ function CopyCategoryDialog({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <strong className="text-sm">Entries</strong>
                             <span className="text-sm text-muted-foreground">
-                                {selectedOrderedEntryIds.length} of {orderedEntries.length} selected
+                                {selectedOrderedEntryIds.length} of {orderedEntries.length} selected (up to {MAX_BATCH_QUEUE_ACTION_IDS})
                             </span>
                         </div>
                         <Input
