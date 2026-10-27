@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { MAX_BATCH_QUEUE_ACTION_IDS } from "@/lib/operationLimits";
 import type { QueuedEntry } from "@/lib/types";
 import { all, assertOwned, getDb, newId, now, runBatches } from "@/server/lib/db";
 import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
@@ -11,8 +12,6 @@ import {
     type QueuedEntryStatusRow
 } from "./stores/queueStore";
 import { assertEntryNameAvailable, createEntryWithBinaryRankingForUser } from "./engine/entryCreation";
-
-const MAX_BATCH_QUEUE_ACTION_IDS = 200;
 
 export const createQueuedEntry = createServerFn({ method: "POST" })
     .middleware([authMiddleware])

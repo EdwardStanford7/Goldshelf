@@ -12,7 +12,8 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
-import { nextMultiSelection } from "@/lib/multiSelect";
+import { nextLimitedMultiSelection } from "@/lib/multiSelect";
+import { MAX_BATCH_QUEUE_ACTION_IDS } from "@/lib/operationLimits";
 import type { QueuedEntry } from "@/lib/types";
 
 const METRIC_CLASS =
@@ -48,6 +49,7 @@ export function QueuePanel({
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
     const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+    const [selectionLimitMessage, setSelectionLimitMessage] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [categoryFilterId, setCategoryFilterId] = useState("all");
 
@@ -85,7 +87,7 @@ export function QueuePanel({
         [visibleQueuedEntries]
     );
     const displayedEntryIds = displayedEntries.map((entry) => entry.id);
-    const selectedEntries = displayedEntries.filter((entry) => selectedEntryIds.has(entry.id));
+    const selectedEntries = queuedEntries.filter((entry) => selectedEntryIds.has(entry.id));
 
     useEffect(() => {
         const currentIds = new Set(queuedEntries.map((entry) => entry.id));
@@ -117,7 +119,7 @@ export function QueuePanel({
             return;
         }
 
-        const nextSelection = nextMultiSelection({
+        const nextSelection = nextLimitedMultiSelection({
             anchorId: selectionAnchorId,
             clickedId: entry.id,
             ctrlKey: options.forceAdditive ? true : event.ctrlKey,
@@ -126,9 +128,16 @@ export function QueuePanel({
             plainBehavior: "focus-or-toggle",
             selectedIds: selectedEntryIds,
             shiftKey: event.shiftKey
-        });
+        }, MAX_BATCH_QUEUE_ACTION_IDS);
+        if (nextSelection.limitExceeded) {
+            setSelectionLimitMessage(
+                `Choose ${MAX_BATCH_QUEUE_ACTION_IDS} or fewer queued entries at a time.`
+            );
+            return;
+        }
         setSelectedEntryIds(nextSelection.selectedIds);
         setSelectionAnchorId(nextSelection.anchorId);
+        setSelectionLimitMessage(null);
     }
 
     async function removeSelected() {
@@ -139,6 +148,7 @@ export function QueuePanel({
         await onDeleteSelected(selectedEntries);
         setSelectedEntryIds(new Set());
         setSelectionAnchorId(null);
+        setSelectionLimitMessage(null);
         setSelectionMode(false);
     }
 
@@ -146,6 +156,7 @@ export function QueuePanel({
         setSelectionMode(false);
         setSelectedEntryIds(new Set());
         setSelectionAnchorId(null);
+        setSelectionLimitMessage(null);
     }
 
     return (
@@ -196,8 +207,11 @@ export function QueuePanel({
             {selectionMode ? (
                 <div className="grid gap-2 rounded-sm border border-border bg-muted p-2">
                     <div className="text-sm text-muted-foreground">
-                        {selectedEntries.length} selected
+                        {selectedEntries.length} of {MAX_BATCH_QUEUE_ACTION_IDS} selected
                     </div>
+                    {selectionLimitMessage ? (
+                        <div className="text-sm text-destructive" role="status">{selectionLimitMessage}</div>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                         <Button
                             disabled={busy || selectedEntries.length === 0}
@@ -217,6 +231,7 @@ export function QueuePanel({
                             onClick={() => {
                                 setSelectedEntryIds(new Set());
                                 setSelectionAnchorId(null);
+                                setSelectionLimitMessage(null);
                             }}
                         >
                             Clear

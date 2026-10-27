@@ -83,11 +83,7 @@ export const Route = createFileRoute("/api/image-proxy")({
 
                 return new Response(image, {
                     headers: {
-                        // The URL only identifies a public remote image and the
-                        // endpoint still authenticates cache misses. Browser
-                        // caching avoids re-proxying the same thumbnails every
-                        // time a picker is opened.
-                        "cache-control": "private, max-age=3600, stale-while-revalidate=86400",
+                        "cache-control": "private, no-store",
                         "content-type": contentType,
                         "content-security-policy": "sandbox; default-src 'none'",
                         "x-content-type-options": "nosniff"
