@@ -1,9 +1,5 @@
 export const CONTENT_ADDRESSED_IMAGE_PREFIX = "entry-images/sha256/";
 
-export function isContentAddressedImageKey(imageKey: string | null): imageKey is string {
-    return Boolean(imageKey?.startsWith(CONTENT_ADDRESSED_IMAGE_PREFIX));
-}
-
 export function contentAddressedImageKey(contentHash: string) {
     return `${CONTENT_ADDRESSED_IMAGE_PREFIX}${contentHash}`;
 }

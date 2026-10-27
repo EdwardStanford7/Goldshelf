@@ -255,11 +255,10 @@ export interface ImageStorageReconciliation {
     r2ObjectCount: number;
     referencedKeyCount: number;
     trackedAssetCount: number;
-    legacyReferenceCount: number;
     missingObjectCount: number;
     orphanObjectCount: number;
-    untrackedSharedReferenceCount: number;
+    untrackedReferenceCount: number;
     missingObjectSamples: string[];
     orphanObjectSamples: string[];
-    untrackedSharedReferenceSamples: string[];
+    untrackedReferenceSamples: string[];
 }

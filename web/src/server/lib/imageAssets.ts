@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { hasStoredImage } from "@/lib/images";
 import {
     contentAddressedImageKey,
-    isContentAddressedImageKey,
     sha256Hex
 } from "@/lib/imageAssets";
 import { getDb, now } from "@/server/lib/db";
@@ -47,20 +46,8 @@ export async function storeContentAddressedImage(
     return objectKey;
 }
 
-export async function deleteLegacyImageObject(imageKey: string | null) {
-    if (!hasStoredImage(imageKey) || isContentAddressedImageKey(imageKey)) {
-        return;
-    }
-
-    await env.IMAGES.delete(imageKey).catch(() => undefined);
-}
-
 export async function releaseImageReference(imageKey: string | null, timestamp = now()) {
     if (!hasStoredImage(imageKey)) {
-        return;
-    }
-    if (!isContentAddressedImageKey(imageKey)) {
-        await deleteLegacyImageObject(imageKey);
         return;
     }
 
@@ -86,7 +73,7 @@ export async function releaseImageReferences(imageKeys: Array<string | null>, ti
 
 export async function deleteUnreferencedImageAssets(imageKeys: Array<string | null>) {
     const objectKeys = Array.from(new Set(
-        imageKeys.filter((imageKey): imageKey is string => isContentAddressedImageKey(imageKey))
+        imageKeys.filter((imageKey): imageKey is string => hasStoredImage(imageKey))
     ));
 
     for (const objectKey of objectKeys) {

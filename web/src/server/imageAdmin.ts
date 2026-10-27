@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { isContentAddressedImageKey } from "@/lib/imageAssets";
 import type { ImageStorageReconciliation } from "@/lib/types";
 import { all, getDb, getImagesBucket, now } from "@/server/lib/db";
 import { adminMiddleware } from "@/server/middleware/auth";
@@ -61,12 +60,7 @@ async function reconcileImageStorage(): Promise<ImageStorageReconciliation> {
 
     const missingObjects = Array.from(referencedKeys).filter((key) => !r2Keys.has(key));
     const orphanObjects = Array.from(r2Keys).filter((key) => !referencedKeys.has(key));
-    const untrackedSharedReferences = Array.from(referencedKeys).filter(
-        (key) => isContentAddressedImageKey(key) && !trackedAssetKeys.has(key)
-    );
-    const legacyReferenceCount = Array.from(referencedKeys).filter(
-        (key) => !isContentAddressedImageKey(key)
-    ).length;
+    const untrackedReferences = Array.from(referencedKeys).filter((key) => !trackedAssetKeys.has(key));
 
     return {
         checkedAt: now(),
@@ -74,12 +68,11 @@ async function reconcileImageStorage(): Promise<ImageStorageReconciliation> {
         r2ObjectCount: r2Keys.size,
         referencedKeyCount: referencedKeys.size,
         trackedAssetCount: trackedAssetKeys.size,
-        legacyReferenceCount,
         missingObjectCount: missingObjects.length,
         orphanObjectCount: orphanObjects.length,
-        untrackedSharedReferenceCount: untrackedSharedReferences.length,
+        untrackedReferenceCount: untrackedReferences.length,
         missingObjectSamples: missingObjects.slice(0, RECONCILIATION_SAMPLE_SIZE),
         orphanObjectSamples: orphanObjects.slice(0, RECONCILIATION_SAMPLE_SIZE),
-        untrackedSharedReferenceSamples: untrackedSharedReferences.slice(0, RECONCILIATION_SAMPLE_SIZE)
+        untrackedReferenceSamples: untrackedReferences.slice(0, RECONCILIATION_SAMPLE_SIZE)
     };
 }

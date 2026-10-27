@@ -1,10 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { env } from "cloudflare:workers";
 import { hasAdminRole } from "@/lib/admin";
 import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
-import { isContentAddressedImageKey } from "@/lib/imageAssets";
-import { hasStoredImage } from "@/lib/images";
 import { PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import type {
@@ -28,7 +25,7 @@ import {
     normalizeRequiredText
 } from "@/server/lib/validation";
 import { auth, requestHasSessionCookie } from "@/server/lib/auth";
-import { releaseImageReferences, storeContentAddressedImage } from "@/server/lib/imageAssets";
+import { releaseImageReferences } from "@/server/lib/imageAssets";
 import { authMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow, getOwnedCategory } from "./stores/categoryStore";
 import {
@@ -775,12 +772,10 @@ async function copyPublicCategoryEntriesToQueueImages(
                 continue;
             }
 
-            const imageKey = await copyEntryImageToQueueImage(input.entry.imageKey, input.createdAt);
-
             queuedEntries[index] = {
                 id: input.queueId,
                 name: input.entry.name,
-                imageKey,
+                imageKey: input.entry.imageKey,
                 createdAt: input.createdAt
             };
         }
@@ -823,29 +818,6 @@ async function assertCategoryNameAvailable(userId: string, categoryName: string)
     if (existing) {
         throw new Error("That category name already exists");
     }
-}
-
-async function copyEntryImageToQueueImage(
-    sourceImageKey: string | null,
-    timestamp: number
-) {
-    if (!hasStoredImage(sourceImageKey)) {
-        return sourceImageKey;
-    }
-    if (isContentAddressedImageKey(sourceImageKey)) {
-        return sourceImageKey;
-    }
-
-    const image = await env.IMAGES.get(sourceImageKey);
-    if (!image?.body) {
-        return null;
-    }
-
-    return storeContentAddressedImage(
-        await image.arrayBuffer(),
-        image.httpMetadata?.contentType ?? "image/jpeg",
-        timestamp
-    );
 }
 
 async function listCopyTargetCategories(userId: string): Promise<ProfileCopyTargetCategory[]> {

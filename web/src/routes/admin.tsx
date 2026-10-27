@@ -333,11 +333,10 @@ function AdminContent({
                         </Button>
                     </div>
                     {imageReport ? (
-                        <div className="grid gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
+                        <div className="grid gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5">
                             <StorageMetric label="R2 objects" value={imageReport.r2ObjectCount} />
                             <StorageMetric label="Referenced" value={imageReport.referencedKeyCount} />
                             <StorageMetric label="Shared assets" value={imageReport.trackedAssetCount} />
-                            <StorageMetric label="Legacy" value={imageReport.legacyReferenceCount} />
                             <StorageMetric label="Missing" value={imageReport.missingObjectCount} danger={imageReport.missingObjectCount > 0} />
                             <StorageMetric label="Orphaned" value={imageReport.orphanObjectCount} danger={imageReport.orphanObjectCount > 0} />
                         </div>
@@ -345,9 +344,9 @@ function AdminContent({
                     {imageReport?.truncated ? (
                         <p className="m-0 text-sm text-destructive">Report stopped at 50,000 R2 objects.</p>
                     ) : null}
-                    {imageReport && imageReport.untrackedSharedReferenceCount > 0 ? (
+                    {imageReport && imageReport.untrackedReferenceCount > 0 ? (
                         <p className="m-0 text-sm text-destructive">
-                            {imageReport.untrackedSharedReferenceCount} shared references have no asset record.
+                            {imageReport.untrackedReferenceCount} references have no asset record.
                         </p>
                     ) : null}
                 </Card>
