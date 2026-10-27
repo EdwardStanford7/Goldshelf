@@ -10,7 +10,6 @@ import {
     imageElementToPosterBlob,
     imageUrlToPosterBlob,
     uploadImageForTarget,
-    withCacheBust,
     type ImagePickerTarget,
     type ImageSearchCandidate
 } from "@/lib/posterImage";
@@ -120,7 +119,6 @@ export function ImagePickerModal({
 
         setLoading(true);
         setError(null);
-        const cacheBust = crypto.randomUUID();
         activeSearchControllerRef.current?.abort();
         const controller = new AbortController();
         activeSearchControllerRef.current = controller;
@@ -130,7 +128,6 @@ export function ImagePickerModal({
             const url = new URL("/api/image-search", window.location.origin);
             url.searchParams.set(target.kind === "entry" ? "entryId" : "queuedEntryId", target.item.id);
             url.searchParams.set("query", submittedQuery);
-            url.searchParams.set("refresh", cacheBust);
             const response = await fetch(url, {
                 cache: "no-store",
                 signal: controller.signal
@@ -149,11 +146,7 @@ export function ImagePickerModal({
             }
 
             const candidates = Array.isArray(body.candidates) ? body.candidates : [];
-            const nextCandidates = candidates.map((candidate) => ({
-                ...candidate,
-                imageUrl: withCacheBust(candidate.imageUrl, cacheBust),
-                thumbnailUrl: withCacheBust(candidate.thumbnailUrl, cacheBust)
-            }));
+            const nextCandidates = candidates;
             if (nextCandidates.length === 0) {
                 throw new Error("No image candidates found");
             }

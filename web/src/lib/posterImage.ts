@@ -18,12 +18,6 @@ export const POSTER_WIDTH = 380;
 export const POSTER_HEIGHT = 475;
 export const MAX_LOCAL_IMAGE_BYTES = 12 * 1024 * 1024;
 
-export function withCacheBust(path: string, value: string) {
-    const url = new URL(path, window.location.origin);
-    url.searchParams.set("refresh", value);
-    return `${url.pathname}${url.search}`;
-}
-
 export async function imageUrlToPosterBlob(imageUrl: string) {
     const response = await fetch(imageUrl);
     if (!response.ok) {

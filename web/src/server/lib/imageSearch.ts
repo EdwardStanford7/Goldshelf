@@ -1,6 +1,9 @@
 import { fetchWithTimeout } from "./network";
 
-const SEARCH_RESULT_COUNT = 18;
+// Each result is rendered through the authenticated image proxy. Eight choices
+// keeps the picker useful without turning one search into dozens of Worker,
+// D1, and third-party image requests.
+const SEARCH_RESULT_COUNT = 8;
 const MAX_SEARCH_QUERY_LENGTH = 120;
 const IMAGE_SEARCH_TIMEOUT_MS = 8_000;
 
