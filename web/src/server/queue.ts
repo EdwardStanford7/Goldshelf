@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { MAX_BATCH_QUEUE_ACTION_IDS } from "@/lib/operationLimits";
+import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
 import type { QueuedEntry } from "@/lib/types";
 import { all, assertOwned, getDb, newId, now, runBatches } from "@/server/lib/db";
 import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
@@ -78,8 +78,8 @@ function normalizeQueueActionIds(value: unknown) {
         throw new Error("Choose at least one queued entry");
     }
 
-    if (ids.length > MAX_BATCH_QUEUE_ACTION_IDS) {
-        throw new Error(`Choose ${MAX_BATCH_QUEUE_ACTION_IDS} or fewer queued entries at a time`);
+    if (ids.length > BULK_OPERATION_CHUNK_SIZE) {
+        throw new Error("Queue operation chunk is too large; try again.");
     }
 
     return ids;

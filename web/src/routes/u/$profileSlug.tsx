@@ -28,11 +28,8 @@ import { showToast } from "@/lib/toast";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile, followButtonLabel, followRelationLabel } from "@/lib/follows";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
-import { nextLimitedMultiSelection } from "@/lib/multiSelect";
-import {
-    MAX_BATCH_QUEUE_ACTION_IDS,
-    PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE
-} from "@/lib/operationLimits";
+import { nextMultiSelection } from "@/lib/multiSelect";
+import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import {
     approveFollowRequest,
@@ -219,11 +216,6 @@ function PublicProfileRoute() {
             showToast("Select at least one entry to copy", "danger");
             return;
         }
-        if (sourceEntryIds.length > MAX_BATCH_QUEUE_ACTION_IDS) {
-            showToast(`You can copy up to ${MAX_BATCH_QUEUE_ACTION_IDS} entries at once.`, "danger");
-            return;
-        }
-
         const cleanCategoryName = copyCategoryName.trim();
         if (copyMode === "new") {
             if (!cleanCategoryName) {
@@ -244,7 +236,7 @@ function PublicProfileRoute() {
         setCopyingCategoryId(copyDialogCategory.id);
 
         try {
-            const sourceEntryIdChunks = chunks(sourceEntryIds, PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE);
+            const sourceEntryIdChunks = chunks(sourceEntryIds, BULK_OPERATION_CHUNK_SIZE);
             let targetCategoryId = copyTargetCategoryId;
             let targetCategoryName = copyMode === "new" ? cleanCategoryName : "";
             let copiedCount = 0;
@@ -539,9 +531,7 @@ function CopyCategoryDialog({
 
         const nextEntries = orderEntries(category.entries);
         setEntrySearch("");
-        setSelectedEntryIds(new Set(
-            nextEntries.slice(0, MAX_BATCH_QUEUE_ACTION_IDS).map((entry) => entry.id)
-        ));
+        setSelectedEntryIds(new Set(nextEntries.map((entry) => entry.id)));
         setSelectionAnchorId(null);
     }, [category]);
 
@@ -578,7 +568,7 @@ function CopyCategoryDialog({
             return;
         }
 
-        const nextSelection = nextLimitedMultiSelection({
+        const nextSelection = nextMultiSelection({
             anchorId: selectionAnchorId,
             clickedId: entryId,
             ctrlKey: event.ctrlKey,
@@ -587,33 +577,21 @@ function CopyCategoryDialog({
             plainBehavior: "toggle",
             selectedIds: selectedEntryIds,
             shiftKey: event.shiftKey
-        }, MAX_BATCH_QUEUE_ACTION_IDS);
-        if (nextSelection.limitExceeded) {
-            showToast(`You can copy up to ${MAX_BATCH_QUEUE_ACTION_IDS} entries at once.`, "danger");
-            return;
-        }
+        });
         setSelectedEntryIds(nextSelection.selectedIds);
         setSelectionAnchorId(nextSelection.anchorId);
     }
 
     function selectVisible() {
         const nextSelectedIds = new Set(selectedEntryIds);
-        let limitExceeded = false;
         for (const entryId of orderedEntryIds) {
             if (nextSelectedIds.has(entryId)) {
                 continue;
-            }
-            if (nextSelectedIds.size >= MAX_BATCH_QUEUE_ACTION_IDS) {
-                limitExceeded = true;
-                break;
             }
             nextSelectedIds.add(entryId);
         }
         setSelectedEntryIds(nextSelectedIds);
         setSelectionAnchorId(orderedEntryIds.at(-1) ?? selectionAnchorId);
-        if (limitExceeded) {
-            showToast(`You can copy up to ${MAX_BATCH_QUEUE_ACTION_IDS} entries at once.`, "danger");
-        }
     }
 
     function deselectVisible() {
@@ -721,7 +699,7 @@ function CopyCategoryDialog({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <strong className="text-sm">Entries</strong>
                             <span className="text-sm text-muted-foreground">
-                                {selectedOrderedEntryIds.length} of {orderedEntries.length} selected (up to {MAX_BATCH_QUEUE_ACTION_IDS})
+                                {selectedOrderedEntryIds.length} of {orderedEntries.length} selected
                             </span>
                         </div>
                         <Input

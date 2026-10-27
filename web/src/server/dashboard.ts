@@ -8,7 +8,12 @@ import { buildDashboard, getDashboardRevision } from "@/server/engine/dashboard"
 
 export const loadDashboard = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
-    .handler(({ context }): Promise<DashboardData> => buildDashboard(context.user.id));
+    .validator((data: { categoryId?: string; includeAllEntries?: boolean } | undefined) => data ?? {})
+    .handler(({ context, data }): Promise<DashboardData> => buildDashboard(
+        context.user.id,
+        data.categoryId,
+        data.includeAllEntries
+    ));
 
 export const loadDashboardFreshness = createServerFn({ method: "GET" })
     .middleware([authMiddleware])

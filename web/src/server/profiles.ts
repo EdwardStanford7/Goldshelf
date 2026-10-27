@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { hasAdminRole } from "@/lib/admin";
 import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
-import { PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
+import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import type {
     CategoryWithEntries,
@@ -39,7 +39,6 @@ import {
 import { type EntryRow, mapEntry } from "./stores/entryStore";
 
 const MAX_USER_NAME_LENGTH = 80;
-const COPY_PUBLIC_CATEGORY_IMAGE_CONCURRENCY = 2;
 
 
 
@@ -669,7 +668,7 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             throw new Error("Copy mode is required");
         }
 
-        const queuedEntries = await copyPublicCategoryEntriesToQueueImages(
+        const queuedEntries = prepareQueuedPublicCategoryEntries(
             entriesToQueue.map((entry, index) => ({
                 entry,
                 queueId: newId("queue"),
@@ -739,7 +738,7 @@ function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[
     if (selectedEntryIds.length === 0) {
         throw new Error("Select at least one entry to copy");
     }
-    if (selectedEntryIds.length > PUBLIC_CATEGORY_COPY_ENTRY_CHUNK_SIZE) {
+    if (selectedEntryIds.length > BULK_OPERATION_CHUNK_SIZE) {
         throw new Error("Copy chunk is too large; try again.");
     }
 
@@ -752,46 +751,15 @@ function selectedOrderedEntries(orderedEntries: Entry[], sourceEntryIds: string[
     return entries;
 }
 
-async function copyPublicCategoryEntriesToQueueImages(
+function prepareQueuedPublicCategoryEntries(
     inputs: PublicCategoryImageCopyInput[]
 ) {
-    if (inputs.length === 0) {
-        return [];
-    }
-
-    const queuedEntries: Array<QueuedPublicCategoryCopyEntry | undefined> = new Array(inputs.length);
-    let nextIndex = 0;
-    const workerCount = Math.min(COPY_PUBLIC_CATEGORY_IMAGE_CONCURRENCY, inputs.length);
-
-    const workerResults = await Promise.allSettled(Array.from({ length: workerCount }, async () => {
-        while (nextIndex < inputs.length) {
-            const index = nextIndex;
-            nextIndex += 1;
-            const input = inputs[index];
-            if (!input) {
-                continue;
-            }
-
-            queuedEntries[index] = {
-                id: input.queueId,
-                name: input.entry.name,
-                imageKey: input.entry.imageKey,
-                createdAt: input.createdAt
-            };
-        }
+    return inputs.map((input) => ({
+        id: input.queueId,
+        name: input.entry.name,
+        imageKey: input.entry.imageKey,
+        createdAt: input.createdAt
     }));
-    const failedWorker = workerResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
-    if (failedWorker) {
-        throw failedWorker.reason;
-    }
-
-    return queuedEntries.map((entry) => {
-        if (!entry) {
-            throw new Error("Failed to prepare copied entry");
-        }
-
-        return entry;
-    });
 }
 
 async function assertProfileSlugAvailable(userId: string, profileSlug: string) {
@@ -880,14 +848,18 @@ async function loadPublicCategories(
         entriesByCategory.set(row.category_id, entries);
     }
 
-    return categories.map((category) => ({
-        id: category.id,
-        name: category.name,
-        sortOrder: category.sort_order,
-        createdAt: category.created_at,
-        isPublic: Boolean(category.is_public),
-        entries: orderEntries(entriesByCategory.get(category.id) ?? [])
-    }));
+    return categories.map((category) => {
+        const entries = orderEntries(entriesByCategory.get(category.id) ?? []);
+        return {
+            id: category.id,
+            name: category.name,
+            sortOrder: category.sort_order,
+            createdAt: category.created_at,
+            isPublic: Boolean(category.is_public),
+            entryCount: entries.length,
+            entries
+        };
+    });
 }
 
 type FollowProfileListKind =

@@ -162,6 +162,27 @@ test.describe("Queue", () => {
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
     });
 
+    test("dashboard loads entries when switching categories", async ({ page, context }) => {
+        await seedUsers([{
+            email: "dashboard-category-load@e2e.test",
+            name: "Dashboard Category Load",
+            categories: [
+                { name: "Movies", entries: ["Arrival"] },
+                { name: "Books", entries: ["Hyperion"] }
+            ]
+        }]);
+        await signInViaApi(context, "dashboard-category-load@e2e.test");
+        await gotoApp(page);
+
+        await expect(page.getByText("Arrival", { exact: true }).first()).toBeVisible();
+        await page.getByRole("button", { name: /^Books · 1/ }).click();
+        await expect(page.getByText("Hyperion", { exact: true }).first()).toBeVisible();
+        await expect(page.getByText("Arrival", { exact: true }).first()).toBeHidden();
+
+        await page.getByRole("button", { name: /^Movies · 1/ }).click();
+        await expect(page.getByText("Arrival", { exact: true }).first()).toBeVisible();
+    });
+
     test("full queue lifecycle: enable, rename, rank now, undo delete, rank queue, disable", async ({
         page,
         context
@@ -462,6 +483,34 @@ test.describe("Queue", () => {
         await expect(page.getByText("4 queued", { exact: true })).toBeVisible();
         await expect(queueItem(page, "Memento")).toBeVisible();
         await expect(queueItem(page, "Solaris")).toBeVisible();
+    });
+
+    test("queue selection silently chunks more than 200 removals", async ({ context, page }) => {
+        const queuedEntries = Array.from({ length: 201 }, (_, index) => ({
+            categoryName: "Movies",
+            name: `Queue ${String(index).padStart(3, "0")}`,
+            createdAt: index + 1
+        }));
+        await seedUsers([{
+            email: "queue-large-batch@e2e.test",
+            name: "Queue Large Batch",
+            queueSettings: { enabled: true, promptForMissingImages: false },
+            categories: [{ name: "Movies", entries: [] }],
+            queuedEntries
+        }]);
+        await signInViaApi(context, "queue-large-batch@e2e.test");
+        await gotoApp(page);
+
+        const queuePanel = page.getByTestId("queue-panel");
+        await expect(queuePanel.getByText("201 queued", { exact: true })).toBeVisible();
+        await queuePanel.getByRole("button", { name: "Select", exact: true }).click();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Queue 000" }).click();
+        await queuePanel.getByRole("checkbox", { name: "Select queued Queue 200" }).click({ modifiers: ["Shift"] });
+        await expect(queuePanel.getByText("201 selected", { exact: true })).toBeVisible();
+
+        await queuePanel.getByRole("button", { name: "Remove selected" }).click();
+        await expect(page.getByText("Removed 201 queued entries.")).toBeVisible({ timeout: 20_000 });
+        await expect(queuePanel.getByText("0 queued", { exact: true })).toBeVisible();
     });
 
     test("active add ranking actions can queue new adds or remove queued adds", async ({

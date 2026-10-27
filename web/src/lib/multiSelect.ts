@@ -10,7 +10,6 @@ export interface MultiSelectInput {
     ctrlKey?: boolean;
     plainBehavior?: PlainSelectionBehavior;
 }
-
 export function nextMultiSelection({
     orderedIds,
     selectedIds,
@@ -65,18 +64,5 @@ export function nextMultiSelection({
     return {
         anchorId: nextAnchorId,
         selectedIds: new Set<string>()
-    };
-}
-
-export function nextLimitedMultiSelection(input: MultiSelectInput, maximumSelected: number) {
-    const nextSelection = nextMultiSelection(input);
-    if (nextSelection.selectedIds.size <= maximumSelected) {
-        return { ...nextSelection, limitExceeded: false };
-    }
-
-    return {
-        anchorId: input.anchorId,
-        selectedIds: new Set(input.selectedIds),
-        limitExceeded: true
     };
 }

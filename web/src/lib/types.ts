@@ -34,6 +34,7 @@ export interface CategoryWithEntries {
     sortOrder: number;
     createdAt: number;
     isPublic: boolean;
+    entryCount: number;
     entries: Entry[];
 }
 

@@ -29,6 +29,10 @@ interface DashboardRecoveryCheckRow {
     has_orphaned_ranking_entry: number;
 }
 
+interface DashboardCategoryRow extends CategoryRow {
+    entry_count: number;
+}
+
 export async function getDashboardRevision(userId: string) {
     const row = await getDb()
         .prepare(
@@ -81,62 +85,83 @@ export async function getDashboardRevision(userId: string) {
 }
 
 /**
- * Assembles the full dashboard payload for a user: categories with ordered
- * entries, the ranking queue, any active binary-ranking session, and the
- * current-user profile. Server-only; shared by the `loadDashboard` server
- * function and the `/` route's `loadHome` (which resolves the session once).
+ * Assembles dashboard metadata plus the selected category's ordered entries.
+ * The browser retains previously loaded categories for the session, so the
+ * normal page load does not transfer an entire library just to show one list.
  */
-export async function buildDashboard(userId: string): Promise<DashboardData> {
+export async function buildDashboard(
+    userId: string,
+    preferredCategoryId?: string,
+    includeAllEntries = false
+): Promise<DashboardData> {
     const startedAt = Date.now();
     const db = getDb();
     await repairDashboardStateIfNeeded(userId);
-    const profile = await ensureUserProfile(userId);
-    const revision = await getDashboardRevision(userId);
-    const queueSettings = await getQueueSettings(userId);
-    const queuedEntries = await listQueuedEntries(userId);
-    const activeBinarySession = await getActiveBinarySession(userId);
-    const activeRepairSession = await getActiveRepairSession(userId);
-    const categories = await all<CategoryRow>(
-        db
-            .prepare(
-                `SELECT id, name, sort_order, created_at, is_public
-             FROM categories
-             WHERE user_id = ?
-             ORDER BY sort_order ASC, name ASC`
-            )
-            .bind(userId)
-    );
+    const [
+        profile,
+        revision,
+        queueSettings,
+        queuedEntries,
+        activeBinarySession,
+        activeRepairSession,
+        categories
+    ] = await Promise.all([
+        ensureUserProfile(userId),
+        getDashboardRevision(userId),
+        getQueueSettings(userId),
+        listQueuedEntries(userId),
+        getActiveBinarySession(userId),
+        getActiveRepairSession(userId),
+        all<DashboardCategoryRow>(
+            db
+                .prepare(
+                    `SELECT categories.id, categories.name, categories.sort_order,
+                            categories.created_at, categories.is_public,
+                            COUNT(entries.id) AS entry_count
+                     FROM categories
+                     LEFT JOIN entries ON entries.category_id = categories.id
+                       AND entries.user_id = categories.user_id
+                       AND entries.status = 'active'
+                     WHERE categories.user_id = ?
+                     GROUP BY categories.id, categories.name, categories.sort_order,
+                              categories.created_at, categories.is_public
+                     ORDER BY categories.sort_order ASC, categories.name ASC`
+                )
+                .bind(userId)
+        )
+    ]);
 
-    if (categories.length === 0) {
-        const dashboard = {
-            revision,
-            categories: [],
-            queueSettings,
-            queuedEntries,
-            activeBinarySession,
-            activeRepairSession,
-            profile: mapCurrentUserProfile(profile)
-        };
-        logDashboardLoadIfNeeded(startedAt, {
-            categoryCount: 0,
-            entryCount: 0,
-            queuedEntryCount: queuedEntries.length,
-            hasActiveBinarySession: Boolean(activeBinarySession),
-            hasActiveRepairSession: Boolean(activeRepairSession)
-        });
-        return dashboard;
-    }
-
-    const entryRows = await all<EntryRow>(
-        db
-            .prepare(
-                `SELECT id, category_id, name, rank_position, image_key, created_at
-             FROM entries
-             WHERE user_id = ? AND status = 'active'
-             ORDER BY category_id ASC, rank_position ASC`
-            )
-            .bind(userId)
-    );
+    const loadedCategoryId = [
+        activeBinarySession?.categoryId,
+        activeRepairSession?.categoryId,
+        preferredCategoryId,
+        categories[0]?.id
+    ].find((categoryId): categoryId is string => Boolean(
+        categoryId && categories.some((category) => category.id === categoryId)
+    ));
+    const entryRows = includeAllEntries
+        ? await all<EntryRow>(
+            db
+                .prepare(
+                    `SELECT id, category_id, name, rank_position, image_key, created_at
+                     FROM entries
+                     WHERE user_id = ? AND status = 'active'
+                     ORDER BY category_id ASC, rank_position ASC`
+                )
+                .bind(userId)
+        )
+        : loadedCategoryId
+        ? await all<EntryRow>(
+            db
+                .prepare(
+                    `SELECT id, category_id, name, rank_position, image_key, created_at
+                     FROM entries
+                     WHERE user_id = ? AND category_id = ? AND status = 'active'
+                     ORDER BY rank_position ASC`
+                )
+                .bind(userId, loadedCategoryId)
+        )
+        : [];
     const entriesByCategory = new Map<string, Entry[]>();
     for (const row of entryRows) {
         const entries = entriesByCategory.get(row.category_id) ?? [];
@@ -152,7 +177,10 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
             sortOrder: category.sort_order,
             createdAt: category.created_at,
             isPublic: Boolean(category.is_public),
-            entries: orderEntries(entriesByCategory.get(category.id) ?? [])
+            entryCount: category.entry_count,
+            entries: includeAllEntries || category.id === loadedCategoryId
+                ? orderEntries(entriesByCategory.get(category.id) ?? [])
+                : []
         })),
         queueSettings,
         queuedEntries,
@@ -160,6 +188,7 @@ export async function buildDashboard(userId: string): Promise<DashboardData> {
         activeRepairSession,
         profile: mapCurrentUserProfile(profile)
     };
+
     logDashboardLoadIfNeeded(startedAt, {
         categoryCount: categories.length,
         entryCount: entryRows.length,

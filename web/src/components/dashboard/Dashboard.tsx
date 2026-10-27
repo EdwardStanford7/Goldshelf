@@ -78,7 +78,7 @@ import { shouldPromptForImage } from "@/lib/images";
 import type { ImagePickerTarget } from "@/lib/posterImage";
 import { ONBOARDING_SAMPLE_PENDING_KEY } from "@/lib/onboarding";
 import { nextMultiSelection } from "@/lib/multiSelect";
-import { SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
+import { BULK_OPERATION_CHUNK_SIZE, SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
 import { orderEntries } from "@/lib/ranking";
 import {
@@ -320,6 +320,14 @@ function chunkParsedImport(parsed: ParsedImport, size: number): ParsedImport[] {
     return chunks;
 }
 
+function chunkItems<T>(items: T[], size: number) {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+        chunks.push(items.slice(index, index + size));
+    }
+    return chunks;
+}
+
 function cancelBinarySessionMessage(
     session: BinarySessionView,
     mode: CancelBinarySessionMode
@@ -363,6 +371,7 @@ export function Dashboard({
         initialDashboard.categories[0]?.id ??
         ""
     );
+    const categoryLoadRequestIdRef = useRef(0);
     const queueSettingsRef = useRef(initialDashboard.queueSettings);
     const lastResumeRefreshAtRef = useRef(Date.now());
     const resumeRefreshInFlightRef = useRef(false);
@@ -445,6 +454,9 @@ export function Dashboard({
             null,
         [dashboard.categories, selectedCategoryId]
     );
+    const selectedCategoryLoading = Boolean(
+        selectedCategory && selectedCategory.entries.length !== selectedCategory.entryCount
+    );
     const statsCategory = useMemo(
         () => dashboard.categories.find((category) => category.id === statsCategoryId) ?? null,
         [dashboard.categories, statsCategoryId]
@@ -458,11 +470,11 @@ export function Dashboard({
         [orderedCategories, selectedCategoryIds]
     );
     const selectedRepairCategories = useMemo(
-        () => selectedCategories.filter((category) => category.entries.length >= 2),
+        () => selectedCategories.filter((category) => category.entryCount >= 2),
         [selectedCategories]
     );
     const selectedRankedEntryCount = useMemo(
-        () => selectedCategories.reduce((count, category) => count + category.entries.length, 0),
+        () => selectedCategories.reduce((count, category) => count + category.entryCount, 0),
         [selectedCategories]
     );
     const entryDateRange = useMemo(
@@ -493,6 +505,7 @@ export function Dashboard({
         selectedCategory &&
         !activeSessionId &&
         !activeRepairSessionId &&
+        !selectedCategoryLoading &&
         !entryFilterActive &&
         selectedCategory.entries.length > 1
     );
@@ -502,7 +515,9 @@ export function Dashboard({
     const canDragReorderCategories = !busy && !activeFlowLocked && !categorySelectionMode && dashboard.categories.length > 1;
     const canCreateCategory = categoryDraftName.trim().length > 0;
     const canCreateEntry = entryDraftName.trim().length > 0;
-    const entryCountSummary = selectedCategory
+    const entryCountSummary = selectedCategoryLoading
+        ? "Loading entries..."
+        : selectedCategory
         ? entryFilterActive
             ? `Showing ${displayedEntries.length} of ${selectedCategory.entries.length} entries`
             : `${displayedEntries.length} entries`
@@ -733,14 +748,61 @@ export function Dashboard({
         setSelectedCategoryId(dashboard.activeRepairSession.categoryId);
     }, [activeRepairSessionId, activeSessionId, dashboard.activeRepairSession]);
 
-    async function refresh() {
-        const nextDashboard = await loadDashboard();
+    function applyDashboard(nextDashboard: DashboardData) {
+        categoryLoadRequestIdRef.current += 1;
         lastResumeRefreshAtRef.current = Date.now();
         dashboardRevisionRef.current = nextDashboard.revision;
         queueSettingsRef.current = nextDashboard.queueSettings;
-        setDashboard(nextDashboard);
+        setDashboard((currentDashboard) => {
+            const revisionChanged = currentDashboard.revision !== nextDashboard.revision;
+            const cachedCategories = new Map(
+                currentDashboard.categories.map((category) => [category.id, category])
+            );
+            return {
+                ...nextDashboard,
+                categories: nextDashboard.categories.map((category) => {
+                    if (category.entries.length === category.entryCount || revisionChanged) {
+                        return category;
+                    }
+
+                    const cachedCategory = cachedCategories.get(category.id);
+                    return cachedCategory &&
+                        cachedCategory.entryCount === category.entryCount &&
+                        cachedCategory.entries.length === cachedCategory.entryCount
+                        ? { ...category, entries: cachedCategory.entries }
+                        : category;
+                })
+            };
+        });
         return nextDashboard;
     }
+
+    async function refresh(categoryId = selectedCategoryId) {
+        const nextDashboard = await loadDashboard({
+            data: categoryId ? { categoryId } : {}
+        });
+        return applyDashboard(nextDashboard);
+    }
+
+    useEffect(() => {
+        if (!selectedCategory || !selectedCategoryLoading) {
+            return;
+        }
+
+        const requestId = categoryLoadRequestIdRef.current + 1;
+        categoryLoadRequestIdRef.current = requestId;
+        void loadDashboard({ data: { categoryId: selectedCategory.id } })
+            .then((nextDashboard) => {
+                if (categoryLoadRequestIdRef.current === requestId) {
+                    applyDashboard(nextDashboard);
+                }
+            })
+            .catch((error) => {
+                if (categoryLoadRequestIdRef.current === requestId) {
+                    setErrorMessage(error);
+                }
+            });
+    }, [selectedCategory, selectedCategoryLoading]);
 
     function clearResumeRetryTimer() {
         if (resumeRetryTimerRef.current !== null) {
@@ -1722,19 +1784,29 @@ export function Dashboard({
     }
 
     async function removeQueuedEntriesForHistory(entries: QueuedEntry[]) {
-        const result = await deleteQueuedEntries({
-            data: { queuedEntryIds: entries.map((entry) => entry.id) }
-        });
+        let deletedCount = 0;
+        for (const chunk of chunkItems(entries, BULK_OPERATION_CHUNK_SIZE)) {
+            const result = await deleteQueuedEntries({
+                data: { queuedEntryIds: chunk.map((entry) => entry.id) }
+            });
+            deletedCount += result.deletedCount;
+        }
         await refreshAfterMutation();
-        return result;
+        return { deletedCount };
     }
 
     async function restoreQueuedEntriesForHistory(entries: QueuedEntry[]) {
-        const result = await restoreQueuedEntries({
-            data: { queuedEntryIds: entries.map((entry) => entry.id) }
-        });
+        let restoredCount = 0;
+        let skippedCount = 0;
+        for (const chunk of chunkItems(entries, BULK_OPERATION_CHUNK_SIZE)) {
+            const result = await restoreQueuedEntries({
+                data: { queuedEntryIds: chunk.map((entry) => entry.id) }
+            });
+            restoredCount += result.restoredCount;
+            skippedCount += result.skippedCount;
+        }
         await refreshAfterMutation();
-        return result;
+        return { restoredCount, skippedCount };
     }
 
     async function handleDeleteQueuedEntry(entry: QueuedEntry) {
@@ -2257,11 +2329,12 @@ export function Dashboard({
         setMessage(null);
         try {
             await nextPaint();
-            const entryCount = dashboard.categories.reduce(
+            const exportDashboard = await loadDashboard({ data: { includeAllEntries: true } });
+            const entryCount = exportDashboard.categories.reduce(
                 (count, category) => count + category.entries.length,
                 0
             );
-            const exportCount = entryCount + dashboard.queuedEntries.length;
+            const exportCount = entryCount + exportDashboard.queuedEntries.length;
             if (exportCount === 0) {
                 pushToast({
                     message: "Nothing to export yet. Add or import entries first."
@@ -2269,7 +2342,7 @@ export function Dashboard({
                 return;
             }
             const { writeExportWorkbook } = await import("@/lib/importExport");
-            const blob = await writeExportWorkbook(dashboard.categories, dashboard.queuedEntries);
+            const blob = await writeExportWorkbook(exportDashboard.categories, exportDashboard.queuedEntries);
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement("a");
             anchor.href = url;
@@ -2894,9 +2967,11 @@ export function Dashboard({
     return (
         <main
             className="grid h-dvh min-h-screen w-full max-w-full min-w-0 grid-cols-[clamp(300px,24vw,360px)_minmax(0,1fr)] overflow-hidden max-[720px]:h-auto max-[720px]:min-h-dvh max-[720px]:grid-cols-1 max-[720px]:grid-rows-[auto_minmax(0,1fr)] max-[720px]:overflow-visible"
-            aria-busy={busy}
+            aria-busy={busy || selectedCategoryLoading}
         >
-            {busy ? <BusyOverlay label={busyLabel ?? "Working..."} /> : null}
+            {busy || selectedCategoryLoading ? (
+                <BusyOverlay label={busyLabel ?? "Loading category..."} />
+            ) : null}
             {importToastOpen ? (
                 <ImportSpreadsheetToast
                     busy={busy}
@@ -2929,7 +3004,7 @@ export function Dashboard({
                     onCancel={() => setCategoryQueueTargets(null)}
                     onConfirm={() => void handleMoveSelectedCategoriesToQueue(categoryQueueTargets)}
                 >
-                    This removes the current ranked order for {categoryQueueTargets.reduce((count, category) => count + category.entries.length, 0)} entries and moves them into the queue to be ranked again. This cannot be undone.
+                    This removes the current ranked order for {categoryQueueTargets.reduce((count, category) => count + category.entryCount, 0)} entries and moves them into the queue to be ranked again. This cannot be undone.
                 </ConfirmDialog>
             ) : null}
             {categoryDeleteTarget ? (
@@ -2940,7 +3015,7 @@ export function Dashboard({
                     onCancel={() => setCategoryDeleteTarget(null)}
                     onConfirm={() => void handleDeleteCategory(categoryDeleteTarget)}
                 >
-                    This permanently removes {categoryDeleteTarget.entries.length} ranked {categoryDeleteTarget.entries.length === 1 ? "entry" : "entries"},
+                    This permanently removes {categoryDeleteTarget.entryCount} ranked {categoryDeleteTarget.entryCount === 1 ? "entry" : "entries"},
                     {" "}
                     {dashboard.queuedEntries.filter((entry) => entry.categoryId === categoryDeleteTarget.id).length} queued {dashboard.queuedEntries.filter((entry) => entry.categoryId === categoryDeleteTarget.id).length === 1 ? "entry" : "entries"},
                     {" "}and stored images for this category.
@@ -3158,7 +3233,7 @@ export function Dashboard({
                                 : null}
                         </DragOverlay>
                     </DndContext>
-                    {selectedCategory && displayedEntries.length === 0 ? (
+                    {selectedCategory && !selectedCategoryLoading && displayedEntries.length === 0 ? (
                         <EmptyState
                             icon={entryFilterActive ? Search : Swords}
                             title={entryFilterActive ? "No Matches" : "No Entries Yet"}

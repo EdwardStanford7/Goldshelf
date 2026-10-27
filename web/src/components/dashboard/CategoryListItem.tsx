@@ -152,7 +152,7 @@ export function CategoryListItem({
                         }}
                     >
                         <strong>{category.name}</strong>
-                        <span className="text-muted-foreground"> · {category.entries.length}</span>
+                        <span className="text-muted-foreground"> · {category.entryCount}</span>
                     </button>
                     {selectionMode ? (
                         <input
@@ -192,7 +192,7 @@ export function CategoryListItem({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40">
                             <DropdownMenuItem
-                                disabled={busy || listLocked || category.entries.length < 2}
+                                disabled={busy || listLocked || category.entryCount < 2}
                                 onSelect={onRepair}
                             >
                                 <Wrench />Repair This Category
@@ -217,7 +217,7 @@ export function CategoryListItem({
             </ContextMenuTrigger>
             <ContextMenuContent>
                 <ContextMenuItem
-                    disabled={busy || listLocked || category.entries.length < 2}
+                    disabled={busy || listLocked || category.entryCount < 2}
                     onSelect={onRepair}
                 >
                     <Wrench />Repair This Category
@@ -252,7 +252,7 @@ export function CategoryDragOverlay({
         <div className="relative min-w-0 rotate-[0.5deg] cursor-grabbing">
             <span className={`${categoryButtonClass(isActive)} block pr-9 shadow-floating`}>
                 <strong>{category.name}</strong>
-                <span className="text-muted-foreground"> · {category.entries.length}</span>
+                <span className="text-muted-foreground"> · {category.entryCount}</span>
             </span>
             <span className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center justify-center text-muted-foreground">
                 <GripVertical className="size-4" />

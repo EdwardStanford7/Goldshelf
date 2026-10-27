@@ -228,6 +228,42 @@ test.describe("Profiles", () => {
         await bobContext.close();
     });
 
+    test("signed-in viewers can copy a shared list with more than 200 entries", async ({
+        page: sourcePage,
+        context: sourceContext,
+        browser
+    }) => {
+        const entries = Array.from({ length: 201 }, (_, index) => `Movie ${String(index).padStart(3, "0")}`);
+        await seedUsers([
+            { ...ALICE, email: "alice-large-copy@e2e.test", categories: [{ name: "Movies", entries }] },
+            { ...BOB, email: "bob-large-copy@e2e.test", categories: [] }
+        ]);
+        await signInViaApi(sourceContext, "alice-large-copy@e2e.test");
+        await gotoApp(sourcePage, "/profile");
+        const sourceSlug = await readOwnSlug(sourcePage);
+        await sourcePage.getByLabel("Public profile").check();
+        await sourcePage.getByRole("button", { name: "Save Profile" }).click();
+        await expect(sourcePage.getByText("Profile saved.")).toBeVisible();
+        await sourcePage.getByRole("checkbox", { name: /Movies/ }).click();
+        await expect(sourcePage.getByText("Profile sharing saved.").first()).toBeVisible();
+
+        const viewerContext = await browser.newContext();
+        const viewerPage = await viewerContext.newPage();
+        await signInViaApi(viewerContext, "bob-large-copy@e2e.test");
+        await gotoApp(viewerPage, `/u/${sourceSlug}`);
+
+        await viewerPage.getByRole("button", { name: "Copy List" }).click();
+        const dialog = viewerPage.getByRole("alertdialog", { name: "Copy Movies" });
+        await dialog.getByLabel("Category name").fill("Large Movie Copy");
+        await expect(dialog.getByText("201 of 201 selected")).toBeVisible();
+        await dialog.getByRole("button", { name: "Copy List" }).click();
+        await expect(viewerPage.getByText("Copied 201 entries to Large Movie Copy.")).toBeVisible({ timeout: 30_000 });
+
+        await gotoApp(viewerPage);
+        await expect(viewerPage.getByText("201 queued", { exact: true })).toBeVisible();
+        await viewerContext.close();
+    });
+
     test("category creation defaults private and can show a category on the profile @smoke", async ({
         page,
         context
