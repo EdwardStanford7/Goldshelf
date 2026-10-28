@@ -86,6 +86,12 @@ test.describe("Ranking", () => {
         await expect(mobileHeader.getByRole("heading", { name: "Books" })).toBeVisible();
         await expect(page.getByText("New Category")).toBeHidden();
 
+        await mobileHeader.getByRole("button", { name: "New entry" }).click();
+        await expect(page.getByRole("heading", { name: "New Entry" })).toBeVisible();
+        const newEntrySheet = page.locator('[data-slot="sheet-content"]');
+        await expect(newEntrySheet.getByPlaceholder("New entry")).toBeVisible();
+        await newEntrySheet.getByRole("button", { name: "Close" }).click();
+
         const avatarBox = await page.getByRole("button", { name: "Account menu" }).boundingBox();
         const headerBox = await mobileHeader.boundingBox();
         expect(avatarBox?.x).toBeLessThan(24);

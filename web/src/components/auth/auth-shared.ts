@@ -26,6 +26,10 @@ export function validateNewPasswordLength(password: string, minPasswordLength: n
   return password.length < minPasswordLength ? passwordLengthMessage(minPasswordLength) : null;
 }
 
+export function validatePasswordConfirmation(password: string, confirmation: string) {
+  return password === confirmation ? null : 'Passwords do not match.';
+}
+
 export async function signInWithEmail({ email, password }: { email: string; password: string }) {
   const result = await signIn.email({
     email: email.trim(),

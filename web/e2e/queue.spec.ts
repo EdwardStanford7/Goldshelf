@@ -126,6 +126,7 @@ test.describe("Queue", () => {
         await page.getByLabel("Name").fill("Default Queue");
         await page.getByLabel("Email").fill("queue-default@e2e.test");
         await page.getByRole("textbox", { name: /^Password/ }).fill(TEST_PASSWORD);
+        await page.getByRole("textbox", { name: "Confirm password" }).fill(TEST_PASSWORD);
         await page.getByRole("button", { name: "Create account" }).click();
         await expect(page.getByRole("heading", { name: "Example Ranking" })).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("#1 Example Item A")).toBeVisible();

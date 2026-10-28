@@ -2833,7 +2833,7 @@ export function Dashboard({
                 className="sticky top-0 z-40 hidden border-b border-border bg-background/95 px-3 pb-3 pt-[max(0.65rem,env(safe-area-inset-top))] shadow-sm backdrop-blur max-[720px]:grid"
                 data-testid="mobile-dashboard-header"
             >
-                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2">
                     <AccountMenu
                         {...accountMenuProps}
                         contentAlign="start"
@@ -2873,6 +2873,17 @@ export function Dashboard({
                             </SheetBody>
                         </SheetContent>
                     </Sheet>
+                    <Button
+                        aria-label="New entry"
+                        disabled={busy || !selectedCategory}
+                        size="icon-lg"
+                        title="New entry"
+                        type="button"
+                        variant="outline"
+                        onClick={() => setMobilePanel("newEntry")}
+                    >
+                        <Plus className="size-5" />
+                    </Button>
                 </div>
                 {selectedCategory && !activeFlowLocked ? (
                     <div className="mt-2 grid min-w-0">

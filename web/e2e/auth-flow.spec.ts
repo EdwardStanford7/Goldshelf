@@ -29,12 +29,25 @@ test.describe("Auth flows", () => {
         await page.getByLabel("Name").fill("Test User");
         await page.getByLabel("Email").fill("signup@e2e.test");
         await page.getByRole("textbox", { name: /^Password/ }).fill(TEST_PASSWORD);
+        await page.getByRole("textbox", { name: "Confirm password" }).fill(TEST_PASSWORD);
         await page.getByRole("button", { name: "Create account" }).click();
 
         await expect(page.getByRole("heading", { name: "Example Ranking" })).toBeVisible({ timeout: 15_000 });
         await expect(page.getByText("#1 Example Item A")).toBeVisible();
         await expect(page.getByText("#2 Example Item B")).toBeVisible();
         await expect(page.getByText("#3 Example Item C")).toBeVisible();
+    });
+
+    test("sign up requires matching passwords", async ({ page }) => {
+        await gotoApp(page, "/signup");
+        await page.getByLabel("Name").fill("Test User");
+        await page.getByLabel("Email").fill("password-match@e2e.test");
+        await page.getByRole("textbox", { name: /^Password/ }).fill(TEST_PASSWORD);
+        await page.getByRole("textbox", { name: "Confirm password" }).fill("a-different-password");
+        await page.getByRole("button", { name: "Create account" }).click();
+
+        await expect(page.getByText("Passwords do not match.")).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
     });
 
     test("seeded user can sign in and sees their data @smoke", async ({ page }) => {

@@ -16,6 +16,7 @@ import {
   SUBMIT_CLASS,
   formatSignUpError,
   signUpWithEmail,
+  validatePasswordConfirmation,
   validateNewPasswordLength,
 } from './auth-shared';
 
@@ -30,12 +31,18 @@ export function SignUpForm({ authOptions }: { authOptions: AuthOptions }) {
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '');
     const password = String(form.get('password') ?? '');
+    const passwordConfirmation = String(form.get('passwordConfirmation') ?? '');
     const name = String(form.get('name') ?? email);
 
     try {
       const passwordLengthError = validateNewPasswordLength(password, authOptions.minPasswordLength);
       if (passwordLengthError) {
         setError(passwordLengthError);
+        return;
+      }
+      const passwordConfirmationError = validatePasswordConfirmation(password, passwordConfirmation);
+      if (passwordConfirmationError) {
+        setError(passwordConfirmationError);
         return;
       }
       await signUpWithEmail({ email, password, name });
@@ -84,6 +91,13 @@ export function SignUpForm({ authOptions }: { authOptions: AuthOptions }) {
           label="Password"
           name="password"
           placeholder={`At least ${authOptions.minPasswordLength} characters`}
+          autoComplete="new-password"
+          minLength={authOptions.minPasswordLength}
+        />
+        <PasswordField
+          label="Confirm password"
+          name="passwordConfirmation"
+          placeholder="Type your password again"
           autoComplete="new-password"
           minLength={authOptions.minPasswordLength}
         />
