@@ -1,6 +1,6 @@
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { ACTIVE_RANKING_LABEL, abortNextServerFn, dispatchPersistedPageShow, gotoApp, openNewCategoryDialog, seedUsers, signInViaApi } from "./helpers";
+import { ACTIVE_RANKING_LABEL, abortNextServerFn, dispatchPersistedPageShow, gotoApp, openDesktopNewEntry, openNewCategoryDialog, seedUsers, signInViaApi } from "./helpers";
 
 const REQUEST_LOAD_FAILURE_MESSAGE = "Could not reach the server. Please try again.";
 const USER = {
@@ -22,8 +22,9 @@ test.describe("Transient network failures", () => {
         await signInViaApi(context, "resume-transient@e2e.test");
         await gotoApp(page);
 
-        await page.getByPlaceholder("New entry").fill("Gamma");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Gamma");
+        await newEntry.press("Enter");
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
 
         const staleResponse = await page.request.post(`${BASE_URL}/api/test/stale-ranking`, {

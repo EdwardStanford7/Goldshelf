@@ -27,7 +27,7 @@ import {
 } from "@/server/repairSessions";
 
 const REPAIR_PANEL_CLASS =
-    "max-w-full min-w-0 rounded-md border border-border bg-card p-4 shadow-panel max-[720px]:p-3";
+    "max-w-full min-w-0 rounded-xl border border-[#d8ae5e]/30 bg-[#201e19] p-5 text-[#f5f0e7] shadow-panel max-[720px]:p-3";
 const STATUS_CLASS =
     "rounded-sm border-l-4 border-l-gold bg-status px-3 py-[0.6rem] whitespace-pre-line";
 const POSTER_CLASS =
@@ -369,17 +369,20 @@ export function RepairRankPanel({
     const controlsDisabled = submitting || recovering;
 
     return (
-        <section className={`${REPAIR_PANEL_CLASS} grid content-start gap-[0.9rem] max-[720px]:gap-2`}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:mb-1 max-[720px]:gap-2 *:max-w-full *:min-w-0">
-                <div>
-                    <strong>
+        <section className={`${REPAIR_PANEL_CLASS} grid content-start gap-5 max-[720px]:gap-3`}>
+            <div className="flex flex-wrap items-start justify-between gap-[0.7rem] max-[720px]:gap-2 *:max-w-full *:min-w-0">
+                <div className="grid min-w-0 gap-1.5">
+                    <strong className="text-[0.7rem] font-semibold tracking-[0.14em] text-[#d8ae5e] uppercase">
                         {repairPhaseLabel(session.phase)} · {session.categoryName}
                     </strong>
-                    <p className="m-0 mt-[0.2rem] text-muted-foreground">
+                    <h2 className="m-0 font-[family-name:var(--app-font-display)] text-[clamp(1.5rem,3vw,2.1rem)] leading-none text-[#f5f0e7]">
+                        Is this pair in the right order?
+                    </h2>
+                    <p className="m-0 text-sm text-[#f5f0e7]/65">
                         {repairSubtitle(session)}
                     </p>
                 </div>
-                <div className="flex flex-wrap gap-2 max-[720px]:gap-1.5">
+                <div className="flex flex-wrap gap-2 max-[720px]:gap-1.5 [&_button]:border-[#f5f0e7]/25 [&_button]:bg-transparent [&_button]:text-[#f5f0e7] [&_button:hover]:bg-[#f5f0e7]/10 [&_button:hover]:text-[#f5f0e7]">
                     {session.canUndoLastMatch ? (
                         <Button
                             size="sm"
@@ -417,7 +420,7 @@ export function RepairRankPanel({
             {recovering ? (
                 <div className={STATUS_CLASS}>Reconnecting...</div>
             ) : null}
-            <div className="grid min-w-0 grid-cols-2 gap-4 max-[720px]:gap-2" data-testid="repair-choice-grid">
+            <div className="grid min-w-0 grid-cols-2 gap-5 mx-auto w-full max-w-[min(72rem,calc((100dvh-21rem)*1.8+1.25rem))] max-[720px]:max-w-none max-[720px]:gap-2" data-testid="repair-choice-grid">
                 {[session.subject, session.opponent].map((entry) => (
                     <RepairMatchCard
                         disabled={controlsDisabled}
@@ -497,7 +500,7 @@ function RepairMatchCard({
 
     if (isRenaming) {
         return (
-            <article className="overflow-hidden rounded-md border border-border bg-card text-left" data-testid="repair-choice-card">
+            <article className="overflow-hidden rounded-xl border border-primary/15 bg-card text-left" data-testid="repair-choice-card">
                 <RepairMatchPoster entry={entry} />
                 <form className="grid gap-[0.6rem] p-[0.7rem] max-[720px]:gap-2 max-[720px]:p-2" onSubmit={handleRenameSubmit}>
                     <Input
@@ -527,7 +530,7 @@ function RepairMatchCard({
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
-                <article className="relative overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-primary" data-testid="repair-choice-card">
+                <article className="group relative overflow-hidden rounded-xl border border-[#f5f0e7]/10 bg-card text-foreground shadow-sm transition-[transform,border-color,box-shadow] duration-150 hover:border-gold/70 motion-safe:hover:-translate-y-0.5 hover:shadow-floating" data-testid="repair-choice-card">
                     <button
                         className="block w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-55"
                         disabled={disabled}
@@ -535,13 +538,13 @@ function RepairMatchCard({
                         onClick={onChoose}
                     >
                         <RepairMatchPoster entry={entry} />
-                        <strong className="block truncate p-[0.7rem] pr-11 max-[720px]:p-2 max-[720px]:pr-9 max-[720px]:text-[0.82rem]">{entry.name}</strong>
+                        <strong className="block truncate p-3 pr-11 font-[family-name:var(--app-font-display)] text-[1.05rem] font-normal max-[720px]:p-2 max-[720px]:pr-9 max-[720px]:text-[0.82rem]">{entry.name}</strong>
                     </button>
                     <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 aria-label={`Actions for ${entry.name}`}
-                                className="absolute top-2 right-2 z-20 hidden border-overlay-button-line bg-overlay-button text-overlay-button-ink hover:bg-overlay-button max-[720px]:top-1.5 max-[720px]:right-1.5 max-[720px]:inline-flex"
+                                className="absolute top-2 right-2 z-20 border-overlay-button-line bg-overlay-button text-overlay-button-ink transition-opacity duration-150 hover:bg-overlay-button focus-visible:opacity-100 max-[720px]:top-1.5 max-[720px]:right-1.5 min-[721px]:opacity-0 min-[721px]:group-hover:opacity-100 min-[721px]:data-[state=open]:opacity-100"
                                 disabled={disabled}
                                 size="icon-sm"
                                 type="button"

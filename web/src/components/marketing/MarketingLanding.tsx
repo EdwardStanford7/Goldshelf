@@ -62,26 +62,19 @@ export function MarketingLanding() {
 
                 {/* Hero: top-anchored poster, one cohesive block ------------ */}
                 <section className="grid content-center gap-10 py-16 lg:gap-12 lg:py-24">
-                    <div className="grid gap-1">
+                    <div className="grid max-w-5xl gap-5">
                         <h1
                             className="gs-rise font-display text-balance text-[clamp(2.75rem,8.5vw,7.25rem)] font-medium leading-[0.94]"
                             style={{ animationDelay: "120ms" }}
                         >
                             Rank everything you <span className="gs-gold italic">love</span>.
                         </h1>
-                        <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-                            <span
-                                className="gs-rise gs-dim font-display text-[clamp(2.75rem,8.5vw,7.25rem)] font-medium leading-[0.94]"
-                                style={{ animationDelay: "200ms" }}
-                            >
-                            </span>
-                            <p
-                                className="gs-rise max-w-xs pb-2 text-base leading-relaxed text-muted-foreground"
-                                style={{ animationDelay: "280ms" }}
-                            >
-                                The shelf that turns head-to-head picks into a clean, ranked list.
-                            </p>
-                        </div>
+                        <p
+                            className="gs-rise max-w-xl text-lg leading-relaxed text-muted-foreground sm:text-xl"
+                            style={{ animationDelay: "240ms" }}
+                        >
+                            Stop agonizing over star ratings. Pick a winner between two things at a time, and Goldshelf turns those choices into a clean, ordered list you can share.
+                        </p>
                     </div>
 
                     <div className="gs-rise flex flex-wrap items-center gap-3" style={{ animationDelay: "360ms" }}>

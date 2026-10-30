@@ -43,7 +43,7 @@ export function AuthLayout({
                     className="grid max-w-full min-w-0 content-center gap-[1.3rem] bg-card p-[clamp(1.5rem,4vw,3rem)]"
                 >
                     <div className="grid gap-2">
-                        <p className="m-0 text-[0.82rem] font-extrabold tracking-normal uppercase text-gold">
+                        <p className="m-0 text-xs font-semibold tracking-[0.14em] uppercase text-gold">
                             {eyebrow}
                         </p>
                         <h2

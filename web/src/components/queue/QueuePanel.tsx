@@ -150,7 +150,7 @@ export function QueuePanel({
 
     return (
         <section
-            className="grid h-full min-h-0 min-w-0 max-w-full content-start gap-[0.9rem] overflow-x-hidden overflow-y-auto rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15 [scrollbar-gutter:stable] max-[720px]:h-fit max-[720px]:min-h-max max-[720px]:overflow-visible max-[720px]:[scrollbar-gutter:auto]"
+            className="grid h-full min-h-0 min-w-0 max-w-full content-start gap-4 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-card/80 p-4 shadow-panel [scrollbar-gutter:stable] max-[720px]:h-fit max-[720px]:min-h-max max-[720px]:overflow-visible max-[720px]:[scrollbar-gutter:auto]"
             data-testid="queue-panel"
         >
             <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-[0.7rem] bg-card max-[720px]:static">

@@ -1,4 +1,4 @@
-import type { CurrentUserProfile } from "@/lib/types";
+import type { ActivityVisibility, CurrentUserProfile } from "@/lib/types";
 import { assertOwned, first, getDb, now } from "@/server/lib/db";
 
 export const MIN_PROFILE_SLUG_LENGTH = 3;
@@ -10,6 +10,7 @@ export interface ProfileRow {
     image: string | null;
     slug: string;
     is_public: number;
+    activity_visibility: ActivityVisibility;
     created_at: number;
     updated_at: number;
 }
@@ -52,8 +53,8 @@ export async function ensureUserProfile(userId: string): Promise<ProfileRow> {
         try {
             await getDb()
                 .prepare(
-                    `INSERT INTO user_profiles (user_id, slug, is_public, created_at, updated_at)
-             VALUES (?, ?, 0, ?, ?)`
+                    `INSERT INTO user_profiles (user_id, slug, is_public, activity_visibility, created_at, updated_at)
+             VALUES (?, ?, 0, 'off', ?, ?)`
                 )
                 .bind(userId, slug, createdAt, createdAt)
                 .run();
@@ -63,6 +64,7 @@ export async function ensureUserProfile(userId: string): Promise<ProfileRow> {
                 image: user.image,
                 slug,
                 is_public: 0,
+                activity_visibility: "off",
                 created_at: createdAt,
                 updated_at: createdAt
             };
@@ -86,7 +88,7 @@ export async function getProfileByUserId(userId: string) {
         getDb()
             .prepare(
                 `SELECT "user".id AS user_id, "user".name, "user".image,
-                user_profiles.slug, user_profiles.is_public,
+                user_profiles.slug, user_profiles.is_public, user_profiles.activity_visibility,
                 user_profiles.created_at, user_profiles.updated_at
          FROM user_profiles
          INNER JOIN "user" ON "user".id = user_profiles.user_id
@@ -101,7 +103,7 @@ export async function getProfileBySlug(profileSlug: string) {
         getDb()
             .prepare(
                 `SELECT "user".id AS user_id, "user".name, "user".image,
-                user_profiles.slug, user_profiles.is_public,
+                user_profiles.slug, user_profiles.is_public, user_profiles.activity_visibility,
                 user_profiles.created_at, user_profiles.updated_at
          FROM user_profiles
          INNER JOIN "user" ON "user".id = user_profiles.user_id
@@ -125,7 +127,8 @@ export function mapCurrentUserProfile(profile: ProfileRow): CurrentUserProfile {
     return {
         userId: profile.user_id,
         slug: profile.slug,
-        isPublic: Boolean(profile.is_public)
+        isPublic: Boolean(profile.is_public),
+        activityVisibility: profile.activity_visibility
     };
 }
 

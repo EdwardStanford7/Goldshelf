@@ -42,7 +42,10 @@ export interface CurrentUserProfile {
     userId: string;
     slug: string;
     isPublic: boolean;
+    activityVisibility: ActivityVisibility;
 }
+
+export type ActivityVisibility = "off" | "followers" | "public";
 
 export interface DashboardData {
     revision: string;
@@ -98,11 +101,12 @@ export interface ProfileSettingsData {
         imageKey: string | null;
         slug: string;
         isPublic: boolean;
+        activityVisibility: ActivityVisibility;
     };
     categories: ProfileSettingsCategory[];
+    queueSettings: QueueSettings;
     following: FollowProfileSummary[];
     followers: FollowProfileSummary[];
-    suggestedProfiles: FollowProfileSummary[];
     incomingFollowRequests: FollowProfileSummary[];
     outgoingFollowRequests: FollowProfileSummary[];
     blockedProfiles: FollowProfileSummary[];
@@ -116,6 +120,8 @@ export interface PublicProfileSummary {
     isPublic: boolean;
     isSelf: boolean;
     relationState: FollowRelationState;
+    followerCount: number;
+    followingCount: number;
 }
 
 export interface ProfileCopyTargetCategory {
@@ -134,6 +140,35 @@ export interface PublicProfileData {
         canUseAdminPrivacyOverride: boolean;
         adminPrivacyOverride: boolean;
     };
+}
+
+export interface RecentActivityItem {
+    entryId: string;
+    entryName: string;
+    entryImageKey: string | null;
+    categoryId: string;
+    categoryName: string;
+    createdAt: number;
+    profile: {
+        userId: string;
+        name: string;
+        imageKey: string | null;
+        slug: string;
+    };
+}
+
+export interface ExploreProfile {
+    userId: string;
+    name: string;
+    imageKey: string | null;
+    slug: string;
+    publicCategoryCount: number;
+}
+
+export interface ExploreData {
+    recentPublicEntries: RecentActivityItem[];
+    followingEntries: RecentActivityItem[];
+    publicProfiles: ExploreProfile[];
 }
 
 export interface ActiveBinarySession {

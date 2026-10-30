@@ -21,9 +21,9 @@ import { useEscapeKey } from "@/hooks/useEscapeKey";
 import type { CategoryWithEntries } from "@/lib/types";
 
 function categoryButtonClass(isActive: boolean) {
-    return `block w-full min-w-0 cursor-pointer rounded-sm border px-[0.8rem] py-[0.55rem] text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${isActive
-            ? "border-gold bg-accent"
-            : "border-border bg-card hover:border-[color-mix(in_srgb,var(--primary)_45%,var(--border))]"
+    return `flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${isActive
+            ? "border-transparent bg-secondary font-semibold text-foreground"
+            : "border-transparent bg-transparent text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
         }`;
 }
 
@@ -125,7 +125,7 @@ export function CategoryListItem({
             <ContextMenuTrigger asChild disabled={busy || selectionMode}>
                 <div
                     ref={setNodeRef}
-                    className={`relative min-w-0 ${canDragReorder && !selectionMode ? "cursor-grab" : ""} ${selectionMode ? "cursor-pointer" : ""} ${isDragging ? "opacity-40" : ""}`.trim()}
+                    className={`group relative min-w-0 ${canDragReorder && !selectionMode ? "cursor-grab" : ""} ${selectionMode ? "cursor-pointer" : ""} ${isDragging ? "opacity-40" : ""}`.trim()}
                     onClick={(event) => {
                         if (selectionMode) {
                             onSelection?.(event);
@@ -136,9 +136,9 @@ export function CategoryListItem({
                     {...listeners}
                 >
                     <button
-                        className={`${categoryButtonClass(isActive)} ${selectionMode ? "pl-9" : ""} ${canDragReorder && !selectionMode ? "pr-9" : ""} ${selectionMode ? "" : "max-[720px]:pr-10"}`.trim()}
+                        className={`${categoryButtonClass(isActive)} ${selectionMode ? "pl-9" : ""} ${selectionMode ? "" : "pr-9"}`.trim()}
                         disabled={busy}
-                        title="Double-click to rename · Right-click for actions"
+                        title={`Double-click to rename · Open the menu for more actions${canDragReorder && !selectionMode ? " · Drag to reorder" : ""}`}
                         type="button"
                         onClick={() => {
                             if (!selectionMode) {
@@ -151,8 +151,12 @@ export function CategoryListItem({
                             }
                         }}
                     >
-                        <strong>{category.name}</strong>
-                        <span className="text-muted-foreground"> · {category.entryCount}</span>
+                        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className="truncate">{category.name}</span>
+                            {!category.isPublic ? <Lock aria-hidden="true" className="size-3 shrink-0 opacity-60"><title>Hidden from profile</title></Lock> : null}
+                        </span>
+                        <span className="sr-only"> · </span>
+                        <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{category.entryCount}</span>
                     </button>
                     {selectionMode ? (
                         <input
@@ -167,19 +171,11 @@ export function CategoryListItem({
                             type="checkbox"
                         />
                     ) : null}
-                    {canDragReorder && !selectionMode ? (
-                        <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute top-1/2 right-2 flex -translate-y-1/2 items-center justify-center text-muted-foreground max-[720px]:hidden"
-                        >
-                            <GripVertical className="size-4" />
-                        </span>
-                    ) : null}
                     {!selectionMode ? <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 aria-label={`Actions for ${category.name}`}
-                                className="absolute top-1/2 right-1.5 z-20 hidden -translate-y-1/2 max-[720px]:inline-flex"
+                                className="absolute top-1/2 right-1 z-20 -translate-y-1/2 transition-opacity focus-visible:opacity-100 min-[721px]:opacity-0 min-[721px]:group-hover:opacity-100 min-[721px]:data-[state=open]:opacity-100"
                                 disabled={busy}
                                 size="icon-sm"
                                 type="button"
@@ -250,9 +246,9 @@ export function CategoryDragOverlay({
 }) {
     return (
         <div className="relative min-w-0 rotate-[0.5deg] cursor-grabbing">
-            <span className={`${categoryButtonClass(isActive)} block pr-9 shadow-floating`}>
-                <strong>{category.name}</strong>
-                <span className="text-muted-foreground"> · {category.entryCount}</span>
+            <span className={`${categoryButtonClass(isActive)} bg-card pr-9 shadow-floating`}>
+                <span className="min-w-0 flex-1 truncate">{category.name}</span>
+                <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{category.entryCount}</span>
             </span>
             <span className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center justify-center text-muted-foreground">
                 <GripVertical className="size-4" />

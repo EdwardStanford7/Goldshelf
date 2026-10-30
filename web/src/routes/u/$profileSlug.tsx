@@ -1,6 +1,19 @@
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { CopyPlus, Globe2, ListOrdered, Shield, Users } from "lucide-react";
+import {
+    Check,
+    ChevronDown,
+    CopyPlus,
+    Globe2,
+    ListOrdered,
+    Lock,
+    Shield,
+    UserCheck,
+    UserMinus,
+    UserPlus,
+    Users,
+    X
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
     AlertDialog,
@@ -10,10 +23,15 @@ import {
     AlertDialogHeader,
     AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { BrandLink } from "@/components/ui/BrandLink";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
 import { CategoryVisibilityBadge } from "@/components/category/CategoryVisibilityBadge";
-import { Card } from "@/components/ui/card";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,7 +44,7 @@ import {
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
 import { redirectIfUnauthorized } from "@/lib/errors";
-import { canViewProfile, followButtonLabel, followRelationLabel } from "@/lib/follows";
+import { canViewProfile } from "@/lib/follows";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import { nextMultiSelection } from "@/lib/multiSelect";
 import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
@@ -35,11 +53,13 @@ import {
     approveFollowRequest,
     cancelFollowRequest,
     copyPublicCategoryToQueue,
+    declineFollowRequest,
     followProfile,
     loadPublicProfile,
     removeFollow
 } from "@/server/profiles";
-import type { CategoryWithEntries, Entry, PublicProfileData } from "@/lib/types";
+import { loadViewer } from "@/server/viewer";
+import type { CategoryWithEntries, Entry, FollowRelationState, PublicProfileData } from "@/lib/types";
 
 const POSTER_CLASS =
     "aspect-[4/5] bg-[image:linear-gradient(135deg,var(--poster-start),var(--poster-end))] text-center text-muted-foreground";
@@ -55,12 +75,15 @@ function chunks<T>(items: T[], size: number) {
 
 export const Route = createFileRoute("/u/$profileSlug")({
     loader: async ({ params }) => {
-        const data = await loadPublicProfile({ data: { profileSlug: params.profileSlug } });
+        const [data, viewer] = await Promise.all([
+            loadPublicProfile({ data: { profileSlug: params.profileSlug } }),
+            loadViewer()
+        ]);
         if (!data) {
             throw notFound();
         }
 
-        return data;
+        return { data, viewer };
     },
     component: PublicProfileRoute,
     notFoundComponent: ProfileNotFound
@@ -68,18 +91,19 @@ export const Route = createFileRoute("/u/$profileSlug")({
 
 function ProfileNotFound() {
     return (
-        <main className="grid min-h-screen content-start gap-4 bg-background px-[clamp(1rem,3vw,2.25rem)] py-5 text-foreground">
-            <PublicProfileTopbar signedIn={false} />
-            <Card className="grid w-[min(100%,34rem)] gap-4 px-4 shadow-panel">
-                <h1 className="text-2xl font-bold">Profile Not Found</h1>
-                <p className="text-muted-foreground">This profile is private or does not exist.</p>
-            </Card>
+        <main className="mx-auto grid min-h-screen w-full max-w-7xl content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] text-foreground">
+            <AppHeader viewer={{ signedIn: false }} />
+            <section className="grid max-w-md gap-2 rounded-xl border border-dashed border-border bg-muted p-6">
+                <Lock aria-hidden="true" className="size-6 text-primary" />
+                <h1 className="m-0 text-2xl">Profile Not Found</h1>
+                <p className="m-0 text-muted-foreground">This profile is private or does not exist.</p>
+            </section>
         </main>
     );
 }
 
 function PublicProfileRoute() {
-    const loaderData = Route.useLoaderData();
+    const { data: loaderData, viewer: headerViewer } = Route.useLoaderData();
     const [profileData, setProfileData] = useState<PublicProfileData | null>(loaderData);
     const [followSaving, setFollowSaving] = useState(false);
     const [copyingCategoryId, setCopyingCategoryId] = useState<string | null>(null);
@@ -99,50 +123,35 @@ function PublicProfileRoute() {
         setCopyDialogCategory(null);
     }, [loaderData]);
 
-    async function handleFollowAction() {
+    function applyRelation(nextRelation: FollowRelationState, followerDelta: number) {
+        if (!profileData) {
+            return;
+        }
+
+        setProfileData({
+            ...profileData,
+            profile: {
+                ...profileData.profile,
+                relationState: nextRelation,
+                followerCount: Math.max(0, profileData.profile.followerCount + followerDelta)
+            },
+            viewer: {
+                ...profileData.viewer,
+                relationState: nextRelation
+            }
+        });
+    }
+
+    async function runFollowAction(action: () => Promise<{ nextRelation: FollowRelationState; followerDelta: number; message: string }>) {
         if (!profileData || profileData.viewer.isSelf) {
             return;
         }
 
         setFollowSaving(true);
-
         try {
-            const currentRelation = profileData.viewer.relationState;
-            let nextRelation = currentRelation;
-            let message = "Profile followed.";
-
-            if (currentRelation === "incoming_request") {
-                const result = await approveFollowRequest({
-                    data: { followerUserId: profileData.profile.userId }
-                });
-                nextRelation = result.relationState;
-                message = "Follow request accepted.";
-            } else if (currentRelation === "requested") {
-                await cancelFollowRequest({ data: { followedUserId: profileData.profile.userId } });
-                nextRelation = "none";
-                message = "Follow request canceled.";
-            } else if (currentRelation === "following" || currentRelation === "mutual") {
-                await removeFollow({ data: { followedUserId: profileData.profile.userId } });
-                nextRelation = currentRelation === "mutual" ? "follows_you" : "none";
-                message = "Profile unfollowed.";
-            } else {
-                const result = await followProfile({ data: { profileUserId: profileData.profile.userId } });
-                nextRelation = result.relationState;
-                message = nextRelation === "requested" ? "Follow request sent." : "Profile followed.";
-            }
-
-            setProfileData({
-                ...profileData,
-                profile: {
-                    ...profileData.profile,
-                    relationState: nextRelation
-                },
-                viewer: {
-                    ...profileData.viewer,
-                    relationState: nextRelation
-                }
-            });
-            showToast(message, "success");
+            const result = await action();
+            applyRelation(result.nextRelation, result.followerDelta);
+            showToast(result.message, "success");
         } catch (followError) {
             if (redirectIfUnauthorized(followError)) {
                 return;
@@ -152,6 +161,50 @@ function PublicProfileRoute() {
         } finally {
             setFollowSaving(false);
         }
+    }
+
+    function handleFollow() {
+        return runFollowAction(async () => {
+            const result = await followProfile({ data: { profileUserId: profileData!.profile.userId } });
+            return {
+                nextRelation: result.relationState,
+                followerDelta: 0,
+                message: result.relationState === "requested" ? "Follow request sent." : "Profile followed."
+            };
+        });
+    }
+
+    function handleUnfollow() {
+        return runFollowAction(async () => {
+            const current = profileData!.viewer.relationState;
+            await removeFollow({ data: { followedUserId: profileData!.profile.userId } });
+            return {
+                nextRelation: current === "mutual" ? "follows_you" : "none",
+                followerDelta: 0,
+                message: "Profile unfollowed."
+            };
+        });
+    }
+
+    function handleCancelRequest() {
+        return runFollowAction(async () => {
+            await cancelFollowRequest({ data: { followedUserId: profileData!.profile.userId } });
+            return { nextRelation: "none", followerDelta: 0, message: "Follow request canceled." };
+        });
+    }
+
+    function handleAcceptRequest() {
+        return runFollowAction(async () => {
+            const result = await approveFollowRequest({ data: { followerUserId: profileData!.profile.userId } });
+            return { nextRelation: result.relationState, followerDelta: 0, message: "Follow request accepted." };
+        });
+    }
+
+    function handleDeclineRequest() {
+        return runFollowAction(async () => {
+            await declineFollowRequest({ data: { followerUserId: profileData!.profile.userId } });
+            return { nextRelation: "none", followerDelta: 0, message: "Follow request declined." };
+        });
     }
 
     function openCopyDialog(category: CategoryWithEntries) {
@@ -301,139 +354,150 @@ function PublicProfileRoute() {
     }
 
     if (!profileData) {
-        return (
-            <main className="grid min-h-screen content-start gap-4 bg-background px-[clamp(1rem,3vw,2.25rem)] py-5 text-foreground">
-                <PublicProfileTopbar signedIn={false} />
-                <Card className="grid w-[min(100%,34rem)] gap-4 px-4 shadow-panel">
-                    <h1 className="text-2xl font-bold">Profile Not Found</h1>
-                    <p className="text-muted-foreground">This profile is private or does not exist.</p>
-                </Card>
-            </main>
-        );
+        return <ProfileNotFound />;
     }
 
     const { profile, viewer } = profileData;
     const canCopySharedCategories = canViewProfile(profile.isPublic, false, viewer.relationState);
     const showCategoryVisibility = profileData.categories.some((category) => !category.isPublic);
+    const totalEntries = profileData.categories.reduce((count, category) => count + category.entries.length, 0);
+    const selectedCategory = profileData.categories.find((category) => category.id === selectedCategoryId) ?? null;
 
     return (
-        <main className="grid h-dvh min-h-screen grid-rows-[auto_auto_minmax(0,1fr)] gap-4 overflow-hidden bg-background px-[clamp(1rem,3vw,2.25rem)] py-5 text-foreground max-[720px]:h-auto max-[720px]:grid-rows-none max-[720px]:overflow-visible">
-            <PublicProfileTopbar signedIn={viewer.isSignedIn} />
+        <main className="mx-auto grid min-h-screen w-full max-w-7xl content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
+            <AppHeader viewer={headerViewer} />
 
-            <Card className="min-w-0 flex-row items-center justify-end gap-[0.8rem] px-4 shadow-panel">
-                <PublicProfileAvatar
-                    imageKey={profile.imageKey}
-                    isSelf={viewer.isSelf}
-                    userId={profile.userId}
-                />
-                <div>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <h1 className="text-2xl font-bold">{profile.name}</h1>
-                        <ProfileVisibilityBadge isPublic={profile.isPublic} />
-                        {viewer.adminPrivacyOverride ? (
-                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-xs font-bold uppercase text-destructive">
-                                <Shield className="size-3" />
-                                Admin Privacy View
-                            </span>
-                        ) : null}
+            <section className="grid gap-6 pt-2" aria-labelledby="profile-heading">
+                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-5 sm:gap-7">
+                    <PublicProfileAvatar
+                        imageKey={profile.imageKey}
+                        isSelf={viewer.isSelf}
+                        name={profile.name}
+                        userId={profile.userId}
+                    />
+                    <div className="grid min-w-0 gap-3">
+                        <div className="grid min-w-0 gap-1">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                                <h1 className="min-w-0 truncate text-[clamp(1.9rem,4vw,2.9rem)] leading-none" id="profile-heading">
+                                    {profile.name}
+                                </h1>
+                                <ProfileVisibilityBadge isPublic={profile.isPublic} />
+                                {viewer.adminPrivacyOverride ? (
+                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-wide text-destructive">
+                                        <Shield className="size-3" />
+                                        Admin Privacy View
+                                    </span>
+                                ) : null}
+                            </div>
+                            <p className="m-0 flex min-w-0 flex-wrap items-center gap-x-2 text-muted-foreground">
+                                <span className="truncate">@{profile.slug}</span>
+                                {!viewer.isSelf && viewer.isSignedIn && (viewer.relationState === "follows_you" || viewer.relationState === "mutual") ? (
+                                    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">Follows you</span>
+                                ) : null}
+                            </p>
+                        </div>
+
+                        <dl className="m-0 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                            <ProfileStat label={profileData.categories.length === 1 ? "shelf" : "shelves"} value={profileData.categories.length} />
+                            <ProfileStat label={totalEntries === 1 ? "entry" : "entries"} value={totalEntries} />
+                            <ProfileStat label={profile.followerCount === 1 ? "follower" : "followers"} value={profile.followerCount} />
+                            <ProfileStat label="following" value={profile.followingCount} />
+                        </dl>
+
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <FollowActions
+                                relationState={viewer.relationState}
+                                saving={followSaving}
+                                isSelf={viewer.isSelf}
+                                isSignedIn={viewer.isSignedIn}
+                                profileIsPublic={profile.isPublic}
+                                onAccept={() => void handleAcceptRequest()}
+                                onCancelRequest={() => void handleCancelRequest()}
+                                onDecline={() => void handleDeclineRequest()}
+                                onFollow={() => void handleFollow()}
+                                onUnfollow={() => void handleUnfollow()}
+                            />
+                            {viewer.canUseAdminPrivacyOverride ? (
+                                <Button
+                                    disabled={adminPrivacySaving}
+                                    size="sm"
+                                    type="button"
+                                    variant={viewer.adminPrivacyOverride ? "default" : "outline"}
+                                    onClick={() => void setAdminPrivacyOverride(!viewer.adminPrivacyOverride)}
+                                >
+                                    <Shield data-icon="inline-start" />
+                                    <span>
+                                        {adminPrivacySaving
+                                            ? "Loading..."
+                                            : viewer.adminPrivacyOverride
+                                                ? "Respect privacy"
+                                                : "Admin: view private lists"}
+                                    </span>
+                                </Button>
+                            ) : null}
+                        </div>
                     </div>
-                    <p className="text-muted-foreground">
-                        @{profile.slug}
-                        {!viewer.isSelf && viewer.isSignedIn
-                            ? ` · ${followRelationLabel(viewer.relationState)}`
-                            : null}
-                    </p>
                 </div>
-                <div className="flex flex-wrap justify-end gap-2">
-                    {viewer.canUseAdminPrivacyOverride ? (
-                        <Button
-                            disabled={adminPrivacySaving}
-                            type="button"
-                            variant={viewer.adminPrivacyOverride ? "default" : "outline"}
-                            onClick={() => void setAdminPrivacyOverride(!viewer.adminPrivacyOverride)}
-                        >
-                            <Shield data-icon="inline-start" />
-                            <span>
-                                {adminPrivacySaving
-                                    ? "Loading..."
-                                    : viewer.adminPrivacyOverride
-                                        ? "Respect Privacy"
-                                        : "Admin: View Private Lists"}
-                            </span>
-                        </Button>
-                    ) : null}
-                    {viewer.isSelf ? (
-                        <Button asChild variant="outline">
-                            <Link to="/profile">Edit Profile</Link>
-                        </Button>
-                    ) : viewer.isSignedIn ? (
-                        <Button
-                            disabled={followSaving}
-                            type="button"
-                            onClick={() => void handleFollowAction()}
-                        >
-                            {followSaving ? "Saving..." : followButtonLabel(viewer.relationState)}
-                        </Button>
-                    ) : (
-                        <Button asChild variant="outline">
-                            <Link to="/">Sign In</Link>
-                        </Button>
-                    )}
-                </div>
-            </Card>
+            </section>
 
             {profileData.categories.length > 0 ? (
-                <div className="m-0 grid min-h-0 w-full grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-md border border-border bg-card shadow-panel max-[720px]:grid-cols-1 max-[720px]:overflow-visible">
-                    <nav className="grid min-h-0 min-w-0 content-start gap-0.5 overflow-y-auto border-r border-border bg-sidebar p-[0.65rem] max-[720px]:flex max-[720px]:max-h-none max-[720px]:flex-row max-[720px]:flex-nowrap max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:overflow-y-hidden max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label="Categories">
+                <div className="grid min-h-0 w-full gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+                    <nav
+                        className="flex min-w-0 gap-1 overflow-x-auto pb-1 [scrollbar-width:thin] lg:sticky lg:top-20 lg:grid lg:content-start lg:gap-0.5 lg:overflow-visible lg:pb-0"
+                        aria-label="Shared shelves"
+                    >
+                        <p className="m-0 hidden pb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase lg:block">Shelves</p>
                         {profileData.categories.map((category) => {
                             const isActive = category.id === selectedCategoryId;
                             return (
                                 <button
-                                    className={`w-full min-w-0 rounded-sm border px-[0.65rem] py-2 text-left shadow-none enabled:hover:border-border enabled:hover:bg-secondary max-[720px]:w-auto max-[720px]:flex-none ${isActive
-                                        ? "border-primary bg-accent font-bold text-accent-strong"
-                                        : "border-transparent bg-transparent"
+                                    className={`flex min-w-0 shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors lg:w-full ${isActive
+                                        ? "bg-secondary font-semibold text-foreground"
+                                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                                         }`}
                                     key={category.id}
                                     type="button"
                                     aria-current={isActive ? "true" : undefined}
                                     onClick={() => selectCategory(category.id)}
                                 >
-                                    <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                                        <span className="block min-w-0 truncate text-[0.92rem]">{category.name}</span>
+                                    <span className="min-w-0 truncate">{category.name}</span>
+                                    <span className="flex shrink-0 items-center gap-1.5">
                                         {showCategoryVisibility ? (
-                                            <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profile.isPublic} className="max-[720px]:hidden" />
+                                            <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profile.isPublic} />
                                         ) : null}
+                                        <span className="text-xs tabular-nums text-muted-foreground">{category.entries.length}</span>
                                     </span>
                                 </button>
                             );
                         })}
                     </nav>
-                    <div ref={entryScrollRef} className="min-h-0 min-w-0 overflow-y-auto p-4 max-[720px]:overflow-visible">
-                        {(() => {
-                            const category = profileData.categories.find(
-                                (c) => c.id === selectedCategoryId
-                            );
-                            if (!category) return null;
-                            return (
-                                <PublicCategory
-                                    category={category}
-                                    copyDisabled={copyingCategoryId === category.id}
-                                    onCopy={
-                                        viewer.isSignedIn && !viewer.isSelf && category.isPublic && canCopySharedCategories
-                                            ? () => openCopyDialog(category)
-                                            : undefined
-                                    }
-                                    profileIsPublic={profile.isPublic}
-                                    showVisibility={showCategoryVisibility}
-                                    usePrivateImages={viewer.isSelf}
-                                />
-                            );
-                        })()}
+                    <div ref={entryScrollRef} className="min-w-0">
+                        {selectedCategory ? (
+                            <PublicCategory
+                                category={selectedCategory}
+                                copyDisabled={copyingCategoryId === selectedCategory.id}
+                                onCopy={
+                                    viewer.isSignedIn && !viewer.isSelf && selectedCategory.isPublic && canCopySharedCategories
+                                        ? () => openCopyDialog(selectedCategory)
+                                        : undefined
+                                }
+                                profileIsPublic={profile.isPublic}
+                                showVisibility={showCategoryVisibility}
+                                usePrivateImages={viewer.isSelf}
+                            />
+                        ) : null}
                     </div>
                 </div>
             ) : (
-                <EmptyState className="m-0 w-full" icon={ListOrdered} title="No Shared Rankings">
-                    Shared lists will appear here.
+                <EmptyState className="m-0 w-full" icon={ListOrdered} title={viewer.isSelf ? "Nothing shared yet" : "No shared shelves"}>
+                    {viewer.isSelf ? (
+                        <>
+                            Shelves you mark as shown appear here.{" "}
+                            <Link className="font-medium text-accent-strong" to="/profile">Choose what to share</Link>
+                        </>
+                    ) : (
+                        `${profile.name} hasn't shared any shelves yet.`
+                    )}
                 </EmptyState>
             )}
 
@@ -459,35 +523,137 @@ function PublicProfileRoute() {
     );
 }
 
-function ProfileVisibilityBadge({ isPublic }: { isPublic: boolean }) {
-    const Icon = isPublic ? Globe2 : Users;
+function ProfileStat({ label, value }: { label: string; value: number }) {
     return (
-        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold uppercase ${
-            isPublic
-                ? "border-primary/40 bg-primary/15 text-primary"
-                : "border-border bg-muted text-muted-foreground"
-        }`} title={isPublic ? "Searchable and visible to anyone" : "Visible to accepted followers"}>
-            <Icon className="size-3" />
-            {isPublic ? "Public Profile" : "Followers Only"}
-        </span>
+        <div className="flex items-baseline gap-1.5">
+            <dt className="sr-only">{label}</dt>
+            <dd className="m-0 font-semibold tabular-nums text-foreground">{value}</dd>
+            <span aria-hidden="true" className="text-muted-foreground">{label}</span>
+        </div>
     );
 }
 
-function PublicProfileTopbar({ signedIn }: { signedIn: boolean }) {
+/**
+ * Every follow state gets a distinct, honest control: the primary button only
+ * ever says what it will do (Follow / Accept), and reversible states
+ * (Following / Requested) expose their undo in a menu instead of silently
+ * toggling on click.
+ */
+function FollowActions({
+    relationState,
+    saving,
+    isSelf,
+    isSignedIn,
+    profileIsPublic,
+    onAccept,
+    onCancelRequest,
+    onDecline,
+    onFollow,
+    onUnfollow
+}: {
+    relationState: FollowRelationState;
+    saving: boolean;
+    isSelf: boolean;
+    isSignedIn: boolean;
+    profileIsPublic: boolean;
+    onAccept: () => void;
+    onCancelRequest: () => void;
+    onDecline: () => void;
+    onFollow: () => void;
+    onUnfollow: () => void;
+}) {
+    if (isSelf) {
+        return (
+            <Button asChild variant="outline">
+                <Link to="/profile">Edit Profile</Link>
+            </Button>
+        );
+    }
+
+    if (!isSignedIn) {
+        return (
+            <Button asChild variant="outline">
+                <Link to="/signin">Sign in to follow</Link>
+            </Button>
+        );
+    }
+
+    if (relationState === "incoming_request") {
+        return (
+            <>
+                <Button disabled={saving} type="button" onClick={onAccept}>
+                    <Check data-icon="inline-start" />
+                    {saving ? "Saving..." : "Accept request"}
+                </Button>
+                <Button disabled={saving} type="button" variant="outline" onClick={onDecline}>
+                    <X data-icon="inline-start" />
+                    Decline
+                </Button>
+            </>
+        );
+    }
+
+    if (relationState === "requested") {
+        return (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button disabled={saving} type="button" variant="outline">
+                        <UserCheck data-icon="inline-start" />
+                        {saving ? "Saving..." : "Requested"}
+                        <ChevronDown className="size-4 opacity-60" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                    <DropdownMenuItem onSelect={onCancelRequest}>
+                        <X />
+                        Cancel request
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        );
+    }
+
+    if (relationState === "following" || relationState === "mutual") {
+        return (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button disabled={saving} type="button" variant="outline">
+                        <UserCheck data-icon="inline-start" />
+                        {saving ? "Saving..." : "Following"}
+                        <ChevronDown className="size-4 opacity-60" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                    <DropdownMenuItem variant="destructive" onSelect={onUnfollow}>
+                        <UserMinus />
+                        Unfollow
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        );
+    }
+
     return (
-        <header className="m-0 flex w-full flex-wrap items-center justify-between gap-3">
-            <BrandLink />
-            <nav className="flex flex-wrap items-center justify-end gap-[0.8rem]" aria-label="Profile navigation">
-                {signedIn ? (
-                    <>
-                        <Link className="text-foreground no-underline hover:text-accent-strong" to="/">Rankings</Link>
-                        <Link className="text-foreground no-underline hover:text-accent-strong" to="/profile">Profile</Link>
-                    </>
-                ) : (
-                    <Link className="text-foreground no-underline hover:text-accent-strong" to="/">Sign In</Link>
-                )}
-            </nav>
-        </header>
+        <Button disabled={saving} type="button" onClick={onFollow} title={profileIsPublic ? undefined : "This profile is private, so following sends a request."}>
+            <UserPlus data-icon="inline-start" />
+            {saving ? "Saving..." : relationState === "follows_you" ? "Follow back" : profileIsPublic ? "Follow" : "Request to follow"}
+        </Button>
+    );
+}
+
+function ProfileVisibilityBadge({ isPublic }: { isPublic: boolean }) {
+    const Icon = isPublic ? Globe2 : Users;
+    return (
+        <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-wide ${isPublic
+                ? "border-gold/40 bg-gold-soft text-gold-strong"
+                : "border-border bg-muted text-muted-foreground"
+                }`}
+            title={isPublic ? "Searchable and visible to anyone" : "Visible to accepted followers"}
+        >
+            <Icon className="size-3" />
+            {isPublic ? "Public Profile" : "Followers Only"}
+        </span>
     );
 }
 
@@ -775,6 +941,7 @@ function CopyCategoryDialog({
     );
 }
 
+
 function PublicCategory({
     category,
     copyDisabled,
@@ -793,43 +960,50 @@ function PublicCategory({
     const entries = useMemo(() => orderEntries(category.entries), [category.entries]);
 
     return (
-        <section className="grid gap-[0.8rem]">
-            <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <h2 className="min-w-0 text-lg font-semibold">{category.name}</h2>
-                    {showVisibility ? <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profileIsPublic} /> : null}
+        <section className="grid gap-5" aria-labelledby={`shelf-${category.id}`}>
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+                <div className="grid min-w-0 gap-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h2 className="min-w-0 truncate text-[clamp(1.5rem,3vw,2.1rem)] leading-none" id={`shelf-${category.id}`}>{category.name}</h2>
+                        {showVisibility ? <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profileIsPublic} /> : null}
+                    </div>
+                    <p className="m-0 text-sm text-muted-foreground">
+                        {entries.length} {entries.length === 1 ? "entry" : "entries"}, ranked by head-to-head picks
+                    </p>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                    <span className="text-muted-foreground">{entries.length} {entries.length === 1 ? "entry" : "entries"}</span>
-                    {onCopy ? (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={copyDisabled}
-                            type="button"
-                            onClick={onCopy}
-                        >
-                            <CopyPlus data-icon="inline-start" />
-                            <span>{copyDisabled ? "Copying..." : "Copy List"}</span>
-                        </Button>
-                    ) : null}
+                {onCopy ? (
+                    <Button
+                        disabled={copyDisabled}
+                        type="button"
+                        variant="outline"
+                        onClick={onCopy}
+                    >
+                        <CopyPlus data-icon="inline-start" />
+                        <span>{copyDisabled ? "Copying..." : "Copy List"}</span>
+                    </Button>
+                ) : null}
+            </div>
+            {entries.length > 0 ? (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,11rem),1fr))]">
+                    {entries.map((entry) => (
+                        <PublicEntryCard
+                            entry={entry}
+                            key={entry.id}
+                            listSize={entries.length}
+                            usePrivateImages={usePrivateImages}
+                        />
+                    ))}
                 </div>
-            </div>
-            <div className="grid gap-[0.65rem]">
-                {entries.map((entry) => (
-                    <PublicEntryRow
-                        entry={entry}
-                        key={entry.id}
-                        listSize={entries.length}
-                        usePrivateImages={usePrivateImages}
-                    />
-                ))}
-            </div>
+            ) : (
+                <EmptyState compact icon={ListOrdered} title="Empty shelf">
+                    Nothing has been ranked here yet.
+                </EmptyState>
+            )}
         </section>
     );
 }
 
-function PublicEntryRow({
+function PublicEntryCard({
     entry,
     listSize,
     usePrivateImages
@@ -840,18 +1014,30 @@ function PublicEntryRow({
 }) {
     const position = entry.rankPosition + 1;
     const percentileLabel = percentileForPosition(position, listSize);
+    const isPodium = position <= 3 && listSize >= 3;
 
     return (
-        <article className="grid grid-cols-[minmax(5.25rem,auto)_5rem_minmax(0,1fr)] items-center gap-[0.65rem] rounded-md border border-border bg-muted px-[0.55rem] py-[0.65rem] max-[520px]:grid-cols-[minmax(4.9rem,auto)_4.25rem_minmax(0,1fr)]">
-            <span className="flex min-w-0 flex-wrap items-center gap-1 font-extrabold text-muted-foreground">
-                <span>#{position}</span>
-                <span className="shrink-0 rounded-full border border-primary/35 px-[0.34rem] py-[0.04rem] text-[0.62rem] leading-tight text-primary" title={`${position} of ${listSize}`}>
-                    {percentileLabel}
-                </span>
-            </span>
+        <article
+            className={`group relative grid min-w-0 overflow-hidden rounded-xl border bg-card shadow-panel transition-[border-color,box-shadow,transform] duration-150 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-floating ${isPodium ? "border-gold/50" : "border-border"
+                }`}
+            title={`#${position} of ${listSize} · ${percentileLabel} percentile`}
+        >
             <PublicEntryPoster entry={entry} usePrivateImages={usePrivateImages} />
-            <div className="min-w-0">
-                <strong className="block min-w-0 truncate">{entry.name}</strong>
+            <span
+                aria-hidden="true"
+                className={`absolute top-2 left-2 grid min-w-7 place-items-center rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums shadow-sm ${isPodium
+                    ? "bg-gold text-primary-foreground dark:text-primary-foreground"
+                    : "bg-overlay-button text-overlay-button-ink"
+                    }`}
+            >
+                {position}
+            </span>
+            <div className="grid min-w-0 gap-0.5 p-2.5">
+                <strong className="block min-w-0 truncate font-[family-name:var(--app-font-display)] text-[0.98rem] leading-tight font-normal">
+                    <span className="sr-only">#{position} </span>
+                    {entry.name}
+                </strong>
+                <span className="text-xs text-muted-foreground">{percentileLabel} percentile</span>
             </div>
         </article>
     );
@@ -900,26 +1086,28 @@ function PublicEntryPoster({
 
     if (!src) {
         return (
-            <span className={`${POSTER_CLASS} grid w-20 content-center place-items-center gap-[0.35rem] overflow-hidden rounded-sm border border-border p-1`}>
-                <small className="text-[0.95rem] leading-tight text-muted-foreground">{isNoImageKey(entry.imageKey) ? "No image saved" : "No image"}</small>
-            </span>
+            <div className={`${POSTER_CLASS} grid w-full content-center place-items-center gap-1 overflow-hidden p-3`}>
+                <small className="text-[0.78rem] leading-tight text-muted-foreground">{isNoImageKey(entry.imageKey) ? "No image saved" : "No image"}</small>
+            </div>
         );
     }
 
     return (
-        <span className={`${POSTER_CLASS} block w-20 overflow-hidden rounded-sm border border-border`}>
+        <div className={`${POSTER_CLASS} block w-full overflow-hidden`}>
             <img className="block h-full w-full object-cover" alt="" decoding="async" loading="lazy" src={src} onError={() => setFailed(true)} />
-        </span>
+        </div>
     );
 }
 
 function PublicProfileAvatar({
     imageKey,
     isSelf,
+    name,
     userId
 }: {
     imageKey: string | null;
     isSelf: boolean;
+    name: string;
     userId: string;
 }) {
     const src = hasStoredImage(imageKey)
@@ -929,9 +1117,11 @@ function PublicProfileAvatar({
         : null;
 
     return (
-        <Avatar aria-hidden="true" className="size-16">
+        <Avatar aria-hidden="true" className="size-20 border-2 border-card shadow-panel ring-1 ring-border sm:size-28">
             {src ? <AvatarImage alt="" decoding="async" src={src} /> : null}
-            <AvatarFallback className="border border-avatar-line [background:radial-gradient(circle_at_50%_38%,var(--avatar-ink)_0_21%,transparent_22%),radial-gradient(circle_at_50%_110%,var(--avatar-ink)_0_39%,transparent_40%),var(--avatar-bg)]" />
+            <AvatarFallback className="bg-avatar font-[family-name:var(--app-font-display)] text-3xl text-avatar-ink sm:text-4xl">
+                {name.trim().charAt(0).toUpperCase() || "?"}
+            </AvatarFallback>
         </Avatar>
     );
 }

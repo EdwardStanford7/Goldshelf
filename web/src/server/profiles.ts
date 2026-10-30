@@ -5,6 +5,7 @@ import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
 import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import type {
+    ActivityVisibility,
     CategoryWithEntries,
     CurrentUserProfile,
     Entry,
@@ -37,6 +38,7 @@ import {
     slugifyProfileInput
 } from "./stores/profileStore";
 import { type EntryRow, mapEntry } from "./stores/entryStore";
+import { getQueueSettings } from "./stores/queueStore";
 
 const MAX_USER_NAME_LENGTH = 80;
 
@@ -93,7 +95,7 @@ type CopyPublicCategoryInput =
 
 export const updateUserProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .validator((data: { name: string; slug?: string; isPublic?: boolean }) => data)
+    .validator((data: { name: string; slug?: string; isPublic?: boolean; activityVisibility?: ActivityVisibility }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const profile = await ensureUserProfile(userId);
@@ -114,6 +116,9 @@ export const updateUserProfile = createServerFn({ method: "POST" })
         }
 
         const nextIsPublic = input.isPublic === undefined ? Boolean(profile.is_public) : input.isPublic;
+        const nextActivityVisibility = normalizeActivityVisibility(
+            input.activityVisibility ?? profile.activity_visibility
+        );
         const updatedAt = now();
         const db = getDb();
         await db.batch([
@@ -127,16 +132,17 @@ export const updateUserProfile = createServerFn({ method: "POST" })
             db
                 .prepare(
                     `UPDATE user_profiles
-           SET slug = ?, is_public = ?, updated_at = ?
+           SET slug = ?, is_public = ?, activity_visibility = ?, updated_at = ?
            WHERE user_id = ?`
                 )
-                .bind(nextSlug, nextIsPublic ? 1 : 0, updatedAt, userId)
+                .bind(nextSlug, nextIsPublic ? 1 : 0, nextActivityVisibility, updatedAt, userId)
         ]);
 
         return {
             name: cleanName,
             profileSlug: nextSlug,
-            profileIsPublic: nextIsPublic
+            profileIsPublic: nextIsPublic,
+            activityVisibility: nextActivityVisibility
         };
     });
 
@@ -167,7 +173,8 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
                 name: profile.name,
                 imageKey: profile.image,
                 slug: profile.slug,
-                isPublic: Boolean(profile.is_public)
+                isPublic: Boolean(profile.is_public),
+                activityVisibility: profile.activity_visibility
             },
             categories: categories.map((category) => ({
                 id: category.id,
@@ -176,9 +183,9 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
                 entryCount: category.entry_count,
                 isPublic: Boolean(category.is_public)
             })),
+            queueSettings: await getQueueSettings(userId),
             following: await listFollowProfiles(userId, "following"),
             followers: await listFollowProfiles(userId, "followers"),
-            suggestedProfiles: await listSuggestedProfiles(userId),
             incomingFollowRequests: await listFollowProfiles(userId, "incoming_requests"),
             outgoingFollowRequests: await listFollowProfiles(userId, "outgoing_requests"),
             blockedProfiles: await listBlockedProfiles(userId)
@@ -525,10 +532,11 @@ async function loadPublicProfileForViewer(
 
     const canUseAdminPrivacyOverride = Boolean(isAdminViewer && !isSelf);
     const adminPrivacyOverride = Boolean(options.adminViewPrivate && canUseAdminPrivacyOverride);
-    const categories = await loadPublicCategories(profile.user_id, { includePrivate: adminPrivacyOverride });
-    const viewerCategories = viewerUserId
-        ? await listCopyTargetCategories(viewerUserId)
-        : [];
+    const [categories, viewerCategories, followCounts] = await Promise.all([
+        loadPublicCategories(profile.user_id, { includePrivate: adminPrivacyOverride }),
+        viewerUserId ? listCopyTargetCategories(viewerUserId) : Promise.resolve([]),
+        getFollowCounts(profile.user_id)
+    ]);
 
     return {
         profile: {
@@ -538,7 +546,9 @@ async function loadPublicProfileForViewer(
             slug: profile.slug,
             isPublic: Boolean(profile.is_public),
             isSelf,
-            relationState
+            relationState,
+            followerCount: followCounts.followerCount,
+            followingCount: followCounts.followingCount
         },
         categories,
         viewer: {
@@ -1013,80 +1023,6 @@ async function listBlockedProfiles(userId: string): Promise<FollowProfileSummary
     return rows.map(mapFollowProfile);
 }
 
-async function listSuggestedProfiles(userId: string): Promise<FollowProfileSummary[]> {
-    const rows = await all<FollowProfileRow>(
-        getDb()
-            .prepare(
-                `WITH direct_connections AS (
-                   SELECT followed_user_id AS user_id
-                   FROM user_follows
-                   WHERE follower_user_id = ? AND status = 'accepted'
-                   UNION
-                   SELECT follower_user_id AS user_id
-                   FROM user_follows
-                   WHERE followed_user_id = ? AND status = 'accepted'
-                 ),
-                 candidate_links AS (
-                   SELECT user_follows.followed_user_id AS user_id,
-                          user_follows.follower_user_id AS through_user_id
-                   FROM user_follows
-                   INNER JOIN direct_connections
-                     ON direct_connections.user_id = user_follows.follower_user_id
-                   WHERE user_follows.status = 'accepted'
-                   UNION ALL
-                   SELECT user_follows.follower_user_id AS user_id,
-                          user_follows.followed_user_id AS through_user_id
-                   FROM user_follows
-                   INNER JOIN direct_connections
-                     ON direct_connections.user_id = user_follows.followed_user_id
-                   WHERE user_follows.status = 'accepted'
-                 ),
-                 candidates AS (
-                   SELECT candidate_links.user_id,
-                          COUNT(DISTINCT candidate_links.through_user_id) AS shared_connection_count
-                   FROM candidate_links
-                   WHERE candidate_links.user_id != ?
-                     AND candidate_links.user_id NOT IN (SELECT user_id FROM direct_connections)
-                   GROUP BY candidate_links.user_id
-                 )
-                 SELECT "user".id AS user_id, "user".name, "user".image,
-                        user_profiles.slug, user_profiles.is_public,
-                        COUNT(categories.id) AS public_category_count,
-                        'none' AS relation_state,
-                        0 AS created_at,
-                        NULL AS accepted_at
-                 FROM candidates
-                 INNER JOIN user_profiles ON user_profiles.user_id = candidates.user_id
-                 INNER JOIN "user" ON "user".id = candidates.user_id
-                 LEFT JOIN categories ON categories.user_id = candidates.user_id
-                   AND categories.is_public = 1
-                 WHERE user_profiles.is_public = 1
-                   AND NOT EXISTS (
-                     SELECT 1
-                     FROM user_follows direct
-                     WHERE (direct.follower_user_id = ? AND direct.followed_user_id = candidates.user_id)
-                        OR (direct.follower_user_id = candidates.user_id AND direct.followed_user_id = ?)
-                   )
-                   AND NOT EXISTS (
-                     SELECT 1
-                     FROM user_blocks blocks
-                     WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = candidates.user_id)
-                        OR (blocks.blocker_user_id = candidates.user_id AND blocks.blocked_user_id = ?)
-                   )
-                 GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
-                          user_profiles.is_public, candidates.shared_connection_count
-                 ORDER BY candidates.shared_connection_count DESC,
-                          COUNT(categories.id) DESC,
-                          lower("user".name) ASC,
-                          user_profiles.slug ASC
-                 LIMIT 8`
-            )
-            .bind(userId, userId, userId, userId, userId, userId, userId)
-    );
-
-    return rows.map(mapFollowProfile);
-}
-
 function mapFollowProfile(row: FollowProfileRow): FollowProfileSummary {
     return {
         userId: row.user_id,
@@ -1125,6 +1061,23 @@ async function getFollowRelationState(
 ): Promise<FollowRelationState> {
     const rows = await getFollowRelationRows(followerUserId, followedUserId);
     return deriveFollowRelationState(rows.outgoingStatus, rows.incomingStatus);
+}
+
+/** Accepted follower / following totals shown in the public profile header. */
+async function getFollowCounts(userId: string): Promise<{ followerCount: number; followingCount: number }> {
+    const row = await first<{ follower_count: number; following_count: number }>(
+        getDb()
+            .prepare(
+                `SELECT
+           (SELECT COUNT(*) FROM user_follows WHERE followed_user_id = ? AND status = 'accepted') AS follower_count,
+           (SELECT COUNT(*) FROM user_follows WHERE follower_user_id = ? AND status = 'accepted') AS following_count`
+            )
+            .bind(userId, userId)
+    );
+    return {
+        followerCount: Number(row?.follower_count ?? 0),
+        followingCount: Number(row?.following_count ?? 0)
+    };
 }
 
 async function getFollowRelationRows(
@@ -1205,6 +1158,14 @@ function normalizeProfileSlug(value: string) {
     }
 
     return slug;
+}
+
+function normalizeActivityVisibility(value: ActivityVisibility) {
+    if (value === "off" || value === "followers" || value === "public") {
+        return value;
+    }
+
+    throw new Error("Activity visibility is invalid");
 }
 
 function parseProfileSlugInput(value: string) {

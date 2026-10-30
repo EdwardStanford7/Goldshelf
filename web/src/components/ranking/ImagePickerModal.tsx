@@ -423,10 +423,10 @@ export function ImagePickerModal({
                 }
             }}
         >
-            <section className="grid max-h-[min(760px,calc(100vh-2rem))] w-[min(920px,100%)] max-w-[calc(100vw-2rem)] gap-[0.9rem] overflow-x-hidden overflow-y-auto rounded-md border border-border bg-card p-4 shadow-panel max-[720px]:h-dvh max-[720px]:max-h-dvh max-[720px]:w-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0 max-[720px]:p-3 [&_h2]:m-0 [&_p]:m-0">
+            <section className="grid max-h-[min(760px,calc(100vh-2rem))] w-[min(960px,100%)] max-w-[calc(100vw-2rem)] gap-4 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-panel max-[720px]:h-dvh max-[720px]:max-h-dvh max-[720px]:w-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0 max-[720px]:p-3 [&_h2]:m-0 [&_p]:m-0">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:sticky max-[720px]:top-0 max-[720px]:z-10 max-[720px]:-mx-3 max-[720px]:-mt-3 max-[720px]:mb-1 max-[720px]:flex-nowrap max-[720px]:bg-card max-[720px]:px-3 max-[720px]:py-3 max-[720px]:shadow-sm *:max-w-full *:min-w-0">
                     <div className="min-w-0">
-                        <h2 className="truncate text-lg font-semibold">Pick Image</h2>
+                        <h2 className="truncate font-[family-name:var(--app-font-display)] text-2xl font-normal tracking-tight">Pick Image</h2>
                         <p className="text-muted-foreground">{target.item.name} - {target.category.name}</p>
                     </div>
                     <Button className="shrink-0" variant="outline" type="button" onClick={onClose}>Close</Button>
@@ -509,10 +509,10 @@ export function ImagePickerModal({
                 {error ? <div className={STATUS_CLASS}>{error}</div> : null}
                 {loading ? <div className={STATUS_CLASS}>Searching for images...</div> : null}
 
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-[0.7rem] max-[720px]:grid-cols-2 max-[720px]:gap-2">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 max-[720px]:grid-cols-2 max-[720px]:gap-2">
                     {candidates.map((candidate) => (
                         <button
-                            className="relative block aspect-4/5 cursor-pointer overflow-hidden rounded-sm border border-border bg-secondary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-55"
+                            className="relative block aspect-4/5 cursor-pointer overflow-hidden rounded-lg border border-border bg-secondary shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
                             disabled={Boolean(savingCandidateId)}
                             key={candidate.id}
                             type="button"

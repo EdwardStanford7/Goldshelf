@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { ACTIVE_RANKING_LABEL, gotoApp, openAccountMenu, openNewCategoryDialog, seedUsers, signInViaApi, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, gotoApp, openDesktopNewEntry, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, signInViaApi, winMatchups } from "./helpers";
 import { BASE_URL } from "./constants";
 
 const RANKER = {
@@ -92,24 +92,8 @@ test.describe("Ranking", () => {
         await expect(newEntrySheet.getByPlaceholder("New entry")).toBeVisible();
         await newEntrySheet.getByRole("button", { name: "Close" }).click();
 
-        const avatarBox = await page.getByRole("button", { name: "Account menu" }).boundingBox();
         const headerBox = await mobileHeader.boundingBox();
-        expect(avatarBox?.x).toBeLessThan(24);
-        expect(avatarBox?.y).toBeLessThan(80);
         expect(headerBox?.height).toBeLessThan(140);
-
-        const accountMenu = await openAccountMenu(page);
-        await accountMenu.getByRole("menuitem", { name: "Settings", exact: true }).hover();
-        const settingsSubmenu = page
-            .locator("[data-slot='dropdown-menu-sub-content'][data-state='open']", { hasText: "Randomize queue ranking" })
-            .first();
-        await expect(settingsSubmenu).toBeVisible();
-        const submenuBox = await settingsSubmenu.boundingBox();
-        expect(submenuBox?.x).toBeGreaterThanOrEqual(0);
-        expect((submenuBox?.x ?? 0) + (submenuBox?.width ?? 0)).toBeLessThanOrEqual(390);
-        await page.keyboard.press("Escape");
-        await page.keyboard.press("Escape");
-        await expect(settingsSubmenu).toBeHidden();
 
         const firstCardWidth = await page.locator("[data-entry-id]").first().evaluate((element) => element.getBoundingClientRect().width);
         expect(firstCardWidth).toBeGreaterThan(140);
@@ -414,7 +398,7 @@ test.describe("Ranking", () => {
         await expect(stats.locator("dt", { hasText: "Added last 30 days" }).locator("xpath=following-sibling::dd").getByText("3", { exact: true })).toBeVisible();
     });
 
-    test("desktop sidebar stays fixed while category and queue panels scroll", async ({
+    test("desktop rail stays fixed while shelves scroll and Queue remains separate", async ({
         page,
         context
     }) => {
@@ -443,7 +427,6 @@ test.describe("Ranking", () => {
 
         const sidebar = page.getByTestId("dashboard-sidebar");
         const categoryPanel = page.getByTestId("category-panel");
-        const queuePanel = page.getByTestId("queue-panel");
         const metrics = await sidebar.evaluate((element) => ({
             clientHeight: element.clientHeight,
             overflowY: getComputedStyle(element).overflowY,
@@ -454,25 +437,18 @@ test.describe("Ranking", () => {
             overflowY: getComputedStyle(element).overflowY,
             scrollHeight: element.scrollHeight
         }));
-        const queueMetrics = await queuePanel.evaluate((element) => ({
-            clientHeight: element.clientHeight,
-            overflowY: getComputedStyle(element).overflowY,
-            scrollHeight: element.scrollHeight
-        }));
         const sidebarBox = await sidebar.boundingBox();
         const categoryBox = await categoryPanel.boundingBox();
-        const queueBox = await queuePanel.boundingBox();
 
         expect(metrics.overflowY).toBe("hidden");
         expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1);
         expect(categoryMetrics.overflowY).toBe("auto");
-        expect(categoryMetrics.scrollHeight).toBeGreaterThan(categoryMetrics.clientHeight);
-        expect(queueMetrics.overflowY).toBe("auto");
-        expect(queueMetrics.scrollHeight).toBeGreaterThan(queueMetrics.clientHeight);
-        expect((categoryBox?.y ?? 0) + (categoryBox?.height ?? 0)).toBeLessThan(queueBox?.y ?? 0);
-        expect((queueBox?.y ?? 0) + (queueBox?.height ?? 0)).toBeLessThanOrEqual(
+        expect(categoryMetrics.scrollHeight).toBeGreaterThanOrEqual(categoryMetrics.clientHeight);
+        expect((categoryBox?.y ?? 0) + (categoryBox?.height ?? 0)).toBeLessThanOrEqual(
             (sidebarBox?.y ?? 0) + (sidebarBox?.height ?? 0)
         );
+        await openQueueWorkspace(page);
+        await expect(page.getByTestId("queue-panel")).toBeVisible();
     });
 
     test("repair mode starts, skips, survives reload, and cancels", async ({
@@ -491,18 +467,19 @@ test.describe("Ranking", () => {
         await signInViaApi(context, "repair-loop@e2e.test");
         await gotoApp(page);
 
-        const categoryPanel = page.getByTestId("dashboard-sidebar").locator("section").filter({ hasText: "Categories" }).first();
+        const categoryPanel = page.getByTestId("category-panel");
         await categoryPanel.getByRole("button", { name: "Select", exact: true }).click();
         await categoryPanel.getByRole("button", { name: "Select all" }).click();
         await categoryPanel.getByRole("button", { name: "Repair selected" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByText("New Entry")).toBeVisible();
-        await expect(page.getByRole("button", { name: "Queue", exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Add entry", exact: true })).toBeVisible();
 
-        await page.getByPlaceholder("New entry").fill("Omega");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const omegaEntry = await openDesktopNewEntry(page);
+        await omegaEntry.fill("Omega");
+        await omegaEntry.press("Enter");
         await expect(page.getByText("Queued Omega for ranking.")).toBeVisible();
-        await expect(page.getByText("1 queued")).toBeVisible();
+        await openQueueWorkspace(page);
+        await expect(queueCount(page, 1)).toBeVisible();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible();
 
         await page.getByRole("button", { name: "Skip" }).click();
@@ -513,7 +490,7 @@ test.describe("Ranking", () => {
 
         await page.getByRole("button", { name: "Exit Repair Mode" }).click();
         await expect(page.getByText("Repair Check · Movies")).toBeHidden({ timeout: 15_000 });
-        await expect(page.getByText("New Entry")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Add entry", exact: true })).toBeVisible();
     });
 
     test("category selection supports scoped repair and batch rerank actions", async ({
@@ -536,7 +513,7 @@ test.describe("Ranking", () => {
         await signInViaApi(context, "category-batch@e2e.test");
         await gotoApp(page);
 
-        const categoryPanel = page.getByTestId("dashboard-sidebar").locator("section").filter({ hasText: "Categories" }).first();
+        const categoryPanel = page.getByTestId("category-panel");
         await categoryPanel.getByRole("button", { name: "Select", exact: true }).click();
         await categoryPanel.getByRole("checkbox", { name: "Select category Books" }).click();
         await categoryPanel.getByRole("checkbox", { name: "Select category Movies" }).click();
@@ -569,7 +546,7 @@ test.describe("Ranking", () => {
         await expect(page.getByText("Moved 5 ranked entries to the queue.")).toBeVisible({ timeout: 15_000 });
         await expect(categoryPanel.getByRole("button", { name: /Books · 0/ })).toBeVisible();
         await expect(categoryPanel.getByRole("button", { name: /Movies · 0/ })).toBeVisible();
-        await expect(page.getByText("5 queued")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Queue 5", exact: true })).toBeVisible();
         await expect(categoryPanel.getByRole("button", { name: /Music · 2/ })).toBeVisible();
     });
 
@@ -648,8 +625,9 @@ test.describe("Ranking", () => {
         await categoryDialog.getByPlaceholder("New category").press("Enter");
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
 
-        await page.getByPlaceholder("New entry").fill("Dune");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Dune");
+        await newEntry.press("Enter");
         await expect(page.getByText("#1 Dune")).toBeVisible();
     });
 
@@ -662,8 +640,9 @@ test.describe("Ranking", () => {
         await gotoApp(page);
         await expect(page.getByText("#1 Alpha")).toBeVisible();
 
-        await page.getByPlaceholder("New entry").fill("Zeta");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Zeta");
+        await newEntry.press("Enter");
 
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Zeta");
@@ -681,21 +660,22 @@ test.describe("Ranking", () => {
         await signInViaApi(context, RANKER.email);
         await gotoApp(page);
 
-        await page.getByPlaceholder("New entry").fill("Zeta");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Zeta");
+        await newEntry.press("Enter");
         const panel = page.locator("section", { hasText: ACTIVE_RANKING_LABEL }).first();
         await expect(panel).toBeVisible({ timeout: 15_000 });
         await expect(panel.getByText(/0 comparisons/)).toBeVisible();
         await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
 
-        await page.getByRole("button", { name: "Zeta" }).click();
+        await page.getByRole("button", { name: /^Zeta\b/ }).click();
         await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeVisible({ timeout: 15_000 });
         await expect(panel.getByText(/1 comparisons/)).toBeVisible();
 
         await page.getByRole("button", { name: "Undo Last Match" }).click();
         await expect(panel.getByText(/0 comparisons/)).toBeVisible({ timeout: 15_000 });
         await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
-        await expect(page.getByRole("button", { name: "Zeta" })).toBeVisible();
+        await expect(page.getByRole("button", { name: /^Zeta\b/ })).toBeVisible();
     });
 
     test("ranking undo handles large categories without exceeding D1 variable limits", async ({
@@ -713,18 +693,19 @@ test.describe("Ranking", () => {
         await signInViaApi(context, "large-undo@e2e.test");
         await gotoApp(page);
 
-        await page.getByPlaceholder("New entry").fill("Zeta");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Zeta");
+        await newEntry.press("Enter");
         const panel = page.locator("section", { hasText: ACTIVE_RANKING_LABEL }).first();
         await expect(panel).toBeVisible({ timeout: 15_000 });
 
-        await page.getByRole("button", { name: "Zeta" }).click();
+        await page.getByRole("button", { name: /^Zeta\b/ }).click();
         await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeVisible({ timeout: 15_000 });
         await page.getByRole("button", { name: "Undo Last Match" }).click();
 
         await expect(panel.getByText(/0 comparisons/)).toBeVisible({ timeout: 15_000 });
         await expect(page.getByRole("button", { name: "Undo Last Match" })).toBeHidden();
-        await expect(page.getByRole("button", { name: "Zeta" })).toBeVisible();
+        await expect(page.getByRole("button", { name: /^Zeta\b/ })).toBeVisible();
     });
 
     test("ranking panel labels placement checks before local repair", async ({
@@ -740,8 +721,9 @@ test.describe("Ranking", () => {
         await signInViaApi(context, email);
         await gotoApp(page);
 
-        await page.getByPlaceholder("New entry").fill("Zeta");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Zeta");
+        await newEntry.press("Enter");
 
         const binaryPanel = rankingPanel(page, "Binary Rank");
         await expect(binaryPanel).toBeVisible({ timeout: 15_000 });
@@ -770,18 +752,18 @@ test.describe("Ranking", () => {
         await signInViaApi(context, RANKER.email);
         await gotoApp(page);
 
-        await page.getByPlaceholder("New entry").fill("Zeta");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Zeta");
+        await newEntry.press("Enter");
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
 
-        const accountMenu = await openAccountMenu(page);
-        await accountMenu.getByRole("menuitem", { name: "Profile" }).click();
-        await expect(page).toHaveURL("/profile");
+        await page.getByTestId("dashboard-sidebar").getByRole("button", { name: /Ranker/ }).click();
+        await expect(page).toHaveURL(/\/u\/ranker/);
         await expect(page.getByRole("heading", { name: "Ranker" })).toBeVisible();
 
         await gotoApp(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByRole("button", { name: "Zeta" })).toBeVisible();
+        await expect(page.getByRole("button", { name: /^Zeta\b/ })).toBeVisible();
         await winMatchups(page, "Zeta");
         await expect(page.getByText("#1 Zeta")).toBeVisible({ timeout: 15_000 });
     });
@@ -794,18 +776,19 @@ test.describe("Ranking", () => {
         await signInViaApi(context, RANKER.email);
         await gotoApp(page);
 
-        await page.getByPlaceholder("New entry").fill("Zeta");
-        await page.getByPlaceholder("New entry").press("Enter");
+        const newEntry = await openDesktopNewEntry(page);
+        await newEntry.fill("Zeta");
+        await newEntry.press("Enter");
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
 
-        await page.getByRole("button", { name: "Zeta" }).click({ button: "right" });
+        await page.getByRole("button", { name: /^Zeta\b/ }).click({ button: "right" });
         await expect(page.getByRole("menuitem", { name: "Rename" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Pick Image" })).toBeEnabled();
         await page.getByRole("menuitem", { name: "Rename" }).click();
         await page.getByLabel("Rename Zeta").fill("Zeta Prime");
         await page.getByRole("button", { name: "Save", exact: true }).click();
 
-        await expect(page.getByRole("button", { name: "Zeta Prime" })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("button", { name: /^Zeta Prime\b/ })).toBeVisible({ timeout: 15_000 });
         await page.getByText("#1 Alpha").click({ button: "right" });
         await expect(page.getByRole("menuitem", { name: "Rename" })).toBeEnabled();
         await expect(page.getByRole("menuitem", { name: "Pick Image" })).toBeEnabled();

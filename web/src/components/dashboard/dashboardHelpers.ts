@@ -23,7 +23,7 @@ export const IDLE_RESUME_REFRESH_AFTER_MS = 15_000;
 export const ACTIVE_FLOW_RESUME_REFRESH_AFTER_MS = 2_000;
 export const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as const;
 export const SIDEBAR_PANEL_CLASS =
-    "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-md border-2 border-primary/35 bg-card p-4 shadow-floating ring-1 ring-primary/15";
+    "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-lg border border-border bg-card/70 p-4 shadow-panel";
 
 export type MobilePanel = "newEntry" | "queue";
 export type EntryDateFilterPreset = "all" | "today" | "last7" | "last30" | "year" | "custom";

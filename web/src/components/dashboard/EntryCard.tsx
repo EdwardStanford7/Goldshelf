@@ -142,11 +142,11 @@ export function EntryCard({
             <ContextMenuTrigger asChild>
                 <article
                     ref={setNodeRef}
-                    className={`relative max-w-full min-w-0 rounded-md border border-border bg-card shadow-panel transition-[border-color,box-shadow,opacity,background-color] duration-150 ease-[ease] ${canDragReorder ? "cursor-grab" : ""
+                    className={`group relative max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-panel transition-[border-color,box-shadow,opacity,background-color,transform] duration-150 ease-[ease] ${canDragReorder ? "cursor-grab" : ""
                         } ${highlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
                         } ${isDragging
                             ? ENTRY_CARD_DRAGGING_CLASS
-                            : "motion-safe:hover:border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] motion-safe:hover:shadow-floating"
+                            : "motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] motion-safe:hover:shadow-floating"
                         }`.trim()}
                     data-entry-id={entry.id}
                     style={{ transform: CSS.Transform.toString(transform), transition }}
@@ -155,7 +155,7 @@ export function EntryCard({
                     {showDragHandle ? (
                         <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute top-2 right-2 z-10 flex items-center justify-center rounded-sm border border-overlay-button-line bg-overlay-button p-1 text-overlay-button-ink max-[720px]:hidden"
+                            className="pointer-events-none absolute top-2 left-2 z-10 flex items-center justify-center rounded-sm border border-overlay-button-line bg-overlay-button p-1 text-overlay-button-ink opacity-0 transition-opacity duration-150 group-hover:opacity-100 max-[720px]:hidden"
                         >
                             <GripVertical className="size-4" />
                         </span>
@@ -165,7 +165,7 @@ export function EntryCard({
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     aria-label={`Actions for ${entry.name}`}
-                                    className="absolute top-2 right-2 z-20 hidden border-overlay-button-line bg-overlay-button text-overlay-button-ink hover:bg-overlay-button max-[720px]:inline-flex"
+                                    className="absolute top-2 right-2 z-20 border-overlay-button-line bg-overlay-button text-overlay-button-ink transition-opacity duration-150 hover:bg-overlay-button focus-visible:opacity-100 min-[721px]:opacity-0 min-[721px]:group-hover:opacity-100 min-[721px]:data-[state=open]:opacity-100"
                                     size="icon-sm"
                                     type="button"
                                     variant="outline"
@@ -209,7 +209,7 @@ export function EntryCard({
                         </DropdownMenu>
                     ) : null}
                     <EntryPoster entry={entry} onDoubleClick={handlePosterDoubleClick} />
-                    <div className="grid min-w-0 gap-[0.55rem] p-[0.65rem] max-[720px]:p-2">
+                    <div className="grid min-w-0 gap-[0.55rem] p-3 max-[720px]:p-2.5">
                         {isRenaming ? (
                             <form className="grid gap-[0.45rem]" onSubmit={handleRenameSubmit}>
                                 <span className="text-sm text-muted-foreground">#{entry.rankPosition + 1}</span>
@@ -236,12 +236,19 @@ export function EntryCard({
                             </form>
                         ) : (
                             <div className="flex min-w-0 items-center gap-[0.45rem]">
+                                <span
+                                    aria-hidden="true"
+                                    className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[0.72rem] font-semibold tabular-nums text-accent-foreground max-[720px]:px-1 max-[720px]:text-[0.66rem]"
+                                >
+                                    {position}
+                                </span>
                                 <strong
-                                    className="block min-w-0 flex-1 truncate text-[0.70rem] leading-tight wrap-normal max-[720px]:text-[0.68rem]"
-                                    title={`#${position} ${entry.name} · Double-click to rename · Right-click for actions${canDragReorder ? " · Drag to reorder" : ""}`}
+                                    className="block min-w-0 flex-1 truncate font-[family-name:var(--app-font-display)] text-[0.92rem] leading-tight wrap-normal max-[720px]:text-[0.85rem]"
+                                    title={`${entry.name} · Double-click to rename · Open the menu for more actions${canDragReorder ? " · Drag to reorder" : ""}`}
                                     onDoubleClick={startRename}
                                 >
-                                    #{position} {entry.name}
+                                    <span className="sr-only">#{position} </span>
+                                    {entry.name}
                                 </strong>
                                 {showPercentile ? (
                                     <span
@@ -392,14 +399,17 @@ function EntryInfo({
 
 export function EntryDragOverlay({ entry }: { entry: Entry }) {
     return (
-        <article className="relative max-w-full min-w-0 rotate-[0.5deg] cursor-grabbing rounded-md border border-border bg-card shadow-floating">
-            <span className="absolute top-2 right-2 z-10 flex items-center justify-center rounded-sm border border-overlay-button-line bg-overlay-button p-1 text-overlay-button-ink">
+        <article className="relative max-w-full min-w-0 rotate-[0.5deg] cursor-grabbing overflow-hidden rounded-xl border border-primary/40 bg-card shadow-floating">
+            <span className="absolute top-2 left-2 z-10 flex items-center justify-center rounded-sm border border-overlay-button-line bg-overlay-button p-1 text-overlay-button-ink">
                 <GripVertical className="size-4" />
             </span>
             <EntryPoster entry={entry} />
-            <div className="grid min-w-0 gap-[0.55rem] p-[0.65rem]">
-                <strong className="block truncate text-[0.70rem] leading-tight wrap-normal">
-                    #{entry.rankPosition + 1} {entry.name}
+            <div className="flex min-w-0 items-center gap-[0.45rem] p-3">
+                <span className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[0.72rem] font-semibold tabular-nums text-accent-foreground">
+                    {entry.rankPosition + 1}
+                </span>
+                <strong className="block min-w-0 flex-1 truncate font-[family-name:var(--app-font-display)] text-[0.92rem] leading-tight wrap-normal">
+                    {entry.name}
                 </strong>
             </div>
         </article>

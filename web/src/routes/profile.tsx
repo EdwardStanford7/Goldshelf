@@ -17,20 +17,25 @@ import {
 } from "@/server/profiles";
 import { deleteCurrentUserAccount } from "@/server/account";
 import { getSession } from "@/server/session";
-import { Ban, Inbox, ListOrdered, Send, UserPlus, Users } from "lucide-react";
+import { updateQueueSettings } from "@/server/queue";
+import { Ban, ExternalLink, Inbox, ListOrdered, Send, UserPlus, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { BrandLink } from "@/components/ui/BrandLink";
 import { CategoryVisibilityBadge } from "@/components/category/CategoryVisibilityBadge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
 import { showToast } from "@/lib/toast";
+import { signOut } from "@/lib/auth-client";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile, followRelationLabel } from "@/lib/follows";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage } from "@/lib/images";
-import type { FollowProfileSummary, FollowSearchResult, ProfileSettingsData } from "@/lib/types";
+import { applyThemeMode, readInitialThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
+import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
+import type { ActivityVisibility, FollowProfileSummary, FollowSearchResult, ProfileSettingsData } from "@/lib/types";
 
 const AVATAR_SIZE = 256;
 const MAX_LOCAL_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -45,6 +50,8 @@ interface CropCenter {
     x: number;
     y: number;
 }
+
+type SettingsSection = "profile" | "shelves" | "social" | "ranking" | "queue" | "appearance" | "account";
 
 export const Route = createFileRoute("/profile")({
     loader: async () => {
@@ -67,6 +74,9 @@ function ProfileRoute() {
     const [displayName, setDisplayName] = useState(loaderData.settings?.user.name ?? "");
     const [profileSlug, setProfileSlug] = useState(loaderData.settings?.user.slug ?? "");
     const [profileIsPublic, setProfileIsPublic] = useState(loaderData.settings?.user.isPublic ?? false);
+    const [activityVisibility, setActivityVisibility] = useState<ActivityVisibility>(
+        loaderData.settings?.user.activityVisibility ?? "off"
+    );
     const [followInput, setFollowInput] = useState("");
     const [followSearchResults, setFollowSearchResults] = useState<FollowSearchResult[]>([]);
     const [followSearchLoading, setFollowSearchLoading] = useState(false);
@@ -78,11 +88,16 @@ function ProfileRoute() {
     const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
     const [deletingAccount, setDeletingAccount] = useState(false);
+    const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialThemeMode());
+    const [showEntryPercentile, setShowEntryPercentile] = useState(() => readInitialShowEntryPercentile());
+    const [savingQueueSettings, setSavingQueueSettings] = useState(false);
+    const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSection>("profile");
     useEffect(() => {
         setSettings(loaderData.settings);
         setDisplayName(loaderData.settings?.user.name ?? "");
         setProfileSlug(loaderData.settings?.user.slug ?? "");
         setProfileIsPublic(loaderData.settings?.user.isPublic ?? false);
+        setActivityVisibility(loaderData.settings?.user.activityVisibility ?? "off");
     }, [loaderData.settings]);
 
     useEffect(() => {
@@ -181,7 +196,8 @@ function ProfileRoute() {
                 data: {
                     name: displayName,
                     slug: profileSlug,
-                    isPublic: profileIsPublic
+                    isPublic: profileIsPublic,
+                    activityVisibility
                 }
             });
             await refreshSettingsAfterMutation();
@@ -206,6 +222,29 @@ function ProfileRoute() {
             setActionError(accountError);
             setDeletingAccount(false);
         }
+    }
+
+    async function handleQueueSettingChange(key: "enabled" | "promptForMissingImages" | "randomizeReadyEntries", value: boolean) {
+        if (!settings || savingQueueSettings) {
+            return;
+        }
+
+        const nextQueueSettings = { ...settings.queueSettings, [key]: value };
+        setSavingQueueSettings(true);
+        try {
+            const savedQueueSettings = await updateQueueSettings({ data: nextQueueSettings });
+            setSettings((current) => current ? { ...current, queueSettings: savedQueueSettings } : current);
+            setStatus("Queue preferences saved.");
+        } catch (queueError) {
+            setActionError(queueError);
+        } finally {
+            setSavingQueueSettings(false);
+        }
+    }
+
+    async function handleSignOut() {
+        await signOut();
+        window.location.assign("/");
     }
 
     async function handleProfileImageInput(event: ChangeEvent<HTMLInputElement>) {
@@ -538,7 +577,7 @@ function ProfileRoute() {
     }
 
     return (
-        <main className="grid min-h-screen content-start gap-4 bg-background px-[clamp(1rem,3vw,2.25rem)] py-5 text-foreground">
+        <main className="mx-auto grid min-h-screen w-full max-w-7xl content-start gap-6 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
             {profileImageDraft ? (
                 <ProfilePhotoEditor
                     file={profileImageDraft.file}
@@ -552,21 +591,45 @@ function ProfileRoute() {
                     onSave={(blob) => handleProfileImageSave(blob)}
                 />
             ) : null}
-            <header className="m-0 flex w-full flex-wrap items-center justify-between gap-3">
-                <BrandLink />
-                <nav className="flex flex-wrap items-center justify-end gap-[0.8rem]" aria-label="Profile navigation">
-                    <Link className="text-foreground no-underline hover:text-accent-strong" to="/">Rankings</Link>
-                    <Link className="text-foreground no-underline hover:text-accent-strong" to="/u/$profileSlug" params={{ profileSlug: settings.user.slug }}>View Profile</Link>
-                </nav>
-            </header>
+            <AppHeader viewer={{ signedIn: true, name: settings.user.name, slug: settings.user.slug, imageKey: settings.user.imageKey }} />
 
-            <div className="m-0 grid w-full grid-cols-[minmax(18rem,0.85fr)_minmax(22rem,1fr)_minmax(22rem,1fr)] items-start gap-4 max-[1180px]:grid-cols-[minmax(18rem,0.85fr)_minmax(22rem,1fr)] max-[720px]:grid-cols-1">
-                <div className="grid min-w-0 content-start gap-4">
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
+            <section className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6 pt-2">
+                <div className="grid gap-2">
+                    <p className="m-0 text-xs font-semibold tracking-[0.14em] text-accent-strong uppercase">Preferences & account</p>
+                    <h1 className="m-0 text-[clamp(2.35rem,5vw,4rem)] leading-none">Settings</h1>
+                    <p className="m-0 text-muted-foreground">Manage your profile, shelves, ranking preferences, and account controls.</p>
+                </div>
+                <Button asChild variant="outline">
+                    <Link to="/u/$profileSlug" params={{ profileSlug: settings.user.slug }}>
+                        <ExternalLink data-icon="inline-start" />
+                        View Profile
+                    </Link>
+                </Button>
+            </section>
+
+            <div className="grid w-full items-start gap-6 lg:grid-cols-[11.5rem_minmax(0,1fr)]">
+                <aside className="flex min-w-0 gap-1 overflow-x-auto border-b border-border pb-3 lg:sticky lg:top-20 lg:grid lg:gap-2 lg:overflow-visible lg:border-b-0 lg:pb-0">
+                    <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Settings</p>
+                    <SettingsSectionButton active={activeSettingsSection === "profile"} label="Profile" onSelect={() => setActiveSettingsSection("profile")} />
+                    <SettingsSectionButton active={activeSettingsSection === "shelves"} label="Shelves" onSelect={() => setActiveSettingsSection("shelves")} />
+                    <SettingsSectionButton active={activeSettingsSection === "social"} badge={settings.incomingFollowRequests.length} label="Privacy & social" onSelect={() => setActiveSettingsSection("social")} />
+                    <SettingsSectionButton active={activeSettingsSection === "ranking"} label="Ranking" onSelect={() => setActiveSettingsSection("ranking")} />
+                    <SettingsSectionButton active={activeSettingsSection === "queue"} label="Queue" onSelect={() => setActiveSettingsSection("queue")} />
+                    <SettingsSectionButton active={activeSettingsSection === "appearance"} label="Appearance" onSelect={() => setActiveSettingsSection("appearance")} />
+                    <SettingsSectionButton active={activeSettingsSection === "account"} label="Account" onSelect={() => setActiveSettingsSection("account")} />
+                </aside>
+
+                <div className="m-0 min-w-0 max-w-[42rem] rounded-xl border border-border bg-card p-[clamp(1.25rem,3vw,1.75rem)] shadow-panel">
+                <div className={activeSettingsSection === "profile" || activeSettingsSection === "shelves" ? "grid min-w-0 content-start gap-6" : "hidden"}>
+                    <Card id="profile" className={activeSettingsSection === "profile" ? "scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
+                        <div className="border-b border-border pb-5">
+                            <h2 className="m-0 text-2xl font-normal">Public profile</h2>
+                            <p className="mb-0 mt-1 text-sm text-muted-foreground">Control how other people find and recognize you.</p>
+                        </div>
                         <div className="mb-4 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-[0.8rem] [&_h1]:m-0 [&_h1]:leading-[1.1]">
                             <ProfileAvatar currentUser imageKey={settings.user.imageKey} userId={settings.user.id} />
                             <div>
-                                <h1 className="text-2xl font-bold">{settings.user.name}</h1>
+                                <h2 className="text-2xl">{settings.user.name}</h2>
                                 <p className="text-muted-foreground">@{settings.user.slug}</p>
                                 <ProfileVisibilityBadge isPublic={settings.user.isPublic} />
                                 <div className="mt-[0.65rem] flex flex-wrap gap-2">
@@ -626,6 +689,22 @@ function ProfileRoute() {
                                     Public profiles are searchable and visible to anyone. Private profiles are visible only to you and accepted followers.
                                 </p>
                             </div>
+                            <label className="grid gap-[0.35rem]">
+                                <span>Recent additions</span>
+                                <select
+                                    aria-label="Recent additions visibility"
+                                    className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                                    value={activityVisibility}
+                                    onChange={(event) => setActivityVisibility(event.target.value as ActivityVisibility)}
+                                >
+                                    <option value="off">Off</option>
+                                    <option value="followers">Followers only</option>
+                                    <option value="public">Public</option>
+                                </select>
+                                <p className="m-0 text-sm text-muted-foreground">
+                                    Share new entries from shown rankings. This never shares hidden rankings; a private profile still limits activity to accepted followers.
+                                </p>
+                            </label>
                             <div className="flex flex-wrap gap-2">
                                 <Button size="lg" disabled={savingProfile} type="submit">
                                     {savingProfile ? "Saving..." : "Save Profile"}
@@ -637,9 +716,12 @@ function ProfileRoute() {
                         </form>
                     </Card>
 
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
+                    <Card id="shelves" className={activeSettingsSection === "shelves" ? "scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
                         <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold">Shared Rankings</h2>
+                            <div>
+                                <h2 className="m-0 text-2xl font-normal">Manage shelves</h2>
+                                <p className="mb-0 mt-1 text-sm text-muted-foreground">Choose which rankings appear on your profile.</p>
+                            </div>
                             <span className="text-muted-foreground">{settings.categories.filter((category) => category.isPublic).length}</span>
                         </div>
                         <p className="m-0 text-sm text-muted-foreground">
@@ -674,111 +756,12 @@ function ProfileRoute() {
                     </Card>
                 </div>
 
-                <div className="grid min-w-0 content-start gap-4">
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold">Find Profiles</h2>
-                            <span className="text-muted-foreground">{followSearchLoading ? "Searching..." : "Profile search"}</span>
-                        </div>
-                        <form className="grid grid-cols-[minmax(0,1fr)_auto] gap-[0.8rem]" onSubmit={handleRequestFollow}>
-                            <Input
-                                aria-label="Profile handle, name, or profile link"
-                                placeholder="search shared profiles or paste a private handle"
-                                value={followInput}
-                                onChange={(event) => setFollowInput(event.target.value)}
-                            />
-                            <Button disabled={savingFollowId === "new" || !followInput.trim()} type="submit">
-                                {savingFollowId === "new" ? "Saving..." : "Follow"}
-                            </Button>
-                        </form>
-                        {followSearchResults.length > 0 ? (
-                            <FollowProfileList
-                                profiles={followSearchResults}
-                                renderActions={renderSearchAction}
-                            />
-                        ) : followInput.trim().length >= 2 && !followSearchLoading ? (
-                            <p className="m-0 text-muted-foreground">No public profiles match that search.</p>
-                        ) : (
-                            <p className="m-0 text-muted-foreground">
-                                Public profiles appear as you type. Exact private handles can still receive follow requests.
-                            </p>
-                        )}
-                    </Card>
-
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold">People You May Know</h2>
-                            <span className="text-muted-foreground">{settings.suggestedProfiles.length}</span>
-                        </div>
-                        {settings.suggestedProfiles.length > 0 ? (
-                            <FollowProfileList
-                                profiles={settings.suggestedProfiles}
-                                renderActions={renderSearchAction}
-                            />
-                        ) : (
-                            <EmptyState compact icon={Users} title="No Suggestions">
-                                Public profiles connected through people you follow will appear here.
-                            </EmptyState>
-                        )}
-                    </Card>
-
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold">Following</h2>
-                            <span className="text-muted-foreground">{settings.following.length}</span>
-                        </div>
-                        {settings.following.length > 0 ? (
-                            <FollowProfileList
-                                profiles={settings.following}
-                                renderActions={(profile) => (
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={savingFollowId === profile.userId}
-                                        type="button"
-                                        onClick={() => void handleRemoveFollow(profile)}
-                                    >
-                                        {savingFollowId === profile.userId ? "Saving..." : "Unfollow"}
-                                    </Button>
-                                )}
-                            />
-                        ) : (
-                            <EmptyState compact icon={UserPlus} title="Not Following Anyone">
-                                Profiles you follow appear here.
-                            </EmptyState>
-                        )}
-                    </Card>
-
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold">Sent Requests</h2>
-                            <span className="text-muted-foreground">{settings.outgoingFollowRequests.length}</span>
-                        </div>
-                        {settings.outgoingFollowRequests.length > 0 ? (
-                            <FollowProfileList
-                                profiles={settings.outgoingFollowRequests}
-                                renderActions={(profile) => (
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={savingFollowId === profile.userId}
-                                        type="button"
-                                        onClick={() => void handleCancelFollow(profile)}
-                                    >
-                                        {savingFollowId === profile.userId ? "Saving..." : "Cancel"}
-                                    </Button>
-                                )}
-                            />
-                        ) : (
-                            <EmptyState compact icon={Send} title="No Sent Requests">
-                                Private-profile requests you send appear here.
-                            </EmptyState>
-                        )}
-                    </Card>
-                </div>
-
-                <div className="grid min-w-0 content-start gap-4 max-[1180px]:col-span-full max-[720px]:col-span-auto">
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
+                <div className={activeSettingsSection === "social" ? "mt-0 grid min-w-0 content-start gap-6" : "hidden"}>
+                    <div className="border-b border-border pb-5">
+                        <h2 className="m-0 text-2xl font-normal">People</h2>
+                        <p className="mb-0 mt-1 text-sm text-muted-foreground">Requests, who you follow, who follows you, and who you have blocked.</p>
+                    </div>
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-lg font-semibold">Follow Requests</h2>
                             <span className="text-muted-foreground">{settings.incomingFollowRequests.length}</span>
@@ -815,8 +798,168 @@ function ProfileRoute() {
                             </EmptyState>
                         )}
                     </Card>
+                    <Card id="social" className="scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="text-lg font-semibold">Find Profiles</h2>
+                            <span className="text-muted-foreground">{followSearchLoading ? "Searching..." : "Profile search"}</span>
+                        </div>
+                        <form className="grid grid-cols-[minmax(0,1fr)_auto] gap-[0.8rem]" onSubmit={handleRequestFollow}>
+                            <Input
+                                aria-label="Profile handle, name, or profile link"
+                                placeholder="search shared profiles or paste a private handle"
+                                value={followInput}
+                                onChange={(event) => setFollowInput(event.target.value)}
+                            />
+                            <Button disabled={savingFollowId === "new" || !followInput.trim()} type="submit">
+                                {savingFollowId === "new" ? "Saving..." : "Follow"}
+                            </Button>
+                        </form>
+                        {followSearchResults.length > 0 ? (
+                            <FollowProfileList
+                                profiles={followSearchResults}
+                                renderActions={renderSearchAction}
+                            />
+                        ) : followInput.trim().length >= 2 && !followSearchLoading ? (
+                            <p className="m-0 text-muted-foreground">No public profiles match that search.</p>
+                        ) : (
+                            <p className="m-0 text-muted-foreground">
+                                Public profiles appear as you type. Exact private handles can still receive follow requests.
+                            </p>
+                        )}
+                    </Card>
 
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="text-lg font-semibold">Following</h2>
+                            <span className="text-muted-foreground">{settings.following.length}</span>
+                        </div>
+                        {settings.following.length > 0 ? (
+                            <FollowProfileList
+                                profiles={settings.following}
+                                renderActions={(profile) => (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={savingFollowId === profile.userId}
+                                        type="button"
+                                        onClick={() => void handleRemoveFollow(profile)}
+                                    >
+                                        {savingFollowId === profile.userId ? "Saving..." : "Unfollow"}
+                                    </Button>
+                                )}
+                            />
+                        ) : (
+                            <EmptyState compact icon={UserPlus} title="Not Following Anyone">
+                                Profiles you follow appear here.
+                            </EmptyState>
+                        )}
+                    </Card>
+
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="text-lg font-semibold">Sent Requests</h2>
+                            <span className="text-muted-foreground">{settings.outgoingFollowRequests.length}</span>
+                        </div>
+                        {settings.outgoingFollowRequests.length > 0 ? (
+                            <FollowProfileList
+                                profiles={settings.outgoingFollowRequests}
+                                renderActions={(profile) => (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={savingFollowId === profile.userId}
+                                        type="button"
+                                        onClick={() => void handleCancelFollow(profile)}
+                                    >
+                                        {savingFollowId === profile.userId ? "Saving..." : "Cancel"}
+                                    </Button>
+                                )}
+                            />
+                        ) : (
+                            <EmptyState compact icon={Send} title="No Sent Requests">
+                                Private-profile requests you send appear here.
+                            </EmptyState>
+                        )}
+                    </Card>
+                </div>
+
+                <div className={activeSettingsSection === "social" || activeSettingsSection === "ranking" || activeSettingsSection === "queue" || activeSettingsSection === "appearance" || activeSettingsSection === "account" ? "mt-6 grid min-w-0 content-start gap-6" : "hidden"}>
+
+                    <Card className={activeSettingsSection === "ranking" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
+                        <div className="border-b border-border pb-5">
+                            <h2 className="m-0 text-2xl font-normal">Ranking experience</h2>
+                            <p className="mb-0 mt-1 text-sm text-muted-foreground">Choose how ranked lists are presented on this device.</p>
+                        </div>
+                        <label className="flex items-center justify-between gap-5 border-b border-border pb-5">
+                            <span className="grid gap-1">
+                                <strong>Show percentiles</strong>
+                                <span className="text-sm text-muted-foreground">Display an item’s percentile alongside its rank.</span>
+                            </span>
+                            <input
+                                aria-label="Show entry percentiles"
+                                checked={showEntryPercentile}
+                                className="w-auto"
+                                type="checkbox"
+                                onChange={(event) => {
+                                    const nextValue = event.target.checked;
+                                    setShowEntryPercentile(nextValue);
+                                    saveShowEntryPercentile(nextValue);
+                                }}
+                            />
+                        </label>
+                    </Card>
+
+                    <Card className={activeSettingsSection === "queue" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
+                        <div className="border-b border-border pb-5">
+                            <h2 className="m-0 text-2xl font-normal">Queue behavior</h2>
+                            <p className="mb-0 mt-1 text-sm text-muted-foreground">Control how entries wait before you rank them.</p>
+                        </div>
+                        {([
+                            ["enabled", "Enable the queue", "Allow new entries to be saved before ranking."],
+                            ["promptForMissingImages", "Prompt for missing images", "Offer an image before a new entry begins ranking."],
+                            ["randomizeReadyEntries", "Randomize queue runs", "Mix ready entries rather than using their visible order."]
+                        ] as const).map(([key, title, description]) => (
+                            <label className="flex items-center justify-between gap-5 border-b border-border pb-5 last:border-b-0 last:pb-0" key={key}>
+                                <span className="grid gap-1">
+                                    <strong>{title}</strong>
+                                    <span className="text-sm text-muted-foreground">{description}</span>
+                                </span>
+                                <input
+                                    aria-label={title}
+                                    checked={settings.queueSettings[key]}
+                                    className="w-auto"
+                                    disabled={savingQueueSettings}
+                                    type="checkbox"
+                                    onChange={(event) => void handleQueueSettingChange(key, event.target.checked)}
+                                />
+                            </label>
+                        ))}
+                    </Card>
+
+                    <Card id="appearance" className={activeSettingsSection === "appearance" ? "scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
+                        <div>
+                            <h2 className="m-0 text-xl">Appearance</h2>
+                            <p className="mb-0 text-sm text-muted-foreground">Choose how Goldshelf looks on this device.</p>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {(["light", "dark", "system"] as ThemeMode[]).map((mode) => (
+                                <Button
+                                    key={mode}
+                                    type="button"
+                                    variant={themeMode === mode ? "secondary" : "outline"}
+                                    onClick={() => {
+                                        setThemeMode(mode);
+                                        saveThemeMode(mode);
+                                        applyThemeMode(mode);
+                                    }}
+                                >
+                                    {mode[0]?.toUpperCase()}{mode.slice(1)}
+                                </Button>
+                            ))}
+                        </div>
+                    </Card>
+
+                    <Card className={activeSettingsSection === "social" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-lg font-semibold">Blocked Profiles</h2>
                             <span className="text-muted-foreground">{settings.blockedProfiles.length}</span>
@@ -844,7 +987,7 @@ function ProfileRoute() {
                         )}
                     </Card>
 
-                    <Card className="min-w-0 gap-4 px-4 shadow-panel">
+                    <Card className={activeSettingsSection === "social" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-lg font-semibold">Followers</h2>
                             <span className="text-muted-foreground">{settings.followers.length}</span>
@@ -861,7 +1004,7 @@ function ProfileRoute() {
                         )}
                     </Card>
 
-                    <Card className="min-w-0 gap-4 border-destructive/40 px-4 shadow-panel">
+                    <Card id="account" className={activeSettingsSection === "account" ? "scroll-mt-6 min-w-0 gap-4 border-destructive/40 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
                         <div>
                             <h2 className="m-0 text-lg font-semibold text-destructive">Delete Account</h2>
                             <p className="mb-0 text-sm text-muted-foreground">
@@ -887,10 +1030,35 @@ function ProfileRoute() {
                                 {deletingAccount ? "Deleting..." : "Delete Account Permanently"}
                             </Button>
                         </form>
+                        <div className="border-t border-border pt-4">
+                            <Button type="button" variant="outline" onClick={() => void handleSignOut()}>
+                                Sign Out
+                            </Button>
+                        </div>
                     </Card>
+                </div>
                 </div>
             </div>
         </main>
+    );
+}
+
+function SettingsSectionButton({ active, badge = 0, label, onSelect }: { active: boolean; badge?: number; label: string; onSelect: () => void }) {
+    return (
+        <button
+            aria-current={active ? "true" : undefined}
+            className={`flex shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors lg:w-full ${active
+                ? "bg-secondary font-semibold text-foreground"
+                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                }`}
+            type="button"
+            onClick={onSelect}
+        >
+            <span className="truncate">{label}</span>
+            {badge > 0 ? (
+                <span aria-hidden="true" title={`${badge} pending`} className="rounded-full bg-accent-strong px-1.5 text-[0.68rem] font-semibold tabular-nums text-background">{badge}</span>
+            ) : null}
+        </button>
     );
 }
 
@@ -918,7 +1086,7 @@ function FollowProfileList<TProfile extends FollowProfileSummary>({
     return (
         <div className="grid gap-[0.65rem]">
             {profiles.map((profile) => (
-                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-[0.8rem] rounded-md border border-border bg-muted p-[0.65rem]" key={profile.userId}>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-border bg-card p-3 max-[520px]:grid-cols-[auto_minmax(0,1fr)] max-[520px]:[&>*:last-child]:col-span-2 max-[520px]:[&>*:last-child]:justify-self-start" key={profile.userId}>
                     <ProfileAvatar imageKey={profile.imageKey} userId={profile.userId} />
                     <div>
                         {canViewProfile(profile.isPublic, false, profile.relationState) ? (
@@ -932,8 +1100,8 @@ function FollowProfileList<TProfile extends FollowProfileSummary>({
                         ) : (
                             <strong className="font-bold text-foreground no-underline">{profile.name}</strong>
                         )}
-                        <p className="m-0 mt-[0.15rem] text-muted-foreground">
-                            @{profile.slug} · {profile.publicCategoryCount} shared rankings ·{" "}
+                        <p className="m-0 mt-0.5 truncate text-sm text-muted-foreground">
+                            @{profile.slug} · {profile.publicCategoryCount} {profile.publicCategoryCount === 1 ? "shelf" : "shelves"} ·{" "}
                             {metaLabel ? metaLabel(profile) : followRelationLabel(profile.relationState)}
                         </p>
                     </div>

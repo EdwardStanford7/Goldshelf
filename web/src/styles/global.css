@@ -10,77 +10,82 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn tokens — default structure, colors swapped to the Goldshelf palette. */
+/*
+ * Shared visual foundation for the application.  The redesign uses a warm,
+ * quiet reading-room palette: category content and actions can take focus
+ * without every surface competing for attention.
+ */
 :root {
-    --radius: 0.625rem;
-    --background: oklch(0.979 0.017 82);
-    --foreground: oklch(0.235 0.04 72);
-    --card: oklch(0.997 0.006 82);
-    --card-foreground: oklch(0.235 0.04 72);
-    --popover: oklch(0.992 0.011 82);
-    --popover-foreground: oklch(0.235 0.04 72);
-    --primary: oklch(0.675 0.128 74);
-    --primary-foreground: oklch(0.18 0.034 68);
-    --secondary: oklch(0.952 0.03 82);
-    --secondary-foreground: oklch(0.235 0.04 72);
-    --muted: oklch(0.963 0.018 82);
-    --muted-foreground: oklch(0.49 0.043 72);
-    --accent: oklch(0.939 0.033 302);
-    --accent-foreground: oklch(0.33 0.105 294);
-    --destructive: oklch(0.5372 0.1612 357.07);
-    --border: oklch(0.885 0.036 78);
-    --input: oklch(0.885 0.036 78);
-    --ring: oklch(0.675 0.128 74);
-    --chart-1: oklch(0.675 0.128 74);
-    --chart-2: oklch(0.548 0.145 294);
-    --chart-3: oklch(0.542 0.0862 164.36);
-    --chart-4: oklch(0.5372 0.1612 357.07);
-    --chart-5: oklch(0.49 0.043 72);
-    --sidebar: oklch(0.956 0.027 84);
-    --sidebar-foreground: oklch(0.235 0.04 72);
-    --sidebar-primary: oklch(0.675 0.128 74);
-    --sidebar-primary-foreground: oklch(0.18 0.034 68);
-    --sidebar-accent: oklch(0.939 0.033 302);
-    --sidebar-accent-foreground: oklch(0.33 0.105 294);
-    --sidebar-border: oklch(0.885 0.036 78);
-    --sidebar-ring: oklch(0.675 0.128 74);
+    --radius: 0.75rem;
+    --background: #f7f5f0;
+    --foreground: #25241f;
+    --card: #fffefa;
+    --card-foreground: #25241f;
+    --popover: #fffefa;
+    --popover-foreground: #25241f;
+    --primary: #292820;
+    --primary-foreground: #fffefa;
+    --secondary: #ede9df;
+    --secondary-foreground: #25241f;
+    --muted: #f1eee7;
+    --muted-foreground: #716f67;
+    --accent: #efe4ca;
+    --accent-foreground: #7b581b;
+    --destructive: #a34538;
+    --border: #dedbd1;
+    --input: #dedbd1;
+    --ring: #b6842f;
+    --chart-1: #b6842f;
+    --chart-2: #6b7891;
+    --chart-3: #758b64;
+    --chart-4: #a34538;
+    --chart-5: #716f67;
+    --sidebar: #ede9df;
+    --sidebar-foreground: #25241f;
+    --sidebar-primary: #292820;
+    --sidebar-primary-foreground: #fffefa;
+    --sidebar-accent: #fffefa;
+    --sidebar-accent-foreground: #25241f;
+    --sidebar-border: #dedbd1;
+    --sidebar-ring: #b6842f;
 }
 
 .dark {
-    --background: oklch(0.178 0.026 72);
-    --foreground: oklch(0.956 0.02 84);
-    --card: oklch(0.218 0.03 72);
-    --card-foreground: oklch(0.956 0.02 84);
-    --popover: oklch(0.238 0.032 72);
-    --popover-foreground: oklch(0.956 0.02 84);
-    --primary: oklch(0.78 0.132 78);
-    --primary-foreground: oklch(0.18 0.026 70);
-    --secondary: oklch(0.286 0.035 74);
-    --secondary-foreground: oklch(0.956 0.02 84);
-    --muted: oklch(0.258 0.03 74);
-    --muted-foreground: oklch(0.77 0.038 82);
-    --accent: oklch(0.292 0.07 300);
-    --accent-foreground: oklch(0.9 0.05 300);
-    --destructive: oklch(0.7872 0.1392 355.68);
-    --border: oklch(0.34 0.04 72);
-    --input: oklch(0.34 0.04 72);
-    --ring: oklch(0.78 0.132 78);
-    --chart-1: oklch(0.78 0.132 78);
-    --chart-2: oklch(0.738 0.11 300);
-    --chart-3: oklch(0.8244 0.0885 162.89);
-    --chart-4: oklch(0.7872 0.1392 355.68);
-    --chart-5: oklch(0.77 0.038 82);
-    --sidebar: oklch(0.196 0.026 72);
-    --sidebar-foreground: oklch(0.956 0.02 84);
-    --sidebar-primary: oklch(0.78 0.132 78);
-    --sidebar-primary-foreground: oklch(0.18 0.026 70);
-    --sidebar-accent: oklch(0.292 0.07 300);
-    --sidebar-accent-foreground: oklch(0.9 0.05 300);
-    --sidebar-border: oklch(0.34 0.04 72);
-    --sidebar-ring: oklch(0.78 0.132 78);
+    --background: #211a16;
+    --foreground: #f3e9d9;
+    --card: #2b211b;
+    --card-foreground: #f3e9d9;
+    --popover: #30261f;
+    --popover-foreground: #f3e9d9;
+    --primary: #d8a657;
+    --primary-foreground: #2a1c10;
+    --secondary: #392a20;
+    --secondary-foreground: #f3e9d9;
+    --muted: #34271f;
+    --muted-foreground: #c4afa0;
+    --accent: #4a3320;
+    --accent-foreground: #f3c979;
+    --destructive: #e18471;
+    --border: #5a4030;
+    --input: #5a4030;
+    --ring: #e3b763;
+    --chart-1: #e3b763;
+    --chart-2: #b8c4d8;
+    --chart-3: #b7caa7;
+    --chart-4: #e18471;
+    --chart-5: #c4afa0;
+    --sidebar: #281c16;
+    --sidebar-foreground: #f3e9d9;
+    --sidebar-primary: #d8a657;
+    --sidebar-primary-foreground: #2a1c10;
+    --sidebar-accent: #392a20;
+    --sidebar-accent-foreground: #f3e9d9;
+    --sidebar-border: #5a4030;
+    --sidebar-ring: #e3b763;
 }
 
 @theme inline {
@@ -123,48 +128,49 @@
 
 :root {
     color-scheme: light;
-    --ready-panel: #fff3cd;
-    --poster-start: #fff4d4;
-    --poster-end: #eadcff;
-    --accent-strong: #5939a8;
-    --gold: #b77917;
-    --gold-strong: #6f4300;
-    --gold-soft: #fff0c4;
+    --ready-panel: #efe4ca;
+    --poster-start: #ede9df;
+    --poster-end: #d9d3c5;
+    --accent-strong: #7b581b;
+    --gold: #b6842f;
+    --gold-strong: #7b581b;
+    --gold-soft: #efe4ca;
     --status-bg: var(--gold-soft);
-    --avatar-ink: #70548f;
-    --avatar-bg: #eadfff;
-    --avatar-line: #cfbee9;
-    --modal-backdrop: rgba(48, 32, 12, 0.5);
-    --busy-backdrop: rgba(48, 32, 12, 0.28);
-    --overlay-button-bg: rgba(35, 24, 10, 0.84);
+    --avatar-ink: #fffefa;
+    --avatar-bg: #292820;
+    --avatar-line: #dedbd1;
+    --modal-backdrop: rgba(37, 36, 31, 0.56);
+    --busy-backdrop: rgba(37, 36, 31, 0.28);
+    --overlay-button-bg: rgba(37, 36, 31, 0.84);
     --overlay-button-line: rgba(255, 255, 255, 0.7);
     --overlay-button-ink: #ffffff;
     --overlay-strip-bg: rgba(35, 24, 10, 0.75);
-    --shadow: 0 16px 42px rgba(93, 63, 21, 0.13);
-    --floating-shadow: 0 24px 64px rgba(93, 63, 21, 0.24);
+    --shadow: 0 12px 32px rgba(48, 42, 28, 0.10);
+    --floating-shadow: 0 20px 54px rgba(48, 42, 28, 0.16);
+    --app-font-display: Georgia, "Times New Roman", serif;
 }
 
 .dark {
     color-scheme: dark;
-    --ready-panel: #352817;
-    --poster-start: #332715;
-    --poster-end: #3a2d4a;
-    --accent-strong: #d8c6ff;
-    --gold: #f0bd63;
-    --gold-strong: #ffe0a0;
-    --gold-soft: rgba(240, 189, 99, 0.16);
+    --ready-panel: #4a3320;
+    --poster-start: #38291f;
+    --poster-end: #513724;
+    --accent-strong: #e3b763;
+    --gold: #e3b763;
+    --gold-strong: #f3c979;
+    --gold-soft: #4a3320;
     --status-bg: var(--gold-soft);
-    --avatar-ink: #e5dcff;
-    --avatar-bg: #392a51;
-    --avatar-line: #675181;
+    --avatar-ink: #25241f;
+    --avatar-bg: #f1eee6;
+    --avatar-line: #3b3a34;
     --modal-backdrop: rgba(0, 0, 0, 0.6);
     --busy-backdrop: rgba(0, 0, 0, 0.38);
     --overlay-button-bg: rgba(18, 12, 6, 0.88);
     --overlay-button-line: rgba(255, 242, 214, 0.3);
     --overlay-button-ink: #fff5df;
     --overlay-strip-bg: rgba(18, 12, 6, 0.84);
-    --shadow: 0 18px 46px rgba(0, 0, 0, 0.32);
-    --floating-shadow: 0 22px 64px rgba(0, 0, 0, 0.52);
+    --shadow: 0 14px 38px rgba(0, 0, 0, 0.26);
+    --floating-shadow: 0 22px 60px rgba(0, 0, 0, 0.42);
 }
 
 @theme inline {
@@ -191,8 +197,9 @@
     --shadow-panel: var(--shadow);
     --shadow-floating: var(--floating-shadow);
     --font-sans:
-        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "Geist Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
         sans-serif;
+    --font-display: var(--app-font-display);
 }
 
 /*
@@ -201,13 +208,32 @@
  */
 @layer base {
     html {
-        font-size: clamp(13px, 0.82vw, 15px);
+        /* Scale gently with viewport width but never below a comfortable 14px. */
+        font-size: clamp(14px, 0.6vw + 6px, 16px);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
     }
 
     body {
         background: var(--background);
         color: var(--foreground);
         font-family: var(--font-sans);
+    }
+
+    h1, h2, h3 {
+        font-family: var(--app-font-display);
+        font-weight: 400;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+
+    ::selection {
+        background: color-mix(in srgb, var(--gold) 35%, transparent);
     }
 }
 

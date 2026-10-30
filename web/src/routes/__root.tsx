@@ -24,7 +24,7 @@ export const Route = createRootRoute({
             { name: "apple-mobile-web-app-title", content: "Goldshelf" },
             { name: "description", content: SITE_DESCRIPTION },
             { name: "author", content: "Edward Stanford" },
-            { name: "theme-color", content: "#1c1409" },
+            { name: "theme-color", content: "#f7f5f0" },
             { property: "og:site_name", content: "Goldshelf" },
             { property: "og:type", content: "website" },
             { property: "og:title", content: "Goldshelf" },

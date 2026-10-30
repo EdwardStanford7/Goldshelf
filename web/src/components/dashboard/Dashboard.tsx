@@ -17,8 +17,7 @@ import {
     rectSortingStrategy,
     verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { BarChart3, CalendarDays, Globe2, Library, ListChecks, ListPlus, Lock, Menu, Plus, Search, Swords, Wrench, X } from "lucide-react";
-import { AccountMenu } from "@/components/layout/AccountMenu";
+import { BarChart3, CalendarDays, Clock3, Compass, Globe2, Home, Library, ListChecks, ListPlus, Lock, Menu, Plus, Search, Settings2, Swords, UserRound, Wrench, X } from "lucide-react";
 import { BinaryRankPanel } from "@/components/ranking/BinaryRankPanel";
 import { RepairRankPanel } from "@/components/ranking/RepairRankPanel";
 import { Button } from "@/components/ui/button";
@@ -98,7 +97,8 @@ import {
     formatDate,
     isTransientRequestFailure
 } from "@/lib/format";
-import { shouldPromptForImage } from "@/lib/images";
+import { hasStoredImage, shouldPromptForImage } from "@/lib/images";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { ImagePickerTarget } from "@/lib/posterImage";
 import { ONBOARDING_SAMPLE_PENDING_KEY } from "@/lib/onboarding";
 import { nextMultiSelection } from "@/lib/multiSelect";
@@ -186,6 +186,7 @@ export function Dashboard({
     const [statsCategoryId, setStatsCategoryId] = useState<string | null>(null);
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const [mobilePanel, setMobilePanel] = useState<MobilePanel | null>(null);
+    const [desktopWorkspace, setDesktopWorkspace] = useState<"rankings" | "queue">("rankings");
     const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
     const activeSessionIdRef = useRef<string | null>(initialActiveSessionId);
     const closedBinarySessionIdsRef = useRef<Set<string>>(new Set());
@@ -212,6 +213,7 @@ export function Dashboard({
     const [busyLabel, setBusyLabel] = useState<string | null>(null);
     const [imagePickerTarget, setImagePickerTarget] = useState<ImagePickerTarget | null>(null);
     const [importToastOpen, setImportToastOpen] = useState(false);
+    const [dataTransferOpen, setDataTransferOpen] = useState(false);
     const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<CategoryWithEntries | null>(null);
     const [categoryQueueTargets, setCategoryQueueTargets] = useState<CategoryWithEntries[] | null>(null);
     const [categorySelectionMode, setCategorySelectionMode] = useState(false);
@@ -1034,6 +1036,33 @@ export function Dashboard({
         document.addEventListener("keydown", handleUndoRedoShortcut);
         return () => document.removeEventListener("keydown", handleUndoRedoShortcut);
     }, []);
+
+    useEffect(() => {
+        function handleSearchShortcut(event: KeyboardEvent) {
+            if (
+                event.defaultPrevented ||
+                event.altKey ||
+                !(event.metaKey || event.ctrlKey) ||
+                event.key.toLowerCase() !== "f" ||
+                isEditableShortcutTarget(event.target) ||
+                activeFlowLocked
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            setDesktopWorkspace("rankings");
+            window.requestAnimationFrame(() => {
+                const searchInput = Array.from(document.querySelectorAll<HTMLInputElement>("[data-entry-search-input]"))
+                    .find((input) => input.offsetParent !== null);
+                searchInput?.focus();
+                searchInput?.select();
+            });
+        }
+
+        document.addEventListener("keydown", handleSearchShortcut);
+        return () => document.removeEventListener("keydown", handleSearchShortcut);
+    }, [activeFlowLocked]);
 
     const requestImageForMatch = useCallback(
         (entry: Entry, category: Pick<CategoryWithEntries, "id" | "name">) => {
@@ -2233,24 +2262,6 @@ export function Dashboard({
         handleStopQueueRank();
     }
 
-    const accountMenuProps = {
-        busy,
-        listLocked: activeFlowLocked,
-        settings: dashboard.queueSettings,
-        onExport: handleExport,
-        onOpenImport: () => setImportToastOpen(true),
-        onOpenProfile: handleOpenProfile,
-        onSaveSettings: handleQueueSettings,
-        onShowEntryPercentileChange: setShowEntryPercentile,
-        onThemeChange: setThemeMode,
-        showEntryPercentile,
-        themeMode,
-        userIsAdmin,
-        userImage: currentUserImage,
-        userImageVersion: currentUserImageVersion,
-        userName: currentUserName
-    };
-
     function renderEntryFilterControls(compact = false) {
         if (!selectedCategory || activeFlowLocked) {
             return null;
@@ -2266,6 +2277,7 @@ export function Dashboard({
                     }`}>
                     <Input
                         aria-label="Search entries"
+                        data-entry-search-input
                         value={entrySearch}
                         placeholder="Search entries"
                         onChange={(event) => handleEntrySearchChange(event.target.value)}
@@ -2322,6 +2334,45 @@ export function Dashboard({
                     </div>
                 ) : null}
             </div>
+        );
+    }
+
+    function renderCategoryOverview() {
+        if (!selectedCategory || selectedCategoryLoading || activeFlowLocked || desktopWorkspace !== "rankings") {
+            return null;
+        }
+
+        const stats = categoryDateStats(selectedCategory);
+        const imageCount = selectedCategory.entries.filter((entry) => hasStoredImage(entry.imageKey)).length;
+        const queuedCount = dashboard.queuedEntries.filter(
+            (entry) => entry.categoryId === selectedCategory.id
+        ).length;
+        const imageCoverage = selectedCategory.entries.length === 0
+            ? 0
+            : Math.round((imageCount / selectedCategory.entries.length) * 100);
+
+        return (
+            <section className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground max-[720px]:hidden" aria-label="Category overview">
+                <span><strong className="font-semibold text-foreground tabular-nums">{selectedCategory.entries.length}</strong> ranked</span>
+                {queuedCount > 0 ? (
+                    <button
+                        className="cursor-pointer rounded-sm underline-offset-4 hover:text-foreground hover:underline"
+                        type="button"
+                        onClick={() => setDesktopWorkspace("queue")}
+                    >
+                        <strong className="font-semibold text-foreground tabular-nums">{queuedCount}</strong> waiting in queue
+                    </button>
+                ) : null}
+                {stats.newestAddedAt ? <span>Last added {formatDate(stats.newestAddedAt)}</span> : null}
+                {selectedCategory.entries.length > 0 ? (
+                    <span className="inline-flex items-center gap-2" title={`${imageCount} of ${selectedCategory.entries.length} entries have an image`}>
+                        <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                            <span className="block h-full rounded-full bg-accent-strong" style={{ width: `${imageCoverage}%` }} />
+                        </span>
+                        {imageCoverage}% with images
+                    </span>
+                ) : null}
+            </section>
         );
     }
 
@@ -2434,11 +2485,11 @@ export function Dashboard({
     function renderCategoryList(closeOnSelect = false, closeOnRepair = false) {
         return (
             <section
-                className={`${SIDEBAR_PANEL_CLASS} !h-full !min-h-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] max-[720px]:!h-fit max-[720px]:!min-h-max max-[720px]:overflow-visible max-[720px]:[scrollbar-gutter:auto]`}
+                className={`${SIDEBAR_PANEL_CLASS} !h-full !min-h-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] min-[721px]:!border-0 min-[721px]:!bg-transparent min-[721px]:!p-0 min-[721px]:!shadow-none max-[720px]:!h-fit max-[720px]:!min-h-max max-[720px]:overflow-visible max-[720px]:[scrollbar-gutter:auto]`}
                 data-testid="category-panel"
             >
-                <div className="sticky top-0 z-10 flex min-w-0 flex-wrap items-center justify-between gap-2 bg-card max-[720px]:static">
-                    <strong className="min-w-0 max-w-full">Categories</strong>
+                <div className="sticky top-0 z-10 flex min-w-0 flex-wrap items-center justify-between gap-2 bg-card min-[721px]:bg-transparent max-[720px]:static">
+                    <strong className="min-w-0 max-w-full text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Your shelves</strong>
                     {!categorySelectionMode ? (
                         <div className="flex items-center gap-2">
                             <Button
@@ -2453,14 +2504,15 @@ export function Dashboard({
                                 <Plus className="size-4" />
                             </Button>
                             <Button
-                                size="sm"
-                                variant="outline"
+                                aria-label="Select"
+                                size="icon-sm"
+                                title="Select categories"
+                                variant="ghost"
                                 disabled={busy || activeFlowLocked || dashboard.categories.length === 0}
                                 type="button"
                                 onClick={() => setCategorySelectionMode(true)}
                             >
-                                <ListChecks data-icon="inline-start" />
-                                <span>Select</span>
+                                <ListChecks className="size-4" />
                             </Button>
                         </div>
                     ) : null}
@@ -2569,7 +2621,10 @@ export function Dashboard({
                                     onDelete={() => setCategoryDeleteTarget(category)}
                                     onRename={(name) => handleRenameCategory(category.id, name)}
                                     onRepair={() => void handleStartRepair(category.id, closeOnRepair)}
-                                    onSelect={() => selectCategory(category.id, closeOnSelect)}
+                                    onSelect={() => {
+                                        setDesktopWorkspace("rankings");
+                                        selectCategory(category.id, closeOnSelect);
+                                    }}
                                     onSelection={(event, options) => handleCategorySelection(category, event, options)}
                                     onToggleVisibility={() => void handleToggleCategoryVisibility(category)}
                                 />
@@ -2686,13 +2741,94 @@ export function Dashboard({
     function renderDesktopSidebar() {
         return (
             <>
-                <div className="relative flex items-center justify-between gap-3">
+                <div className="relative flex items-center justify-between gap-3 px-2">
                     <BrandLink />
                 </div>
-
-                {renderCategoryList(false)}
-                {renderNewEntryPanel(handleCreateEntry)}
-                {renderQueuePanel()}
+                <nav className="grid gap-1" aria-label="Dashboard navigation">
+                    <Button
+                        className="justify-start"
+                        size="lg"
+                        type="button"
+                        variant={desktopWorkspace === "rankings" ? "secondary" : "ghost"}
+                        onClick={() => setDesktopWorkspace("rankings")}
+                    >
+                        <Home data-icon="inline-start" />
+                        My rankings
+                    </Button>
+                    <Button
+                        className="justify-start"
+                        size="lg"
+                        type="button"
+                        variant={desktopWorkspace === "queue" ? "secondary" : "ghost"}
+                        onClick={() => setDesktopWorkspace("queue")}
+                    >
+                        <Clock3 data-icon="inline-start" />
+                        Queue
+                        {dashboard.queuedEntries.length > 0 ? (
+                            <span className="ml-auto rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
+                                {dashboard.queuedEntries.length}
+                            </span>
+                        ) : null}
+                    </Button>
+                    <Button
+                        className="justify-start"
+                        size="lg"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void navigate({ to: "/explore" })}
+                    >
+                        <Compass data-icon="inline-start" />
+                        Explore
+                    </Button>
+                </nav>
+                <div className="min-h-0 overflow-hidden">
+                    {desktopWorkspace === "rankings" ? renderCategoryList(false) : null}
+                </div>
+                <div className="grid gap-1 border-t border-border pt-3">
+                    <Button
+                        className="justify-start"
+                        disabled={busy || activeFlowLocked}
+                        size="lg"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setDataTransferOpen(true)}
+                    >
+                        <ListChecks data-icon="inline-start" />
+                        Import & export
+                    </Button>
+                    <Button
+                        className="justify-start"
+                        size="lg"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void navigate({ to: "/profile" })}
+                    >
+                        <Settings2 data-icon="inline-start" />
+                        Settings
+                    </Button>
+                    <Button
+                        className="h-auto min-h-14 justify-start px-2 py-2 text-left"
+                        size="lg"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void navigate({ to: "/u/$profileSlug", params: { profileSlug: dashboard.profile.slug } })}
+                    >
+                        <Avatar className="size-8 shrink-0 border border-border">
+                            {hasStoredImage(currentUserImage) ? (
+                                <AvatarImage alt="" decoding="async" src={`/api/profile-image?v=${encodeURIComponent(`${currentUserImage ?? ""}-${currentUserImageVersion}`)}`} />
+                            ) : null}
+                            <AvatarFallback className="bg-avatar text-xs font-semibold text-avatar-ink">
+                                {currentUserName.trim().charAt(0).toUpperCase() || "?"}
+                            </AvatarFallback>
+                        </Avatar>
+                        <span className="grid min-w-0 gap-0.5">
+                            <strong className="truncate text-sm">{currentUserName}</strong>
+                            <span className="truncate text-xs font-normal text-muted-foreground">
+                                {dashboard.profile.isPublic ? "Public profile" : "Private profile"} · @{dashboard.profile.slug}
+                            </span>
+                        </span>
+                    </Button>
+                </div>
             </>
         );
     }
@@ -2725,6 +2861,15 @@ export function Dashboard({
                             <Swords data-icon="inline-start" />
                             <span>Queue</span>
                             <span className="ml-auto text-muted-foreground">{dashboard.queuedEntries.length} queued</span>
+                        </Button>
+                        <Button
+                            className="justify-start"
+                            type="button"
+                            variant="outline"
+                            onClick={() => void navigate({ to: "/explore" })}
+                        >
+                            <Compass data-icon="inline-start" />
+                            <span>Explore</span>
                         </Button>
                     </div>
                 </section>
@@ -2767,12 +2912,46 @@ export function Dashboard({
 
     return (
         <main
-            className="grid h-dvh min-h-screen w-full max-w-full min-w-0 grid-cols-[clamp(300px,24vw,360px)_minmax(0,1fr)] overflow-hidden max-[720px]:h-auto max-[720px]:min-h-dvh max-[720px]:grid-cols-1 max-[720px]:grid-rows-[auto_minmax(0,1fr)] max-[720px]:overflow-visible"
+            className="grid h-dvh min-h-screen w-full max-w-full min-w-0 grid-cols-[17rem_minmax(0,1fr)] overflow-hidden max-[720px]:h-auto max-[720px]:min-h-dvh max-[720px]:grid-cols-1 max-[720px]:grid-rows-[auto_minmax(0,1fr)] max-[720px]:overflow-visible"
             aria-busy={busy || selectedCategoryLoading}
         >
             {busy || selectedCategoryLoading ? (
                 <BusyOverlay label={busyLabel ?? "Loading category..."} />
             ) : null}
+            <Dialog open={dataTransferOpen} onOpenChange={setDataTransferOpen}>
+                <DialogContent className="w-[min(30rem,calc(100vw-2rem))]">
+                    <DialogHeader>
+                        <DialogTitle>Import & export</DialogTitle>
+                        <DialogDescription>
+                            Bring a spreadsheet into Goldshelf or download a complete backup of your rankings and queue.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <Button
+                            disabled={busy || activeFlowLocked}
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                setDataTransferOpen(false);
+                                setImportToastOpen(true);
+                            }}
+                        >
+                            Import xlsx
+                        </Button>
+                        <Button
+                            disabled={busy}
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                setDataTransferOpen(false);
+                                void handleExport();
+                            }}
+                        >
+                            Export xlsx
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
             {importToastOpen ? (
                 <ImportSpreadsheetToast
                     busy={busy}
@@ -2823,7 +3002,7 @@ export function Dashboard({
                 </ConfirmDialog>
             ) : null}
             <aside
-                className="grid h-dvh max-h-dvh min-h-0 min-w-0 grid-rows-[auto_clamp(11rem,31vh,21rem)_auto_minmax(0,1fr)] gap-[0.9rem] overflow-hidden border-r border-border bg-sidebar p-4 max-[720px]:hidden"
+                className="grid h-dvh max-h-dvh min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-5 overflow-hidden border-r border-border bg-sidebar px-4 py-7 max-[720px]:hidden"
                 data-testid="dashboard-sidebar"
             >
                 {renderDesktopSidebar()}
@@ -2834,15 +3013,19 @@ export function Dashboard({
                 data-testid="mobile-dashboard-header"
             >
                 <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2">
-                    <AccountMenu
-                        {...accountMenuProps}
-                        contentAlign="start"
-                        triggerClassName="flex h-10 w-10 flex-none items-center justify-center rounded-full p-0"
-                    />
+                    <Button
+                        aria-label="View profile"
+                        size="icon-lg"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void navigate({ to: "/u/$profileSlug", params: { profileSlug: dashboard.profile.slug } })}
+                    >
+                        <UserRound className="size-5" />
+                    </Button>
                     <div className="grid min-w-0 gap-[0.05rem] text-center">
-                        <h1 className="m-0 truncate text-[1.08rem] font-bold">{selectedCategory?.name ?? "Categories"}</h1>
+                        <h1 className="m-0 truncate text-[1.08rem] font-bold">{desktopWorkspace === "queue" ? "Queue" : selectedCategory?.name ?? "Categories"}</h1>
                         <p className="m-0 truncate text-[0.82rem] text-muted-foreground">
-                            {entryCountSummary}
+                            {desktopWorkspace === "queue" ? `${dashboard.queuedEntries.length} queued` : entryCountSummary}
                         </p>
                     </div>
                     <Sheet open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
@@ -2885,7 +3068,7 @@ export function Dashboard({
                         <Plus className="size-5" />
                     </Button>
                 </div>
-                {selectedCategory && !activeFlowLocked ? (
+                {desktopWorkspace === "rankings" && selectedCategory && !activeFlowLocked ? (
                     <div className="mt-2 grid min-w-0">
                         {renderEntryFilterControls(true)}
                     </div>
@@ -2896,27 +3079,44 @@ export function Dashboard({
                 className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-background max-[720px]:block max-[720px]:overflow-visible"
             >
                 <div
-                    className="z-40 flex min-h-0 flex-nowrap items-center gap-[0.7rem] border-b border-border bg-background px-[clamp(0.9rem,2.4vw,1.75rem)] py-[0.8rem] shadow-sm max-[720px]:hidden *:max-w-full *:min-w-0"
+                    className="z-40 flex min-h-0 flex-nowrap items-center gap-4 border-b border-border bg-background/95 px-[clamp(1.5rem,4vw,3.75rem)] py-5 backdrop-blur max-[720px]:hidden *:max-w-full *:min-w-0"
                     data-testid="dashboard-topbar"
                 >
-                    <div className="grid max-w-[min(34rem,42vw)] min-w-0 flex-[0_1_auto] gap-[0.15rem]">
-                        <h1 className="m-0 truncate text-2xl font-bold">{selectedCategory?.name ?? "Categories"}</h1>
-                        <p className="m-0 text-muted-foreground">
-                            {entryCountSummary}
+                    <div className="grid max-w-[min(34rem,42vw)] min-w-0 flex-[0_1_auto] gap-1">
+                        <span className="text-xs font-semibold tracking-[0.14em] text-accent-strong uppercase">
+                            {desktopWorkspace === "queue"
+                                ? "Ranking queue"
+                                : selectedCategory?.isPublic
+                                    ? "Shown on profile"
+                                    : "Private shelf"}
+                        </span>
+                        <h1 className="m-0 truncate text-[clamp(1.85rem,2.8vw,2.8rem)] leading-none">{desktopWorkspace === "queue" ? "Queue" : selectedCategory?.name ?? "Categories"}</h1>
+                        <p className="m-0 text-sm text-muted-foreground">
+                            {desktopWorkspace === "queue"
+                                ? `${dashboard.queuedEntries.length} queued entries · rank whenever you are ready`
+                                : `${entryCountSummary} · ${dashboard.queuedEntries.filter((entry) => entry.categoryId === selectedCategory?.id).length} in queue`}
                         </p>
                     </div>
-                    {renderEntryFilterControls()}
-                    <AccountMenu
-                        {...accountMenuProps}
-                    />
+                    {desktopWorkspace === "rankings" ? renderEntryFilterControls() : null}
+                    <Button
+                        className="ml-auto"
+                        disabled={busy || !selectedCategory}
+                        size="lg"
+                        type="button"
+                        onClick={() => setMobilePanel("newEntry")}
+                    >
+                        <Plus data-icon="inline-start" />
+                        Add entry
+                    </Button>
                 </div>
 
                 <div
-                    className="grid min-h-0 min-w-0 content-start gap-[0.85rem] overflow-x-hidden overflow-y-auto px-[clamp(0.9rem,2.4vw,1.75rem)] py-4 max-[720px]:gap-3 max-[720px]:overflow-y-visible max-[720px]:px-3 max-[720px]:py-3"
+                    className="grid min-h-0 min-w-0 content-start gap-6 overflow-x-hidden overflow-y-auto px-[clamp(1.5rem,4vw,3.75rem)] py-8 max-[720px]:gap-3 max-[720px]:overflow-y-visible max-[720px]:px-3 max-[720px]:pt-3 max-[720px]:pb-22"
                     data-testid="dashboard-scroll-region"
                     ref={mainRef}
                 >
-                    {dashboard.categories.length === 0 ? (
+                    {desktopWorkspace === "queue" ? renderQueuePanel() : null}
+                    {desktopWorkspace === "rankings" && dashboard.categories.length === 0 ? (
                         <EmptyState
                             icon={Library}
                             title="Create Your First Category"
@@ -2994,7 +3194,9 @@ export function Dashboard({
                         />
                     ) : null}
 
-                    <DndContext
+                    {renderCategoryOverview()}
+
+                    {desktopWorkspace === "rankings" ? <DndContext
                         sensors={sensors}
                         onDragStart={handleEntryDragStart}
                         onDragEnd={handleEntryDragEnd}
@@ -3007,7 +3209,7 @@ export function Dashboard({
                             <section
                                 className={`grid min-w-0 gap-3 max-[720px]:grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] max-[720px]:gap-2 ${entryFilterActive
                                     ? "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
-                                    : "grid-cols-[repeat(auto-fit,minmax(min(100%,16.5rem),1fr))]"
+                                    : "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
                                     }`}
                             >
                                 {selectedCategory ? orderedEntries.map((entry) => (
@@ -3044,8 +3246,8 @@ export function Dashboard({
                                 })()
                                 : null}
                         </DragOverlay>
-                    </DndContext>
-                    {selectedCategory && !selectedCategoryLoading && displayedEntries.length === 0 ? (
+                    </DndContext> : null}
+                    {desktopWorkspace === "rankings" && selectedCategory && !selectedCategoryLoading && displayedEntries.length === 0 ? (
                         <EmptyState
                             icon={entryFilterActive ? Search : Swords}
                             title={entryFilterActive ? "No Matches" : "No Entries Yet"}
@@ -3059,6 +3261,37 @@ export function Dashboard({
                     ) : null}
                 </div>
             </section>
+            <nav className="fixed inset-x-0 bottom-0 z-50 hidden grid-cols-4 border-t border-border bg-card/95 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur max-[720px]:grid" aria-label="Mobile navigation">
+                <Button
+                    className="h-12 flex-col gap-0.5 text-[0.68rem]"
+                    size="sm"
+                    type="button"
+                    variant={desktopWorkspace === "rankings" ? "ghost" : "ghost"}
+                    onClick={() => setDesktopWorkspace("rankings")}
+                >
+                    <Home className={`size-4 ${desktopWorkspace === "rankings" ? "text-accent-strong" : ""}`} />
+                    Rankings
+                </Button>
+                <Button
+                    className="relative h-12 flex-col gap-0.5 text-[0.68rem]"
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setDesktopWorkspace("queue")}
+                >
+                    <Clock3 className={`size-4 ${desktopWorkspace === "queue" ? "text-accent-strong" : ""}`} />
+                    Queue
+                    {dashboard.queuedEntries.length > 0 ? <span className="absolute left-[calc(50%+0.45rem)] top-1 grid size-4 place-items-center rounded-full bg-accent-strong text-[0.6rem] text-background">{dashboard.queuedEntries.length}</span> : null}
+                </Button>
+                <Button className="h-12 flex-col gap-0.5 text-[0.68rem]" size="sm" type="button" variant="ghost" onClick={() => void navigate({ to: "/explore" })}>
+                    <Compass className="size-4" />
+                    Explore
+                </Button>
+                <Button className="h-12 flex-col gap-0.5 text-[0.68rem]" size="sm" type="button" variant="ghost" onClick={() => void navigate({ to: "/profile" })}>
+                    <Settings2 className="size-4" />
+                    Settings
+                </Button>
+            </nav>
         </main>
     );
 }

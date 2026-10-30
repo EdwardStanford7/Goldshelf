@@ -24,7 +24,7 @@ import { getBinarySession, submitBinaryWinner, undoBinaryMatch } from "@/server/
 import type { BinarySessionView, CancelBinarySessionMode, CategoryWithEntries, Entry } from "@/lib/types";
 
 const RANK_PANEL_CLASS =
-    "max-w-full min-w-0 rounded-md border border-border bg-card p-4 shadow-panel max-[720px]:p-3";
+    "max-w-full min-w-0 rounded-xl border border-[#d8ae5e]/30 bg-[#201e19] p-5 text-[#f5f0e7] shadow-panel max-[720px]:p-3";
 const STATUS_CLASS =
     "rounded-sm border-l-4 border-l-gold bg-status px-3 py-[0.6rem] whitespace-pre-line";
 const POSTER_CLASS =
@@ -369,6 +369,37 @@ export function BinaryRankPanel({
         setRenamingEntryId(entry.id);
     }
 
+    // Arrow keys pick the left/right card so long runs of comparisons never
+    // need the mouse. Ignored while typing (rename) or when an overlay owns focus.
+    useEffect(() => {
+        if (!session || submitting || recovering || renamingEntryId) {
+            return;
+        }
+
+        function handleKeyDown(event: KeyboardEvent) {
+            if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+                return;
+            }
+            const target = event.target as HTMLElement | null;
+            if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+                return;
+            }
+            if (document.querySelector("[role='dialog'], [role='alertdialog'], [role='menu']")) {
+                return;
+            }
+            if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                void chooseWinner(session!.subject.id);
+            } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                void chooseWinner(session!.opponent.id);
+            }
+        }
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    });
+
     if (error) {
         return <div className={STATUS_CLASS}>{error}</div>;
     }
@@ -388,21 +419,29 @@ export function BinaryRankPanel({
     };
 
     return (
-        <section className={`${RANK_PANEL_CLASS} grid content-start gap-[0.9rem] max-[720px]:gap-2`}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-[0.7rem] max-[720px]:mb-1 max-[720px]:gap-2 *:max-w-full *:min-w-0">
-                <div>
-                    <strong>
+        <section className={`${RANK_PANEL_CLASS} grid content-start gap-5 max-[720px]:gap-3`} data-testid="binary-rank-panel">
+            <div className="flex flex-wrap items-start justify-between gap-[0.7rem] max-[720px]:gap-2 *:max-w-full *:min-w-0">
+                <div className="grid min-w-0 gap-1.5">
+                    <strong className="text-[0.7rem] font-semibold tracking-[0.14em] text-[#d8ae5e] uppercase">
                         {rankPhaseLabel(session.phase)} · {session.categoryName}
                     </strong>
-                    <p className="m-0 mt-[0.2rem] text-muted-foreground">
+                    <h2 className="m-0 font-[family-name:var(--app-font-display)] text-[clamp(1.5rem,3vw,2.1rem)] leading-none text-[#f5f0e7]">
                         {session.phase === "binary"
-                            ? `Range ${session.lowerBound + 1}-${session.upperBound + 1} · ${session.comparisonCount} comparisons`
-                            : `${session.comparisonCount} comparisons`}
+                            ? "Which do you prefer?"
+                            : session.phase === "placement_check"
+                                ? "Does this placement look right?"
+                                : "One more check nearby"}
+                    </h2>
+                    <p className="m-0 text-sm text-[#f5f0e7]/65">
+                        {session.phase === "binary"
+                            ? `Placing ${session.subject.name} · Range ${session.lowerBound + 1}-${session.upperBound + 1} · ${session.comparisonCount} comparisons`
+                            : `Placing ${session.subject.name} · ${session.comparisonCount} comparisons`}
                     </p>
                 </div>
                 <div className="flex flex-wrap justify-end gap-2 max-[720px]:gap-1.5">
                     {session.canUndoLastMatch ? (
                         <Button
+                            className="border-[#f5f0e7]/25 bg-transparent text-[#f5f0e7] hover:bg-[#f5f0e7]/10 hover:text-[#f5f0e7]"
                             size="sm"
                             variant="outline"
                             disabled={controlsDisabled}
@@ -415,6 +454,7 @@ export function BinaryRankPanel({
                     ) : null}
                     {sessionActionState.canSkipQueuedAdd ? (
                         <Button
+                            className="border-[#f5f0e7]/25 bg-transparent text-[#f5f0e7] hover:bg-[#f5f0e7]/10 hover:text-[#f5f0e7]"
                             size="sm"
                             variant="outline"
                             disabled={controlsDisabled}
@@ -430,6 +470,7 @@ export function BinaryRankPanel({
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     aria-label="Ranking actions"
+                                    className="border-[#f5f0e7]/25 bg-transparent text-[#f5f0e7] hover:bg-[#f5f0e7]/10 hover:text-[#f5f0e7]"
                                     disabled={controlsDisabled}
                                     size="icon-sm"
                                     type="button"
@@ -456,13 +497,20 @@ export function BinaryRankPanel({
             {recovering ? (
                 <div className={STATUS_CLASS}>Reconnecting...</div>
             ) : null}
-            <div className="grid min-w-0 grid-cols-2 gap-4 max-[720px]:gap-2" data-testid="ranking-choice-grid">
-                {[session.subject, session.opponent].map((entry) => (
+            <div className="relative grid min-w-0 grid-cols-2 gap-5 mx-auto w-full max-w-[min(72rem,calc((100dvh-21rem)*1.8+1.25rem))] max-[720px]:max-w-none max-[720px]:gap-2" data-testid="ranking-choice-grid">
+                <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-[38%] left-1/2 z-10 grid size-10 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-[#d8ae5e]/40 bg-[#201e19] font-[family-name:var(--app-font-display)] text-sm italic text-[#d8ae5e] shadow-floating max-[720px]:size-8 max-[720px]:text-xs"
+                >
+                    vs
+                </span>
+                {[session.subject, session.opponent].map((entry, index) => (
                     <MatchCard
                         disabled={controlsDisabled}
                         entry={entry}
                         isRenaming={renamingEntryId === entry.id}
                         key={entry.id}
+                        shortcutLabel={index === 0 ? "←" : "→"}
                         renameValue={renameValue}
                         onCancelRename={() => {
                             setRenameValue(entry.name);
@@ -507,6 +555,9 @@ export function BinaryRankPanel({
                     />
                 ))}
             </div>
+            <p className="m-0 hidden text-center text-xs text-[#f5f0e7]/45 min-[721px]:block">
+                Press <kbd className="rounded border border-[#f5f0e7]/25 px-1.5 py-0.5 font-sans">←</kbd> or <kbd className="rounded border border-[#f5f0e7]/25 px-1.5 py-0.5 font-sans">→</kbd> to pick · right-click a card for more
+            </p>
         </section>
     );
 }
@@ -641,12 +692,14 @@ function MatchCard({
     onStartRename,
     onSubmitRename,
     renderContextActions,
-    renderDropdownActions
+    renderDropdownActions,
+    shortcutLabel
 }: {
     disabled: boolean;
     entry: Entry;
     isRenaming: boolean;
     renameValue: string;
+    shortcutLabel?: string;
     onCancelRename: () => void;
     onChoose: () => void;
     onPickImage: () => void;
@@ -667,7 +720,7 @@ function MatchCard({
 
     if (isRenaming) {
         return (
-            <article className="overflow-hidden rounded-md border border-border bg-card text-left" data-testid="ranking-choice-card">
+            <article className="overflow-hidden rounded-xl border border-primary/15 bg-card text-left" data-testid="ranking-choice-card">
                 <MatchPoster entry={entry} />
                 <form className="grid gap-[0.6rem] p-[0.7rem] max-[720px]:gap-2 max-[720px]:p-2" onSubmit={handleRenameSubmit}>
                     <Input
@@ -697,21 +750,26 @@ function MatchCard({
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>
-                <article className="relative overflow-hidden rounded-md border border-border bg-card transition-colors hover:border-primary" data-testid="ranking-choice-card">
+                <article className="group relative overflow-hidden rounded-xl border border-[#f5f0e7]/10 bg-card text-foreground shadow-sm transition-[transform,border-color,box-shadow] duration-150 has-[button:focus-visible]:border-gold hover:border-gold/70 motion-safe:hover:-translate-y-0.5 hover:shadow-floating" data-testid="ranking-choice-card">
                     <button
-                        className="block w-full cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-55"
+                        className="block w-full cursor-pointer text-left outline-none disabled:cursor-not-allowed disabled:opacity-55"
                         disabled={disabled}
                         type="button"
                         onClick={onChoose}
                     >
                         <MatchPoster entry={entry} />
-                        <strong className="block truncate p-[0.7rem] pr-11 max-[720px]:p-2 max-[720px]:pr-9 max-[720px]:text-[0.82rem]">{entry.name}</strong>
+                        <span className="flex min-w-0 items-center gap-2 p-3 pr-11 max-[720px]:p-2 max-[720px]:pr-9">
+                            <strong className="block min-w-0 flex-1 truncate font-[family-name:var(--app-font-display)] text-[1.05rem] font-normal max-[720px]:text-[0.82rem]">{entry.name}</strong>
+                            {shortcutLabel ? (
+                                <kbd aria-hidden="true" className="hidden shrink-0 rounded border border-border px-1.5 py-0.5 font-sans text-[0.68rem] text-muted-foreground min-[721px]:inline-block">{shortcutLabel}</kbd>
+                            ) : null}
+                        </span>
                     </button>
                     <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 aria-label={`Actions for ${entry.name}`}
-                                className="absolute top-2 right-2 z-20 hidden border-overlay-button-line bg-overlay-button text-overlay-button-ink hover:bg-overlay-button max-[720px]:top-1.5 max-[720px]:right-1.5 max-[720px]:inline-flex"
+                                className="absolute top-2 right-2 z-20 border-overlay-button-line bg-overlay-button text-overlay-button-ink transition-opacity duration-150 hover:bg-overlay-button focus-visible:opacity-100 max-[720px]:top-1.5 max-[720px]:right-1.5 min-[721px]:opacity-0 min-[721px]:group-hover:opacity-100 min-[721px]:data-[state=open]:opacity-100"
                                 disabled={disabled}
                                 size="icon-sm"
                                 type="button"

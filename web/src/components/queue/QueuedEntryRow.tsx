@@ -70,9 +70,9 @@ export function QueuedEntryRow({
         <ContextMenu>
             <ContextMenuTrigger asChild disabled={metadataDisabled || selectionMode}>
                 <div
-                    className={`relative grid min-w-0 ${selectionMode ? "grid-cols-[auto_54px_minmax(0,1fr)] cursor-pointer" : "grid-cols-[54px_minmax(0,1fr)]"} items-start gap-[0.55rem] rounded-sm border p-[0.65rem] max-[720px]:pr-10 ${selected
+                    className={`group relative grid min-w-0 ${selectionMode ? "grid-cols-[auto_54px_minmax(0,1fr)] cursor-pointer" : "grid-cols-[54px_minmax(0,1fr)]"} items-start gap-[0.55rem] rounded-lg border p-[0.65rem] pr-10 transition-colors ${selected
                         ? "border-primary bg-accent"
-                        : "border-border bg-muted"
+                        : "border-border bg-card hover:border-primary/35"
                         }`}
                     onClick={(event) => {
                         if (selectionMode) {
@@ -98,7 +98,7 @@ export function QueuedEntryRow({
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     aria-label={`Actions for queued ${entry.name}`}
-                                    className="absolute top-2 right-1.5 z-20 hidden max-[720px]:inline-flex"
+                                    className="absolute top-2 right-1.5 z-20 transition-opacity focus-visible:opacity-100 min-[721px]:opacity-0 min-[721px]:group-hover:opacity-100 min-[721px]:data-[state=open]:opacity-100"
                                     disabled={metadataDisabled}
                                     size="icon-sm"
                                     type="button"
@@ -155,15 +155,34 @@ export function QueuedEntryRow({
                             </form>
                         ) : (
                             <div
-                                title="Double-click to rename · Right-click for actions"
+                                className="grid min-w-0 gap-1.5"
+                                title="Double-click to rename · Open the menu for more actions"
                                 onDoubleClick={() => {
                                     if (!metadataDisabled && !selectionMode) {
                                         startRename();
                                     }
                                 }}
                             >
-                                <strong>{entry.name}</strong>
-                                <p className="m-0 mt-[0.2rem] text-muted-foreground">{entry.categoryName}</p>
+                                <div className="min-w-0">
+                                    <strong className="block truncate">{entry.name}</strong>
+                                    <p className="m-0 mt-[0.1rem] truncate text-sm text-muted-foreground">{entry.categoryName}</p>
+                                </div>
+                                {!selectionMode ? (
+                                    <Button
+                                        className="w-fit"
+                                        disabled={rankLocked}
+                                        size="sm"
+                                        type="button"
+                                        variant="outline"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            void onStart(entry);
+                                        }}
+                                    >
+                                        <Swords data-icon="inline-start" />
+                                        Rank now
+                                    </Button>
+                                ) : null}
                             </div>
                         )}
                     </div>

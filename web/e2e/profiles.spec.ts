@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { gotoApp, openNewCategoryDialog, seedUsers, signInViaApi } from "./helpers";
+import { categoryButton, gotoApp, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, signInViaApi } from "./helpers";
 
 const ALICE = {
     email: "alice@e2e.test",
@@ -29,6 +29,13 @@ async function readOwnSlug(page: Page) {
     const handleText = await page.getByText(/^@[a-z0-9-]+$/).first().textContent();
     expect(handleText, "profile handle should be visible on /profile").toBeTruthy();
     return handleText!.slice(1);
+}
+
+async function openSettingsSection(page: Page, section: "Profile" | "Shelves" | "Privacy & social" | "Account") {
+    const tab = page.getByRole("button", { name: section, exact: true });
+    if (await tab.getAttribute("aria-current") !== "page") {
+        await tab.click();
+    }
 }
 
 test.describe("Profiles", () => {
@@ -63,6 +70,47 @@ test.describe("Profiles", () => {
         await expect(page.getByRole("heading", { name: "Edit Photo" })).toBeHidden();
     });
 
+    test("Explore only shows entries whose owner explicitly shares activity @smoke", async ({
+        page: ownerPage,
+        context: ownerContext,
+        browser
+    }) => {
+        await seedUsers([
+            {
+                email: "explore-owner@e2e.test",
+                name: "Explore Owner",
+                categories: [{ name: "Films", entries: ["Arrival"] }]
+            },
+            { email: "explore-viewer@e2e.test", name: "Explore Viewer" }
+        ]);
+        await signInViaApi(ownerContext, "explore-owner@e2e.test");
+        await gotoApp(ownerPage, "/profile");
+
+        await ownerPage.getByLabel("Public profile").check();
+        await ownerPage.getByLabel("Recent additions visibility").selectOption("public");
+        await ownerPage.getByRole("button", { name: "Save Profile" }).click();
+        await expect(ownerPage.getByText("Profile saved.")).toBeVisible();
+        await openSettingsSection(ownerPage, "Shelves");
+        await ownerPage.getByRole("checkbox", { name: /Films/ }).click({ force: true });
+        await expect(ownerPage.getByText("Profile sharing saved.").first()).toBeVisible();
+
+        const viewerContext = await browser.newContext();
+        const viewerPage = await viewerContext.newPage();
+        await signInViaApi(viewerContext, "explore-viewer@e2e.test");
+        await gotoApp(viewerPage, "/explore");
+        await expect(viewerPage.getByRole("heading", { name: "Explore" })).toBeVisible();
+        await expect(viewerPage.getByText("Arrival").first()).toBeVisible();
+
+        await openSettingsSection(ownerPage, "Profile");
+        await ownerPage.getByLabel("Recent additions visibility").selectOption("off");
+        await ownerPage.getByRole("button", { name: "Save Profile" }).click();
+        await expect(ownerPage.getByText("Profile saved.")).toBeVisible();
+        await gotoApp(viewerPage, "/explore");
+        await expect(viewerPage.getByText("Arrival")).toBeHidden();
+
+        await viewerContext.close();
+    });
+
     test("user can permanently delete their account", async ({ page, context }) => {
         await seedUsers([{
             email: "delete-account@e2e.test",
@@ -71,6 +119,7 @@ test.describe("Profiles", () => {
         }]);
         await signInViaApi(context, "delete-account@e2e.test");
         await gotoApp(page, "/profile");
+        await openSettingsSection(page, "Account");
 
         await page.getByLabel("Delete account confirmation").fill("DELETE");
         await Promise.all([
@@ -118,6 +167,7 @@ test.describe("Profiles", () => {
         await alicePage.getByLabel("Public profile").check();
         await alicePage.getByRole("button", { name: "Save Profile" }).click();
         await expect(alicePage.getByText("Profile saved.")).toBeVisible();
+        await openSettingsSection(alicePage, "Shelves");
         await alicePage.getByRole("checkbox", { name: /Movies/ }).click();
         await expect(alicePage.getByText("Profile sharing saved.").first()).toBeVisible();
 
@@ -146,9 +196,10 @@ test.describe("Profiles", () => {
         await expect(bobPage.getByText("Copied 3 entries to Alice Movies.")).toBeVisible({ timeout: 15_000 });
 
         await gotoApp(bobPage);
-        await bobPage.getByRole("button", { name: "Alice Movies" }).click();
+        await categoryButton(bobPage, "Alice Movies").click();
         await expect(bobPage.getByRole("heading", { name: "Alice Movies" })).toBeVisible();
-        await expect(bobPage.getByText("3 queued")).toBeVisible();
+        await bobPage.getByRole("button", { name: /^Queue/ }).click();
+        await expect(queueCount(bobPage, 3)).toBeVisible();
         await expect(bobPage.getByText("Arrival").first()).toBeVisible();
         await expect(bobPage.getByText("Heat").first()).toBeVisible();
         await expect(bobPage.getByText("Solaris").first()).toBeVisible();
@@ -196,6 +247,7 @@ test.describe("Profiles", () => {
         await alicePage.getByLabel("Public profile").check();
         await alicePage.getByRole("button", { name: "Save Profile" }).click();
         await expect(alicePage.getByText("Profile saved.")).toBeVisible();
+        await openSettingsSection(alicePage, "Shelves");
         await alicePage.getByRole("checkbox", { name: /Movies/ }).click();
         await expect(alicePage.getByText("Profile sharing saved.").first()).toBeVisible();
 
@@ -217,12 +269,13 @@ test.describe("Profiles", () => {
         await expect(bobPage.getByText("Copied 1 entry to Movies. Skipped 1 duplicate.")).toBeVisible({ timeout: 15_000 });
 
         await gotoApp(bobPage);
-        await bobPage.getByRole("button", { name: "Movies" }).click();
+        await categoryButton(bobPage, "Movies").click();
         await expect(bobPage.getByRole("heading", { name: "Movies" })).toBeVisible();
         await expect(bobPage.getByText("#1 Arrival")).toBeVisible();
-        await expect(bobPage.getByText("1 queued")).toBeVisible();
-        await expect(bobPage.getByText("Arrival").first()).toBeVisible();
+        await openQueueWorkspace(bobPage);
+        await expect(queueCount(bobPage, 1)).toBeVisible();
         await expect(bobPage.getByText("Dune").first()).toBeVisible();
+        await expect(bobPage.getByText("Arrival").first()).toBeHidden();
         await expect(bobPage.getByText("Heat").first()).toBeHidden();
 
         await bobContext.close();
@@ -244,6 +297,7 @@ test.describe("Profiles", () => {
         await sourcePage.getByLabel("Public profile").check();
         await sourcePage.getByRole("button", { name: "Save Profile" }).click();
         await expect(sourcePage.getByText("Profile saved.")).toBeVisible();
+        await openSettingsSection(sourcePage, "Shelves");
         await sourcePage.getByRole("checkbox", { name: /Movies/ }).click();
         await expect(sourcePage.getByText("Profile sharing saved.").first()).toBeVisible();
 
@@ -260,7 +314,8 @@ test.describe("Profiles", () => {
         await expect(viewerPage.getByText("Copied 201 entries to Large Movie Copy.")).toBeVisible({ timeout: 30_000 });
 
         await gotoApp(viewerPage);
-        await expect(viewerPage.getByText("201 queued", { exact: true })).toBeVisible();
+        await openQueueWorkspace(viewerPage);
+        await expect(queueCount(viewerPage, 201)).toBeVisible();
         await viewerContext.close();
     });
 
@@ -285,17 +340,17 @@ test.describe("Profiles", () => {
 
         await gotoApp(page, "/profile");
         await expect(page.getByText("Public profiles are searchable and visible to anyone.")).toBeVisible();
-        await expect(page.getByText("Shown lists appear on your profile.")).toBeVisible();
-        await expect(page.getByText("Private").first()).toBeVisible();
         await page.getByLabel("Public profile").check();
         await page.getByRole("button", { name: "Save Profile" }).click();
         await expect(page.getByText("Profile saved.")).toBeVisible();
+        await openSettingsSection(page, "Shelves");
+        await expect(page.getByText("Shown lists appear on your profile.")).toBeVisible();
         await expect(page.getByRole("checkbox", { name: /Private Shelf/ })).not.toBeChecked();
         await expect(page.getByRole("checkbox", { name: /Shared Shelf/ })).toBeChecked();
 
         await page.getByRole("link", { name: "View Profile" }).click();
         await expect(page.getByRole("heading", { name: "Share Tester" })).toBeVisible();
-        await expect(page.getByText("Shared Shelf")).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Shared Shelf" })).toBeVisible();
         await expect(page.getByText("Private Shelf")).toBeHidden();
     });
 
@@ -322,6 +377,7 @@ test.describe("Profiles", () => {
         await expect(bobPage.getByText("Profile followed.")).toBeVisible();
 
         await gotoApp(alicePage, "/profile");
+        await openSettingsSection(alicePage, "Privacy & social");
         await expect(alicePage.getByRole("heading", { name: "Followers" })).toBeVisible();
         await expect(alicePage.getByText("Bob Stone").first()).toBeVisible();
         await alicePage.getByRole("button", { name: "Block", exact: true }).click();
@@ -335,6 +391,7 @@ test.describe("Profiles", () => {
         await expect(bobPage.getByText("This profile is private or does not exist.")).toBeVisible();
 
         await gotoApp(alicePage, "/profile");
+        await openSettingsSection(alicePage, "Privacy & social");
         await alicePage.getByRole("button", { name: "Unblock", exact: true }).click();
         await expect(alicePage.getByText("Unblocked Bob Stone.")).toBeVisible();
         await expect(alicePage.getByText("No Blocked Profiles")).toBeVisible();
@@ -370,6 +427,7 @@ test.describe("Profiles", () => {
         await ownerPage.getByLabel("Public profile").check();
         await ownerPage.getByRole("button", { name: "Save Profile" }).click();
         await expect(ownerPage.getByText("Profile saved.")).toBeVisible();
+        await openSettingsSection(ownerPage, "Shelves");
         await ownerPage.getByRole("checkbox", { name: new RegExp(longCategoryName) }).click();
         await expect(ownerPage.getByText("Profile sharing saved.").first()).toBeVisible();
 
@@ -383,7 +441,7 @@ test.describe("Profiles", () => {
         await expect(adminPage.getByText("100th").first()).toBeVisible();
         await expect(adminPage.getByText("75th").first()).toBeVisible();
 
-        const categoryNav = adminPage.getByRole("navigation", { name: "Categories" });
+        const categoryNav = adminPage.getByRole("navigation", { name: "Shared shelves" });
         const longCategoryButton = categoryNav.getByRole("button", { name: new RegExp(longCategoryName) });
         await expect(longCategoryButton).toBeVisible();
         await expect(categoryNav.getByRole("button", { name: /Private Notes/ })).toBeHidden();
@@ -458,6 +516,7 @@ test.describe("Profiles", () => {
         // The visibility checkbox is controlled and only flips after the save
         // round-trip, so click + poll instead of check() (which verifies
         // state synchronously).
+        await openSettingsSection(alicePage, "Shelves");
         await alicePage.getByRole("checkbox", { name: /Movies/ }).click();
         await expect(alicePage.getByText("Profile sharing saved.").first()).toBeVisible();
         await expect(alicePage.getByRole("checkbox", { name: /Movies/ })).toBeChecked();
@@ -498,12 +557,14 @@ test.describe("Profiles", () => {
         await bobPage.getByRole("button", { name: "Follow", exact: true }).click();
         await expect(bobPage.getByText("Profile followed.")).toBeVisible();
 
-        await gotoApp(alicePage, "/profile");
-        await expect(alicePage.getByText("People You May Know")).toBeVisible();
-        await expect(alicePage.getByText("Charlie Day")).toBeVisible();
+        // Discovery is now a separate, privacy-filtered Explore workspace;
+        // profile settings no longer perform a suggestion query on load.
+        await gotoApp(alicePage, "/explore");
+        await expect(alicePage.getByRole("heading", { name: "Explore" })).toBeVisible();
 
         // --- Alice requests to follow Bob's private profile by exact handle. ---
         await gotoApp(alicePage, "/profile");
+        await openSettingsSection(alicePage, "Privacy & social");
         await alicePage.getByLabel("Profile handle, name, or profile link").fill(bobSlug);
         // Bob's follower row also offers a follow-back "Follow" button; the
         // Find Profiles submit comes first in the page.
@@ -516,26 +577,30 @@ test.describe("Profiles", () => {
 
         // --- Bob approves; the relationship becomes mutual on both sides. ---
         await gotoApp(bobPage, "/profile");
+        await openSettingsSection(bobPage, "Privacy & social");
         await expect(bobPage.getByText("Alice Park").first()).toBeVisible();
         await bobPage.getByRole("button", { name: "Accept", exact: true }).click();
         await expect(bobPage.getByText("Follow request accepted.")).toBeVisible();
         await expect(bobPage.getByText("Mutual").first()).toBeVisible();
 
         await gotoApp(alicePage, "/profile");
+        await openSettingsSection(alicePage, "Privacy & social");
         await expect(alicePage.getByText("Bob Stone").first()).toBeVisible();
         await expect(alicePage.getByText("Mutual").first()).toBeVisible();
 
         // --- Hiding the category removes it from the public page. ---
+        await openSettingsSection(alicePage, "Shelves");
         await alicePage.getByRole("checkbox", { name: /Movies/ }).click();
         await expect(alicePage.getByText("Profile sharing saved.").first()).toBeVisible();
         await expect(alicePage.getByRole("checkbox", { name: /Movies/ })).not.toBeChecked();
 
         await gotoApp(anonPage, `/u/${aliceSlug}`);
         await expect(anonPage.getByRole("heading", { name: "Alice Park" })).toBeVisible();
-        await expect(anonPage.getByText("No Shared Rankings")).toBeVisible();
+        await expect(anonPage.getByText("No shared shelves")).toBeVisible();
         await expect(anonPage.getByText("Arrival")).toBeHidden();
 
         // --- Going private hides the page from visitors but not followers. ---
+        await openSettingsSection(alicePage, "Profile");
         await alicePage.getByLabel("Public profile").uncheck();
         await alicePage.getByRole("button", { name: "Save Profile" }).click();
         await expect(alicePage.getByText("Profile saved.")).toBeVisible();
@@ -548,7 +613,9 @@ test.describe("Profiles", () => {
         await expect(bobPage.getByText("Followers Only", { exact: true }).first()).toBeVisible();
 
         // --- Unfollowing revokes Bob's access to the private profile. ---
-        await bobPage.getByRole("button", { name: "Mutual" }).click();
+        // Following/mutual is a menu so unfollow is an explicit choice, not a toggle.
+        await bobPage.getByRole("button", { name: "Following" }).click();
+        await bobPage.getByRole("menuitem", { name: "Unfollow" }).click();
         await expect(bobPage.getByText("Profile unfollowed.")).toBeVisible();
 
         await gotoApp(bobPage, `/u/${aliceSlug}`);

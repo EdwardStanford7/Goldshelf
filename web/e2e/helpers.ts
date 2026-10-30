@@ -29,61 +29,32 @@ export async function openNewCategoryDialog(page: Page): Promise<Locator> {
     return dialog;
 }
 
+/** The desktop redesign keeps entry creation in the focused Add entry sheet. */
+export async function openDesktopNewEntry(page: Page): Promise<Locator> {
+    const input = page.getByPlaceholder("New entry");
+    if (!await input.isVisible().catch(() => false)) {
+        await page.getByRole("button", { name: "Add entry", exact: true }).click();
+    }
+    await expect(input).toBeVisible();
+    return input;
+}
+
+/** The desktop redesign gives Queue its own workspace instead of mounting it in the rail. */
+export async function openQueueWorkspace(page: Page): Promise<Locator> {
+    const panel = page.getByTestId("queue-panel");
+    if (!await panel.isVisible().catch(() => false)) {
+        await page.getByRole("button", { name: /^Queue(?:\s+\d+)?$/ }).click();
+    }
+    await expect(panel).toBeVisible();
+    return panel;
+}
+
+/** Targets the queue workspace count rather than incidental responsive chrome. */
+export function queueCount(page: Page, count: number) {
+    return page.getByTestId("queue-panel").getByText(`${count} queued`, { exact: true });
+}
+
 /** Opens the account menu and waits for its content to be usable. */
-export async function openAccountMenu(page: Page): Promise<Locator> {
-    const accountButton = page.getByRole("button", { name: "Account menu" });
-    const openMenu = page
-        .locator("[data-slot='dropdown-menu-content'][data-state='open']", { hasText: "Sign Out" })
-        .last();
-    const signOutItem = openMenu.getByRole("menuitem", { name: "Sign Out", exact: true });
-    if (await signOutItem.isVisible().catch(() => false)) {
-        await waitForStableLocator(openMenu);
-        return openMenu;
-    }
-
-    await page
-        .locator("[data-slot='dropdown-menu-content'][data-state='closed']")
-        .waitFor({ state: "detached", timeout: 1_000 })
-        .catch(() => undefined);
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-        await accountButton.click();
-        if (await signOutItem.waitFor({ state: "visible", timeout: 1_000 }).then(() => true).catch(() => false)) {
-            await waitForStableLocator(openMenu);
-            return openMenu;
-        }
-    }
-
-    await expect(signOutItem).toBeVisible();
-    await waitForStableLocator(openMenu);
-    return openMenu;
-}
-
-async function waitForStableLocator(locator: Locator) {
-    let previousBox: string | null = null;
-
-    await expect.poll(async () => {
-        const box = await locator.boundingBox();
-        if (!box) {
-            previousBox = null;
-            return "missing";
-        }
-
-        const currentBox = [
-            box.x.toFixed(2),
-            box.y.toFixed(2),
-            box.width.toFixed(2),
-            box.height.toFixed(2)
-        ].join(":");
-        const isStable = previousBox === currentBox;
-        previousBox = currentBox;
-        return isStable ? "stable" : "moving";
-    }, {
-        intervals: [50, 50, 50, 100],
-        timeout: 2_000
-    }).toBe("stable");
-}
-
 export interface SeedEntry {
     name: string;
     imageKey?: string | null;
@@ -200,8 +171,18 @@ export async function chooseEntryMenuAction(
     await page.getByRole("menuitem", { name: actionName }).click();
 }
 
+/**
+ * Sidebar shelf button. Its accessible name is "<name> · <count>", and the
+ * hover-revealed "Actions for <name>" menu button sits beside it, so anchor on
+ * the name prefix rather than a substring match.
+ */
+export function categoryButton(page: Page | Locator, categoryName: string) {
+    const escaped = categoryName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return page.getByRole("button", { name: new RegExp(`^${escaped} ·`) });
+}
+
 export async function chooseCategoryMenuAction(page: Page, categoryName: string, actionName: string) {
-    await page.getByRole("button", { name: categoryName }).click({ button: "right" });
+    await categoryButton(page, categoryName).click({ button: "right" });
     await page.getByRole("menuitem", { name: actionName }).click();
 }
 

@@ -1,6 +1,7 @@
 import { test, expect } from "./base";
 import {
     ACTIVE_RANKING_LABEL,
+    categoryButton,
     chooseCategoryMenuAction,
     chooseEntryMenuAction,
     expectRankedEntries,
@@ -76,7 +77,7 @@ test.describe("Entry operations", () => {
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
         await expect(rankedEntry(page, 1, "Dune")).toBeVisible();
 
-        await page.getByRole("button", { name: "Movies" }).click();
+        await categoryButton(page, "Movies").click();
         await expectRankedEntries(page, ["Arrival", "Heat", "Solaris"]);
         await expect(rankedEntry(page, 1, "Dune")).toBeHidden();
 
@@ -88,15 +89,15 @@ test.describe("Entry operations", () => {
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Heat");
 
-        await page.getByRole("button", { name: "Books" }).click();
+        await categoryButton(page, "Books").click();
         await expect(page.getByRole("heading", { name: "Books" })).toBeVisible();
         await expectRankedEntries(page, ["Heat", "Dune"]);
 
         await gotoApp(page);
-        await page.getByRole("button", { name: "Movies" }).click();
+        await categoryButton(page, "Movies").click();
         await expectRankedEntries(page, ["Arrival", "Solaris"]);
         await expect(rankedEntry(page, 1, "Heat")).toBeHidden();
-        await page.getByRole("button", { name: "Books" }).click();
+        await categoryButton(page, "Books").click();
         await expectRankedEntries(page, ["Heat", "Dune"]);
     });
 
@@ -117,8 +118,8 @@ test.describe("Entry operations", () => {
         await chooseCategoryMenuAction(page, "Books", "Rename");
         await page.getByLabel("Rename Books").fill("Novels");
         await page.getByRole("button", { name: "Save" }).click();
-        await expect(page.getByRole("button", { name: "Novels" })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Books" })).toBeHidden();
+        await expect(categoryButton(page, "Novels")).toBeVisible();
+        await expect(categoryButton(page, "Books")).toBeHidden();
 
         await chooseCategoryMenuAction(page, "Novels", "Delete");
         await expect(page.getByText("Delete Novels?")).toBeVisible();
@@ -126,7 +127,7 @@ test.describe("Entry operations", () => {
         await page.getByRole("button", { name: "Delete Category" }).click();
 
         await expect(page.getByText("Deleted Novels.")).toBeVisible();
-        await expect(page.getByRole("button", { name: "Novels" })).toBeHidden();
+        await expect(categoryButton(page, "Novels")).toBeHidden();
         await expect(page.getByText("Hyperion")).toBeHidden();
         await expect(rankedEntry(page, 1, "Arrival")).toBeVisible();
     });
