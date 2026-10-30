@@ -2364,7 +2364,7 @@ export function Dashboard({
                     </button>
                 ) : null}
                 {stats.newestAddedAt ? <span>Last added {formatDate(stats.newestAddedAt)}</span> : null}
-                {selectedCategory.entries.length > 0 ? (
+                {selectedCategory.entries.length > 0 && imageCoverage < 100 ? (
                     <span className="inline-flex items-center gap-2" title={`${imageCount} of ${selectedCategory.entries.length} entries have an image`}>
                         <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
                             <span className="block h-full rounded-full bg-accent-strong" style={{ width: `${imageCoverage}%` }} />

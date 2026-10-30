@@ -45,6 +45,7 @@ import { showToast } from "@/lib/toast";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile } from "@/lib/follows";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
+import { readInitialShowEntryPercentile } from "@/lib/preferences";
 import { nextMultiSelection } from "@/lib/multiSelect";
 import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
@@ -90,7 +91,7 @@ export const Route = createFileRoute("/u/$profileSlug")({
 
 function ProfileNotFound() {
     return (
-        <main className="mx-auto grid min-h-screen w-full max-w-7xl content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] text-foreground">
+        <main className="mx-auto grid min-h-screen w-full max-w-[96rem] content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] text-foreground">
             <AppHeader viewer={{ signedIn: false }} />
             <section className="grid max-w-md gap-2 rounded-xl border border-dashed border-border bg-muted p-6">
                 <Lock aria-hidden="true" className="size-6 text-primary" />
@@ -110,6 +111,9 @@ function PublicProfileRoute() {
     const [copyMode, setCopyMode] = useState<CopyMode>("new");
     const [copyCategoryName, setCopyCategoryName] = useState("");
     const [copyTargetCategoryId, setCopyTargetCategoryId] = useState("");
+    // Public visitors do not inherit a stored display preference. Signed-in
+    // viewers get the same local preference used by their own dashboard.
+    const [showPercentiles, setShowPercentiles] = useState(false);
     const entryScrollRef = useRef<HTMLDivElement | null>(null);
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
         loaderData?.categories[0]?.id ?? null
@@ -120,6 +124,10 @@ function PublicProfileRoute() {
         setSelectedCategoryId(loaderData?.categories[0]?.id ?? null);
         setCopyDialogCategory(null);
     }, [loaderData]);
+
+    useEffect(() => {
+        setShowPercentiles(headerViewer.signedIn ? readInitialShowEntryPercentile() : false);
+    }, [headerViewer.signedIn]);
 
     function applyRelation(nextRelation: FollowRelationState, followerDelta: number) {
         if (!profileData) {
@@ -325,7 +333,7 @@ function PublicProfileRoute() {
     const selectedCategory = profileData.categories.find((category) => category.id === selectedCategoryId) ?? null;
 
     return (
-        <main className="mx-auto grid min-h-screen w-full max-w-7xl content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
+        <main className="mx-auto grid min-h-screen w-full max-w-[96rem] content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
             <AppHeader viewer={headerViewer} />
 
             <section className="grid gap-6 pt-2" aria-labelledby="profile-heading">
@@ -378,7 +386,7 @@ function PublicProfileRoute() {
             </section>
 
             {profileData.categories.length > 0 ? (
-                <div className="grid min-h-0 w-full gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+                <div className="grid min-h-0 w-full gap-8 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start">
                     <nav
                         className="flex min-w-0 gap-1 overflow-x-auto pb-1 [scrollbar-width:thin] lg:sticky lg:top-20 lg:grid lg:content-start lg:gap-0.5 lg:overflow-visible lg:pb-0"
                         aria-label="Shared shelves"
@@ -420,6 +428,7 @@ function PublicProfileRoute() {
                                 }
                                 profileIsPublic={profile.isPublic}
                                 showVisibility={showCategoryVisibility}
+                                showPercentiles={showPercentiles}
                                 usePrivateImages={viewer.isSelf}
                             />
                         ) : null}
@@ -884,6 +893,7 @@ function PublicCategory({
     copyDisabled,
     onCopy,
     profileIsPublic,
+    showPercentiles,
     showVisibility,
     usePrivateImages
 }: {
@@ -891,6 +901,7 @@ function PublicCategory({
     copyDisabled?: boolean;
     onCopy?: () => void;
     profileIsPublic: boolean;
+    showPercentiles: boolean;
     showVisibility: boolean;
     usePrivateImages: boolean;
 }) {
@@ -927,6 +938,7 @@ function PublicCategory({
                             entry={entry}
                             key={entry.id}
                             listSize={entries.length}
+                            showPercentiles={showPercentiles}
                             usePrivateImages={usePrivateImages}
                         />
                     ))}
@@ -943,10 +955,12 @@ function PublicCategory({
 function PublicEntryCard({
     entry,
     listSize,
+    showPercentiles,
     usePrivateImages
 }: {
     entry: Entry;
     listSize: number;
+    showPercentiles: boolean;
     usePrivateImages: boolean;
 }) {
     const position = entry.rankPosition + 1;
@@ -962,10 +976,7 @@ function PublicEntryCard({
             <PublicEntryPoster entry={entry} usePrivateImages={usePrivateImages} />
             <span
                 aria-hidden="true"
-                className={`absolute top-2 left-2 grid min-w-7 place-items-center rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums shadow-sm ${isPodium
-                    ? "bg-gold text-primary-foreground dark:text-primary-foreground"
-                    : "bg-overlay-button text-overlay-button-ink"
-                    }`}
+                className="absolute top-2 left-2 grid min-w-7 place-items-center rounded-md bg-gold px-1.5 py-0.5 text-xs font-bold tabular-nums text-primary-foreground shadow-sm dark:text-primary-foreground"
             >
                 {position}
             </span>
@@ -974,7 +985,7 @@ function PublicEntryCard({
                     <span className="sr-only">#{position} </span>
                     {entry.name}
                 </strong>
-                <span className="text-xs text-muted-foreground">{percentileLabel} percentile</span>
+                {showPercentiles ? <span className="text-xs text-muted-foreground">{percentileLabel} percentile</span> : null}
             </div>
         </article>
     );

@@ -88,7 +88,7 @@ test.describe("Auth flows", () => {
         await expect(page.getByText("Create Your First Category")).toBeVisible();
 
         await page.getByRole("button", { name: "Settings", exact: true }).click();
-        await page.getByRole("button", { name: "Account", exact: true }).click();
+        await page.getByRole("button", { name: "Profile & account", exact: true }).click();
         await page.getByRole("button", { name: "Sign Out" }).click();
 
         await expect(

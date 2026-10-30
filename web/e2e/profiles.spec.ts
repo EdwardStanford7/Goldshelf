@@ -32,7 +32,12 @@ async function readOwnSlug(page: Page) {
 }
 
 async function openSettingsSection(page: Page, section: "Profile" | "Shelves" | "Privacy & social" | "Account") {
-    const tab = page.getByRole("button", { name: section, exact: true });
+    const tabLabel = section === "Shelves"
+        ? "Library & ranking"
+        : section === "Profile" || section === "Account"
+            ? "Profile & account"
+            : section;
+    const tab = page.getByRole("button", { name: tabLabel, exact: true });
     if (await tab.getAttribute("aria-current") !== "page") {
         await tab.click();
     }
@@ -121,6 +126,7 @@ test.describe("Profiles", () => {
         await gotoApp(page, "/profile");
         await openSettingsSection(page, "Account");
 
+        await page.getByText("Delete account", { exact: true }).click();
         await page.getByLabel("Delete account confirmation").fill("DELETE");
         await Promise.all([
             page.waitForURL(/\/signin$/),
@@ -561,9 +567,10 @@ test.describe("Profiles", () => {
         await gotoApp(alicePage, "/profile");
         await openSettingsSection(alicePage, "Privacy & social");
         await alicePage.getByLabel("Profile handle, name, or profile link").fill(bobSlug);
-        // Bob's follower row also offers a follow-back "Follow" button; the
-        // Find Profiles submit comes first in the page.
-        await alicePage.getByRole("button", { name: "Follow", exact: true }).first().click();
+        await alicePage.getByLabel("Profile handle, name, or profile link")
+            .locator("xpath=ancestor::form")
+            .getByRole("button", { name: "Follow", exact: true })
+            .click();
         await expect(alicePage.getByText("Follow request sent.")).toBeVisible();
         // Bob can appear in both Followers and Sent Requests.
         await expect(alicePage.getByText("Bob Stone").first()).toBeVisible();

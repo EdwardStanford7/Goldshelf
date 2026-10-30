@@ -31,7 +31,7 @@ async function openQueueSettings(page: Page) {
     }
 
     await gotoApp(page, "/profile");
-    await page.getByRole("button", { name: "Queue", exact: true }).click();
+    await page.getByRole("button", { name: "Library & ranking", exact: true }).click();
     await expect(queueToggle).toBeVisible();
 }
 

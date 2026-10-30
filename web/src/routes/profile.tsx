@@ -52,7 +52,7 @@ interface CropCenter {
     y: number;
 }
 
-type SettingsSection = "profile" | "shelves" | "social" | "ranking" | "queue" | "appearance" | "account";
+type SettingsSection = "profile" | "library" | "social";
 
 export const Route = createFileRoute("/profile")({
     loader: async () => {
@@ -597,7 +597,7 @@ function ProfileRoute() {
     }
 
     return (
-        <main className="mx-auto grid min-h-screen w-full max-w-7xl content-start gap-6 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
+        <main className="mx-auto grid min-h-screen w-full max-w-[96rem] content-start gap-6 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
             {profileImageDraft ? (
                 <ProfilePhotoEditor
                     file={profileImageDraft.file}
@@ -627,55 +627,77 @@ function ProfileRoute() {
                 </Button>
             </section>
 
-            <div className="grid w-full items-start gap-6 lg:grid-cols-[11.5rem_minmax(0,1fr)]">
+            <div className="grid w-full items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
                 <aside className="flex min-w-0 gap-1 overflow-x-auto border-b border-border pb-3 lg:sticky lg:top-20 lg:grid lg:gap-2 lg:overflow-visible lg:border-b-0 lg:pb-0">
                     <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Settings</p>
-                    <SettingsSectionButton active={activeSettingsSection === "profile"} label="Profile" onSelect={() => setActiveSettingsSection("profile")} />
-                    <SettingsSectionButton active={activeSettingsSection === "shelves"} label="Shelves" onSelect={() => setActiveSettingsSection("shelves")} />
+                    <SettingsSectionButton active={activeSettingsSection === "profile"} label="Profile & account" onSelect={() => setActiveSettingsSection("profile")} />
+                    <SettingsSectionButton active={activeSettingsSection === "library"} label="Library & ranking" onSelect={() => setActiveSettingsSection("library")} />
                     <SettingsSectionButton active={activeSettingsSection === "social"} badge={settings.incomingFollowRequests.length} label="Privacy & social" onSelect={() => setActiveSettingsSection("social")} />
-                    <SettingsSectionButton active={activeSettingsSection === "ranking"} label="Ranking" onSelect={() => setActiveSettingsSection("ranking")} />
-                    <SettingsSectionButton active={activeSettingsSection === "queue"} label="Queue" onSelect={() => setActiveSettingsSection("queue")} />
-                    <SettingsSectionButton active={activeSettingsSection === "appearance"} label="Appearance" onSelect={() => setActiveSettingsSection("appearance")} />
-                    <SettingsSectionButton active={activeSettingsSection === "account"} label="Account" onSelect={() => setActiveSettingsSection("account")} />
                 </aside>
 
-                <div className="m-0 min-w-0 max-w-[42rem] rounded-xl border border-border bg-card p-[clamp(1.25rem,3vw,1.75rem)] shadow-panel">
-                <div className={activeSettingsSection === "profile" || activeSettingsSection === "shelves" ? "grid min-w-0 content-start gap-6" : "hidden"}>
+                <div className={`m-0 min-w-0 rounded-xl border border-border bg-card p-[clamp(1.25rem,3vw,2.25rem)] shadow-panel ${activeSettingsSection === "profile" ? "max-w-[54rem]" : ""}`}>
+                <div className={activeSettingsSection === "profile"
+                    ? "grid min-w-0 content-start gap-6"
+                    : activeSettingsSection === "library"
+                        ? "grid min-w-0 content-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,2fr)]"
+                        : "hidden"}>
                     <Card id="profile" className={activeSettingsSection === "profile" ? "scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
                         <div className="border-b border-border pb-5">
                             <h2 className="m-0 text-2xl font-normal">Public profile</h2>
                             <p className="mb-0 mt-1 text-sm text-muted-foreground">Control how other people find and recognize you.</p>
                         </div>
-                        <div className="mb-4 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-[0.8rem] [&_h1]:m-0 [&_h1]:leading-[1.1]">
-                            <ProfileAvatar currentUser imageKey={settings.user.imageKey} userId={settings.user.id} />
-                            <div>
-                                <h2 className="text-2xl">{settings.user.name}</h2>
-                                <p className="text-muted-foreground">@{settings.user.slug}</p>
-                                <ProfileVisibilityBadge isPublic={settings.user.isPublic} />
-                                <div className="mt-[0.65rem] flex flex-wrap gap-2">
-                                    <label className={`w-fit rounded-sm border border-border bg-card px-[0.8rem] py-[0.55rem] text-foreground ${savingProfileImage ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}>
-                                        <span>{savingProfileImage ? "Uploading..." : "Upload Photo"}</span>
-                                        <input
-                                            accept="image/*"
-                                            className="absolute h-px w-px overflow-hidden [clip:rect(0,0,0,0)]"
-                                            disabled={savingProfileImage}
-                                            type="file"
-                                            onChange={(event) => void handleProfileImageInput(event)}
-                                        />
-                                    </label>
-                                    <Button
-                                        variant="outline"
-                                        disabled={savingProfileImage || !hasStoredImage(settings.user.imageKey)}
-                                        type="button"
-                                        onClick={() => void handleRemoveProfileImage()}
-                                    >
-                                        Remove
-                                    </Button>
+                        <div className="mb-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
+                            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-[0.8rem] [&_h1]:m-0 [&_h1]:leading-[1.1]">
+                                <ProfileAvatar currentUser imageKey={settings.user.imageKey} userId={settings.user.id} />
+                                <div>
+                                    <h2 className="text-2xl">{settings.user.name}</h2>
+                                    <p className="text-muted-foreground">@{settings.user.slug}</p>
+                                    <ProfileVisibilityBadge isPublic={settings.user.isPublic} />
+                                    <div className="mt-[0.65rem] flex flex-wrap gap-2">
+                                        <label className={`w-fit rounded-sm border border-border bg-card px-[0.8rem] py-[0.55rem] text-foreground ${savingProfileImage ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}>
+                                            <span>{savingProfileImage ? "Uploading..." : "Upload Photo"}</span>
+                                            <input
+                                                accept="image/*"
+                                                className="absolute h-px w-px overflow-hidden [clip:rect(0,0,0,0)]"
+                                                disabled={savingProfileImage}
+                                                type="file"
+                                                onChange={(event) => void handleProfileImageInput(event)}
+                                            />
+                                        </label>
+                                        <Button
+                                            variant="outline"
+                                            disabled={savingProfileImage || !hasStoredImage(settings.user.imageKey)}
+                                            type="button"
+                                            onClick={() => void handleRemoveProfileImage()}
+                                        >
+                                            Remove
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="rounded-lg bg-muted/35 p-4">
+                                <h2 className="m-0 text-lg">Appearance</h2>
+                                <p className="mb-3 mt-1 text-sm text-muted-foreground">Choose how Goldshelf looks on this device.</p>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {(["light", "dark", "system"] as ThemeMode[]).map((mode) => (
+                                        <Button
+                                            key={mode}
+                                            type="button"
+                                            variant={themeMode === mode ? "secondary" : "outline"}
+                                            onClick={() => {
+                                                setThemeMode(mode);
+                                                saveThemeMode(mode);
+                                                applyThemeMode(mode);
+                                            }}
+                                        >
+                                            {mode[0]?.toUpperCase()}{mode.slice(1)}
+                                        </Button>
+                                    ))}
                                 </div>
                             </div>
                         </div>
 
-                        <form className="grid gap-[0.8rem]" onSubmit={handleProfileSubmit}>
+                        <form className="grid gap-[0.8rem] sm:grid-cols-2" onSubmit={handleProfileSubmit}>
                             <label className="grid gap-[0.35rem]">
                                 <span>Display Name</span>
                                 <Input
@@ -725,7 +747,7 @@ function ProfileRoute() {
                                     Share new entries from shown rankings. This never shares hidden rankings; a private profile still limits activity to accepted followers.
                                 </p>
                             </label>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2 sm:col-span-2">
                                 <Button size="lg" disabled={savingProfile} type="submit">
                                     {savingProfile ? "Saving..." : "Save Profile"}
                                 </Button>
@@ -736,7 +758,7 @@ function ProfileRoute() {
                         </form>
                     </Card>
 
-                    <Card id="shelves" className={activeSettingsSection === "shelves" ? "scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
+                    <Card id="shelves" className={activeSettingsSection === "library" ? "scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
                         <div className="flex items-center justify-between gap-3">
                             <div>
                                 <h2 className="m-0 text-2xl font-normal">Manage shelves</h2>
@@ -778,14 +800,32 @@ function ProfileRoute() {
                             </EmptyState>
                         )}
                     </Card>
+                    {activeSettingsSection === "library" ? (
+                        <LibraryPreferences
+                            queueSettings={settings.queueSettings}
+                            savingQueueSettings={savingQueueSettings}
+                            showEntryPercentile={showEntryPercentile}
+                            onQueueSettingChange={handleQueueSettingChange}
+                            onShowEntryPercentileChange={(nextValue) => {
+                                setShowEntryPercentile(nextValue);
+                                saveShowEntryPercentile(nextValue);
+                            }}
+                        />
+                    ) : null}
                 </div>
 
-                <div className={activeSettingsSection === "social" ? "mt-0 grid min-w-0 content-start gap-6" : "hidden"}>
-                    <div className="border-b border-border pb-5">
+                <div className={activeSettingsSection === "social" ? "mt-0 grid min-w-0 content-start gap-6 xl:grid-cols-2" : "hidden"}>
+                    <div className="border-b border-border pb-5 xl:col-span-2">
                         <h2 className="m-0 text-2xl font-normal">People</h2>
                         <p className="mb-0 mt-1 text-sm text-muted-foreground">Requests, who you follow, who follows you, and who you have blocked.</p>
                     </div>
-                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0 xl:order-4">
+                        <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Followers</h2><span className="text-muted-foreground">{settings.followers.length}</span></div>
+                        {settings.followers.length > 0 ? <FollowProfileList profiles={settings.followers} renderActions={renderFollowerAction} /> : (
+                            <EmptyState compact icon={Users} title="No Followers">Accepted followers appear here.</EmptyState>
+                        )}
+                    </Card>
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0 xl:order-2">
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-lg font-semibold">Follow Requests</h2>
                             <span className="text-muted-foreground">{settings.incomingFollowRequests.length}</span>
@@ -822,7 +862,7 @@ function ProfileRoute() {
                             </EmptyState>
                         )}
                     </Card>
-                    <Card id="social" className="scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
+                    <Card id="social" className="scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0 xl:order-1">
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-lg font-semibold">Find Profiles</h2>
                             <span className="text-muted-foreground">{followSearchLoading ? "Searching..." : "Profile search"}</span>
@@ -852,7 +892,7 @@ function ProfileRoute() {
                         )}
                     </Card>
 
-                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0 xl:order-3">
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-lg font-semibold">Following</h2>
                             <span className="text-muted-foreground">{settings.following.length}</span>
@@ -879,7 +919,7 @@ function ProfileRoute() {
                         )}
                     </Card>
 
-                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0">
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0 xl:order-5">
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-lg font-semibold">Sent Requests</h2>
                             <span className="text-muted-foreground">{settings.outgoingFollowRequests.length}</span>
@@ -905,159 +945,58 @@ function ProfileRoute() {
                             </EmptyState>
                         )}
                     </Card>
-                </div>
-
-                <div className={activeSettingsSection === "social" || activeSettingsSection === "ranking" || activeSettingsSection === "queue" || activeSettingsSection === "appearance" || activeSettingsSection === "account" ? "mt-6 grid min-w-0 content-start gap-6" : "hidden"}>
-
-                    <Card className={activeSettingsSection === "ranking" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
-                        <div className="border-b border-border pb-5">
-                            <h2 className="m-0 text-2xl font-normal">Ranking experience</h2>
-                            <p className="mb-0 mt-1 text-sm text-muted-foreground">Choose how ranked lists are presented on this device.</p>
-                        </div>
-                        <label className="flex items-center justify-between gap-5 border-b border-border pb-5">
-                            <span className="grid gap-1">
-                                <strong>Show percentiles</strong>
-                                <span className="text-sm text-muted-foreground">Display an item’s percentile alongside its rank.</span>
-                            </span>
-                            <input
-                                aria-label="Show entry percentiles"
-                                checked={showEntryPercentile}
-                                className="w-auto"
-                                type="checkbox"
-                                onChange={(event) => {
-                                    const nextValue = event.target.checked;
-                                    setShowEntryPercentile(nextValue);
-                                    saveShowEntryPercentile(nextValue);
-                                }}
-                            />
-                        </label>
-                    </Card>
-
-                    <Card className={activeSettingsSection === "queue" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
-                        <div className="border-b border-border pb-5">
-                            <h2 className="m-0 text-2xl font-normal">Queue behavior</h2>
-                            <p className="mb-0 mt-1 text-sm text-muted-foreground">Control how entries wait before you rank them.</p>
-                        </div>
-                        {([
-                            ["enabled", "Enable the queue", "Allow new entries to be saved before ranking."],
-                            ["promptForMissingImages", "Prompt for missing images", "Offer an image before a new entry begins ranking."],
-                            ["randomizeReadyEntries", "Randomize queue runs", "Mix ready entries rather than using their visible order."]
-                        ] as const).map(([key, title, description]) => (
-                            <label className="flex items-center justify-between gap-5 border-b border-border pb-5 last:border-b-0 last:pb-0" key={key}>
-                                <span className="grid gap-1">
-                                    <strong>{title}</strong>
-                                    <span className="text-sm text-muted-foreground">{description}</span>
-                                </span>
-                                <input
-                                    aria-label={title}
-                                    checked={settings.queueSettings[key]}
-                                    className="w-auto"
-                                    disabled={savingQueueSettings}
-                                    type="checkbox"
-                                    onChange={(event) => void handleQueueSettingChange(key, event.target.checked)}
-                                />
-                            </label>
-                        ))}
-                    </Card>
-
-                    <Card id="appearance" className={activeSettingsSection === "appearance" ? "scroll-mt-6 min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
-                        <div>
-                            <h2 className="m-0 text-xl">Appearance</h2>
-                            <p className="mb-0 text-sm text-muted-foreground">Choose how Goldshelf looks on this device.</p>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                            {(["light", "dark", "system"] as ThemeMode[]).map((mode) => (
-                                <Button
-                                    key={mode}
-                                    type="button"
-                                    variant={themeMode === mode ? "secondary" : "outline"}
-                                    onClick={() => {
-                                        setThemeMode(mode);
-                                        saveThemeMode(mode);
-                                        applyThemeMode(mode);
-                                    }}
-                                >
-                                    {mode[0]?.toUpperCase()}{mode.slice(1)}
-                                </Button>
-                            ))}
-                        </div>
-                    </Card>
-
-                    <Card className={activeSettingsSection === "social" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold">Blocked Profiles</h2>
-                            <span className="text-muted-foreground">{settings.blockedProfiles.length}</span>
-                        </div>
+                    <Card className="min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0 xl:order-6">
+                        <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Blocked Profiles</h2><span className="text-muted-foreground">{settings.blockedProfiles.length}</span></div>
                         {settings.blockedProfiles.length > 0 ? (
                             <FollowProfileList
                                 profiles={settings.blockedProfiles}
                                 metaLabel={() => "Blocked"}
-                                renderActions={(profile) => (
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={savingBlockId === profile.userId}
-                                        type="button"
-                                        onClick={() => void handleUnblockProfile(profile)}
-                                    >
-                                        {savingBlockId === profile.userId ? "Saving..." : "Unblock"}
-                                    </Button>
-                                )}
+                                renderActions={(profile) => <Button size="sm" variant="outline" disabled={savingBlockId === profile.userId} type="button" onClick={() => void handleUnblockProfile(profile)}>{savingBlockId === profile.userId ? "Saving..." : "Unblock"}</Button>}
                             />
-                        ) : (
-                            <EmptyState compact icon={Ban} title="No Blocked Profiles">
-                                Blocked profiles cannot follow you or request access.
-                            </EmptyState>
-                        )}
+                        ) : <EmptyState compact icon={Ban} title="No Blocked Profiles">Blocked profiles cannot follow you or request access.</EmptyState>}
                     </Card>
+                </div>
 
-                    <Card className={activeSettingsSection === "social" ? "min-w-0 gap-4 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
-                        <div className="flex items-center justify-between gap-3">
-                            <h2 className="text-lg font-semibold">Followers</h2>
-                            <span className="text-muted-foreground">{settings.followers.length}</span>
-                        </div>
-                        {settings.followers.length > 0 ? (
-                            <FollowProfileList
-                                profiles={settings.followers}
-                                renderActions={renderFollowerAction}
-                            />
-                        ) : (
-                            <EmptyState compact icon={Users} title="No Followers">
-                                Accepted followers appear here.
-                            </EmptyState>
-                        )}
-                    </Card>
+                <div className={activeSettingsSection === "profile" ? "mt-6 grid min-w-0 content-start gap-6" : "hidden"}>
 
-                    <Card id="account" className={activeSettingsSection === "account" ? "scroll-mt-6 min-w-0 gap-4 border-destructive/40 bg-transparent px-0 py-0 shadow-none ring-0" : "hidden"}>
-                        <div>
-                            <h2 className="m-0 text-lg font-semibold text-destructive">Delete Account</h2>
-                            <p className="mb-0 text-sm text-muted-foreground">
-                                Permanently deletes your profile, rankings, follow data, and uploaded images. This cannot be undone.
-                            </p>
-                        </div>
-                        <form className="grid gap-2" onSubmit={handleAccountDeletion}>
-                            <label className="grid gap-1 text-sm">
-                                <span>Type DELETE to confirm</span>
-                                <Input
-                                    aria-label="Delete account confirmation"
-                                    autoComplete="off"
-                                    disabled={deletingAccount}
-                                    value={deleteConfirmation}
-                                    onChange={(event) => setDeleteConfirmation(event.target.value)}
-                                />
-                            </label>
-                            <Button
-                                disabled={deletingAccount || deleteConfirmation.trim() !== "DELETE"}
-                                type="submit"
-                                variant="destructive"
-                            >
-                                {deletingAccount ? "Deleting..." : "Delete Account Permanently"}
-                            </Button>
-                        </form>
-                        <div className="border-t border-border pt-4">
-                            <Button type="button" variant="outline" onClick={() => void handleSignOut()}>
-                                Sign Out
-                            </Button>
+                    <Card id="account" className="scroll-mt-6 min-w-0 gap-3 border-t border-border bg-transparent px-0 pt-6 shadow-none ring-0">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h2 className="m-0 text-lg font-semibold">Account</h2>
+                                <p className="mb-0 text-sm text-muted-foreground">Sign out or manage permanent account removal.</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button type="button" variant="outline" onClick={() => void handleSignOut()}>
+                                    Sign Out
+                                </Button>
+                                <details className="relative">
+                                    <summary className="flex h-9 cursor-pointer list-none items-center rounded-lg border border-destructive/50 px-3 text-sm font-medium text-destructive [&::-webkit-details-marker]:hidden">
+                                        Delete account
+                                    </summary>
+                                    <div className="absolute right-0 z-20 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-destructive/40 bg-card p-3 shadow-panel">
+                                        <p className="mb-3 mt-0 text-sm text-muted-foreground">Permanently deletes your profile, rankings, follow data, and uploaded images. This cannot be undone.</p>
+                                        <form className="grid gap-2" onSubmit={handleAccountDeletion}>
+                                            <label className="grid gap-1 text-sm">
+                                                <span>Type DELETE to confirm</span>
+                                                <Input
+                                                    aria-label="Delete account confirmation"
+                                                    autoComplete="off"
+                                                    disabled={deletingAccount}
+                                                    value={deleteConfirmation}
+                                                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                                                />
+                                            </label>
+                                            <Button
+                                                disabled={deletingAccount || deleteConfirmation.trim() !== "DELETE"}
+                                                type="submit"
+                                                variant="destructive"
+                                            >
+                                                {deletingAccount ? "Deleting..." : "Delete Account Permanently"}
+                                            </Button>
+                                        </form>
+                                    </div>
+                                </details>
+                            </div>
                         </div>
                     </Card>
                 </div>
@@ -1083,6 +1022,54 @@ function SettingsSectionButton({ active, badge = 0, label, onSelect }: { active:
                 <span aria-hidden="true" title={`${badge} pending`} className="rounded-full bg-accent-strong px-1.5 text-[0.68rem] font-semibold tabular-nums text-background">{badge}</span>
             ) : null}
         </button>
+    );
+}
+
+function LibraryPreferences({
+    queueSettings,
+    savingQueueSettings,
+    showEntryPercentile,
+    onQueueSettingChange,
+    onShowEntryPercentileChange
+}: {
+    queueSettings: ProfileSettingsData["queueSettings"];
+    savingQueueSettings: boolean;
+    showEntryPercentile: boolean;
+    onQueueSettingChange: (key: keyof ProfileSettingsData["queueSettings"], enabled: boolean) => Promise<void>;
+    onShowEntryPercentileChange: (enabled: boolean) => void;
+}) {
+    return (
+        <div className="grid min-w-0 content-start gap-6 xl:sticky xl:top-20">
+            <Card className="min-w-0 gap-4 bg-muted/35 px-5 py-5 shadow-none ring-0">
+                <div>
+                    <h2 className="m-0 text-xl">Ranking experience</h2>
+                    <p className="mb-0 mt-1 text-sm text-muted-foreground">Presentation preferences for this device.</p>
+                </div>
+                <label className="flex items-center justify-between gap-5">
+                    <span className="grid gap-1">
+                        <strong>Show percentiles</strong>
+                        <span className="text-sm text-muted-foreground">Display an item’s percentile alongside its rank.</span>
+                    </span>
+                    <input aria-label="Show entry percentiles" checked={showEntryPercentile} className="w-auto" type="checkbox" onChange={(event) => onShowEntryPercentileChange(event.target.checked)} />
+                </label>
+            </Card>
+            <Card className="min-w-0 gap-4 bg-muted/35 px-5 py-5 shadow-none ring-0">
+                <div>
+                    <h2 className="m-0 text-xl">Queue behavior</h2>
+                    <p className="mb-0 mt-1 text-sm text-muted-foreground">Control how entries wait before ranking.</p>
+                </div>
+                {([
+                    ["enabled", "Enable the queue", "Allow new entries to be saved before ranking."],
+                    ["promptForMissingImages", "Prompt for missing images", "Offer an image before a new entry begins ranking."],
+                    ["randomizeReadyEntries", "Randomize queue runs", "Mix ready entries rather than using their visible order."]
+                ] as const).map(([key, title, description]) => (
+                    <label className="flex items-center justify-between gap-5 border-t border-border pt-4 first:border-t-0 first:pt-0" key={key}>
+                        <span className="grid gap-1"><strong>{title}</strong><span className="text-sm text-muted-foreground">{description}</span></span>
+                        <input aria-label={title} checked={queueSettings[key]} className="w-auto" disabled={savingQueueSettings} type="checkbox" onChange={(event) => void onQueueSettingChange(key, event.target.checked)} />
+                    </label>
+                ))}
+            </Card>
+        </div>
     );
 }
 
