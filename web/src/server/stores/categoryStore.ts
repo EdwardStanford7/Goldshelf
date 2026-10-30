@@ -6,13 +6,14 @@ export interface CategoryRow {
     sort_order: number;
     created_at: number;
     is_public?: number;
+    visibility: "private" | "followers" | "public";
 }
 
 export async function getOwnedCategory(userId: string, categoryId: string) {
     return first<CategoryRow>(
         getDb()
             .prepare(
-                `SELECT id, name, sort_order, created_at, is_public
+                `SELECT id, name, sort_order, created_at, is_public, visibility
          FROM categories
          WHERE user_id = ? AND id = ?`
             )

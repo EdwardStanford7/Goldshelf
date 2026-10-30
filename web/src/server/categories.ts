@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { hasStoredImage } from "@/lib/images";
+import type { CategoryVisibility } from "@/lib/types";
 import { all, assertOwned, first, getDb, newId, now } from "@/server/lib/db";
 import { releaseImageReferences } from "@/server/lib/imageAssets";
 import { MAX_CATEGORY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
@@ -13,7 +14,7 @@ import { assertNoActiveBinarySession } from "./engine/rankingSessions";
 
 export const createCategory = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .validator((data: { name: string; isPublic?: boolean }) => data)
+    .validator((data: { name: string; visibility?: CategoryVisibility; isPublic?: boolean }) => data)
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const cleanName = normalizeRequiredText(data.name, "Category name", MAX_CATEGORY_NAME_LENGTH);
@@ -33,10 +34,10 @@ export const createCategory = createServerFn({ method: "POST" })
 
         await db
             .prepare(
-                `INSERT INTO categories (id, user_id, name, sort_order, created_at, updated_at, is_public)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+                `INSERT INTO categories (id, user_id, name, sort_order, created_at, updated_at, is_public, visibility)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
             )
-            .bind(id, userId, cleanName, (maxSort?.max_sort ?? -1) + 1, createdAt, createdAt, data.isPublic ? 1 : 0)
+            .bind(id, userId, cleanName, (maxSort?.max_sort ?? -1) + 1, createdAt, createdAt, (data.visibility ?? (data.isPublic ? "public" : "private")) === "public" ? 1 : 0, data.visibility ?? (data.isPublic ? "public" : "private"))
             .run();
 
         return id;
@@ -83,7 +84,7 @@ export const moveCategoryRelativeToCategory = createServerFn({ method: "POST" })
         const categories = await all<CategoryRow>(
             db
                 .prepare(
-                    `SELECT id, name, sort_order, created_at, is_public
+                    `SELECT id, name, sort_order, created_at, is_public, visibility
          FROM categories
          WHERE user_id = ?
          ORDER BY sort_order ASC, name ASC`
@@ -181,7 +182,7 @@ export const deleteCategory = createServerFn({ method: "POST" })
 
 export const updateCategoryVisibility = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .validator((data: { categoryId: string; isPublic: boolean }) => data)
+    .validator((data: { categoryId: string; visibility?: CategoryVisibility; isPublic?: boolean }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const category = await getOwnedCategory(userId, input.categoryId);
@@ -190,13 +191,13 @@ export const updateCategoryVisibility = createServerFn({ method: "POST" })
         await getDb()
             .prepare(
                 `UPDATE categories
-       SET is_public = ?, updated_at = ?
+       SET is_public = ?, visibility = ?, updated_at = ?
        WHERE user_id = ? AND id = ?`
             )
-            .bind(input.isPublic ? 1 : 0, now(), userId, input.categoryId)
+            .bind((input.visibility ?? (input.isPublic ? "public" : "private")) === "public" ? 1 : 0, input.visibility ?? (input.isPublic ? "public" : "private"), now(), userId, input.categoryId)
             .run();
 
-        return { categoryId: input.categoryId, isPublic: input.isPublic };
+        return { categoryId: input.categoryId, visibility: input.visibility ?? (input.isPublic ? "public" : "private") };
     });
 
 function normalizeCategoryIds(value: unknown) {
@@ -234,7 +235,7 @@ async function assertOwnedCategoryIds(userId: string, categoryIds: string[]) {
 
 export const updateCategoriesVisibility = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .validator((data: { categoryIds: string[]; isPublic: boolean }) => data)
+    .validator((data: { categoryIds: string[]; visibility?: CategoryVisibility; isPublic?: boolean }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const categoryIds = normalizeCategoryIds(input.categoryIds);
@@ -243,14 +244,14 @@ export const updateCategoriesVisibility = createServerFn({ method: "POST" })
         await getDb()
             .prepare(
                 `UPDATE categories
-                 SET is_public = ?, updated_at = ?
+                 SET is_public = ?, visibility = ?, updated_at = ?
                  WHERE user_id = ?
                    AND id IN (SELECT value FROM json_each(?))`
             )
-            .bind(input.isPublic ? 1 : 0, now(), userId, JSON.stringify(categoryIds))
+            .bind((input.visibility ?? (input.isPublic ? "public" : "private")) === "public" ? 1 : 0, input.visibility ?? (input.isPublic ? "public" : "private"), now(), userId, JSON.stringify(categoryIds))
             .run();
 
-        return { updatedCount: categoryIds.length, isPublic: input.isPublic };
+        return { updatedCount: categoryIds.length, visibility: input.visibility ?? (input.isPublic ? "public" : "private") };
     });
 
 export const moveCategoriesToQueue = createServerFn({ method: "POST" })

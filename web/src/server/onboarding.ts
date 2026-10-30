@@ -29,8 +29,8 @@ export const createOnboardingSampleRanking = createServerFn({ method: "POST" })
         const statements: D1PreparedStatement[] = [
             db
                 .prepare(
-                    `INSERT INTO categories (id, user_id, name, sort_order, created_at, updated_at, is_public)
-             VALUES (?, ?, ?, 0, ?, ?, 0)`
+                    `INSERT INTO categories (id, user_id, name, sort_order, created_at, updated_at, is_public, visibility)
+             VALUES (?, ?, ?, 0, ?, ?, 0, 'private')`
                 )
                 .bind(categoryId, userId, SAMPLE_CATEGORY_NAME, createdAt, createdAt)
         ];

@@ -116,7 +116,7 @@ export async function buildDashboard(
             db
                 .prepare(
                     `SELECT categories.id, categories.name, categories.sort_order,
-                            categories.created_at, categories.is_public,
+                            categories.created_at, categories.is_public, categories.visibility,
                             COUNT(entries.id) AS entry_count
                      FROM categories
                      LEFT JOIN entries ON entries.category_id = categories.id
@@ -124,7 +124,7 @@ export async function buildDashboard(
                        AND entries.status = 'active'
                      WHERE categories.user_id = ?
                      GROUP BY categories.id, categories.name, categories.sort_order,
-                              categories.created_at, categories.is_public
+                              categories.created_at, categories.is_public, categories.visibility
                      ORDER BY categories.sort_order ASC, categories.name ASC`
                 )
                 .bind(userId)
@@ -176,7 +176,8 @@ export async function buildDashboard(
             name: category.name,
             sortOrder: category.sort_order,
             createdAt: category.created_at,
-            isPublic: Boolean(category.is_public),
+            isPublic: category.visibility !== "private",
+            visibility: category.visibility,
             entryCount: category.entry_count,
             entries: includeAllEntries || category.id === loadedCategoryId
                 ? orderEntries(entriesByCategory.get(category.id) ?? [])

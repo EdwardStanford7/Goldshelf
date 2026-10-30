@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, ExternalLink, ListOrdered, Swords, Users } from "lucide-react";
 import { GildedBackground } from "./GildedBackground";
+import { hasStoredImage } from "@/lib/images";
+import type { ExploreProfile } from "@/lib/types";
 import "./marketing.css";
 
 const FEATURES = [
@@ -24,7 +26,7 @@ const FEATURES = [
 const CATEGORIES = ["Films", "Albums", "Books", "Games", "Restaurants", "Anything"] as const;
 const GITHUB_URL = "https://github.com/EdwardStanford7/Goldshelf";
 
-export function MarketingLanding() {
+export function MarketingLanding({ trendingProfiles }: { trendingProfiles: ExploreProfile[] }) {
     return (
         <main className="relative min-h-screen overflow-hidden text-foreground">
             <div className="gs-field" aria-hidden="true" />
@@ -86,10 +88,11 @@ export function MarketingLanding() {
                             <ArrowRight className="size-4" aria-hidden="true" />
                         </Link>
                         <Link
-                            to="/signin"
+                            to="/"
+                            hash="discover"
                             className="gs-ghost inline-flex h-12 items-center rounded-full px-6 text-base font-medium"
                         >
-                            Sign in
+                            Browse public shelves
                         </Link>
                     </div>
 
@@ -105,6 +108,24 @@ export function MarketingLanding() {
                         </div>
                     </div>
                 </section>
+
+                {trendingProfiles.length > 0 ? (
+                    <section className="gs-rise grid gap-4 pb-4" id="discover" style={{ animationDelay: "430ms" }}>
+                        <div className="flex flex-wrap items-end justify-between gap-3">
+                            <div className="grid gap-1">
+                                <span className="gs-kicker text-xs font-semibold uppercase">Discover</span>
+                                <h2 className="font-display text-3xl font-medium sm:text-4xl">Trending public shelves</h2>
+                                <p className="m-0 max-w-xl text-sm text-muted-foreground">Profiles rise with public shelves, community follows, and recently shared activity.</p>
+                            </div>
+                            <Link className="gs-ghost inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium" to="/signin">
+                                Join the community <ArrowRight className="size-4" />
+                            </Link>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            {trendingProfiles.slice(0, 4).map((profile) => <TrendingProfileCard key={profile.userId} profile={profile} />)}
+                        </div>
+                    </section>
+                ) : null}
 
                 {/* Features ------------------------------------------------- */}
                 <section className="grid gap-4 sm:grid-cols-3 lg:gap-6">
@@ -149,5 +170,29 @@ export function MarketingLanding() {
                 </footer>
             </div>
         </main>
+    );
+}
+
+function TrendingProfileCard({ profile }: { profile: ExploreProfile }) {
+    const avatarSrc = hasStoredImage(profile.imageKey)
+        ? `/api/public-profile-image/${encodeURIComponent(profile.userId)}?v=${encodeURIComponent(profile.imageKey)}`
+        : null;
+    return (
+        <Link
+            className="gs-panel gs-glass grid min-w-0 gap-3 rounded-2xl p-4 text-foreground no-underline transition-transform hover:-translate-y-0.5"
+            params={{ profileSlug: profile.slug }}
+            to="/u/$profileSlug"
+        >
+            <div className="flex items-center gap-3">
+                <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-gold/15 text-sm font-semibold text-gold">
+                    {avatarSrc ? <img alt="" className="size-full object-cover" src={avatarSrc} /> : profile.name.trim().charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                    <strong className="block truncate font-display text-lg font-medium">{profile.name}</strong>
+                    <span className="block truncate text-sm text-muted-foreground">@{profile.slug}</span>
+                </div>
+            </div>
+            <span className="text-sm text-muted-foreground">{profile.publicCategoryCount} {profile.publicCategoryCount === 1 ? "public shelf" : "public shelves"}</span>
+        </Link>
     );
 }

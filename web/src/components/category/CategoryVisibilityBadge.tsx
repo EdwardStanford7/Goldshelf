@@ -1,41 +1,44 @@
 import { Globe2, Lock, Users } from "lucide-react";
+import type { CategoryVisibility } from "@/lib/types";
 
 export function CategoryVisibilityBadge({
     isPublic,
+    visibility,
     profileIsPublic,
     className = ""
 }: {
     isPublic: boolean;
+    visibility?: CategoryVisibility;
     profileIsPublic?: boolean;
     className?: string;
 }) {
-    const visibility = !isPublic
+    const resolvedVisibility = visibility ?? (!isPublic
         ? "private"
         : profileIsPublic === false
             ? "followers"
-            : "public";
-    const label = visibility === "public"
+            : "public");
+    const label = resolvedVisibility === "public"
         ? "Public"
-        : visibility === "followers"
+        : resolvedVisibility === "followers"
             ? "Followers"
             : "Private";
-    const title = visibility === "public"
+    const title = resolvedVisibility === "public"
         ? "Visible to anyone who can open this public profile"
-        : visibility === "followers"
+        : resolvedVisibility === "followers"
             ? "Shown on a private profile, visible to accepted followers"
             : "Hidden from this profile";
-    const Icon = visibility === "public"
+    const Icon = resolvedVisibility === "public"
         ? Globe2
-        : visibility === "followers"
+        : resolvedVisibility === "followers"
             ? Users
             : Lock;
 
     return (
         <span
             className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-[0.15rem] text-[0.68rem] font-bold leading-none uppercase tracking-normal ${
-                visibility === "public"
+                resolvedVisibility === "public"
                     ? "border-primary/40 bg-primary/15 text-primary"
-                    : visibility === "followers"
+                    : resolvedVisibility === "followers"
                         ? "border-border bg-secondary text-accent-strong"
                         : "border-border bg-muted text-muted-foreground"
             } ${className}`.trim()}

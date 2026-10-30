@@ -7,7 +7,6 @@ import {
     Globe2,
     ListOrdered,
     Lock,
-    Shield,
     UserCheck,
     UserMinus,
     UserPlus,
@@ -111,7 +110,6 @@ function PublicProfileRoute() {
     const [copyMode, setCopyMode] = useState<CopyMode>("new");
     const [copyCategoryName, setCopyCategoryName] = useState("");
     const [copyTargetCategoryId, setCopyTargetCategoryId] = useState("");
-    const [adminPrivacySaving, setAdminPrivacySaving] = useState(false);
     const entryScrollRef = useRef<HTMLDivElement | null>(null);
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
         loaderData?.categories[0]?.id ?? null
@@ -223,43 +221,6 @@ function PublicProfileRoute() {
         entryScrollRef.current?.scrollTo({ top: 0 });
     }
 
-    async function setAdminPrivacyOverride(enabled: boolean) {
-        if (!profileData || !profileData.viewer.canUseAdminPrivacyOverride) {
-            return;
-        }
-
-        setAdminPrivacySaving(true);
-        try {
-            const nextProfileData = await loadPublicProfile({
-                data: {
-                    profileSlug: profileData.profile.slug,
-                    adminViewPrivate: enabled
-                }
-            });
-            if (!nextProfileData) {
-                setProfileData(null);
-                return;
-            }
-
-            const currentSelectedCategoryId = selectedCategoryId;
-            const nextSelectedCategoryId = nextProfileData.categories.some((category) => category.id === currentSelectedCategoryId)
-                ? currentSelectedCategoryId
-                : nextProfileData.categories[0]?.id ?? null;
-            setProfileData(nextProfileData);
-            setSelectedCategoryId(nextSelectedCategoryId);
-            setCopyDialogCategory(null);
-            showToast(enabled ? "Admin private lists shown." : "Privacy-respecting view restored.", "default");
-        } catch (error) {
-            if (redirectIfUnauthorized(error)) {
-                return;
-            }
-
-            showToast(error instanceof Error ? error.message : String(error), "danger");
-        } finally {
-            setAdminPrivacySaving(false);
-        }
-    }
-
     async function handleCopyCategory(sourceEntryIds: string[]) {
         if (!profileData || !copyDialogCategory || !profileData.viewer.isSignedIn || profileData.viewer.isSelf) {
             return;
@@ -359,7 +320,7 @@ function PublicProfileRoute() {
 
     const { profile, viewer } = profileData;
     const canCopySharedCategories = canViewProfile(profile.isPublic, false, viewer.relationState);
-    const showCategoryVisibility = profileData.categories.some((category) => !category.isPublic);
+    const showCategoryVisibility = profileData.categories.length > 0;
     const totalEntries = profileData.categories.reduce((count, category) => count + category.entries.length, 0);
     const selectedCategory = profileData.categories.find((category) => category.id === selectedCategoryId) ?? null;
 
@@ -382,12 +343,6 @@ function PublicProfileRoute() {
                                     {profile.name}
                                 </h1>
                                 <ProfileVisibilityBadge isPublic={profile.isPublic} />
-                                {viewer.adminPrivacyOverride ? (
-                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-wide text-destructive">
-                                        <Shield className="size-3" />
-                                        Admin Privacy View
-                                    </span>
-                                ) : null}
                             </div>
                             <p className="m-0 flex min-w-0 flex-wrap items-center gap-x-2 text-muted-foreground">
                                 <span className="truncate">@{profile.slug}</span>
@@ -417,24 +372,6 @@ function PublicProfileRoute() {
                                 onFollow={() => void handleFollow()}
                                 onUnfollow={() => void handleUnfollow()}
                             />
-                            {viewer.canUseAdminPrivacyOverride ? (
-                                <Button
-                                    disabled={adminPrivacySaving}
-                                    size="sm"
-                                    type="button"
-                                    variant={viewer.adminPrivacyOverride ? "default" : "outline"}
-                                    onClick={() => void setAdminPrivacyOverride(!viewer.adminPrivacyOverride)}
-                                >
-                                    <Shield data-icon="inline-start" />
-                                    <span>
-                                        {adminPrivacySaving
-                                            ? "Loading..."
-                                            : viewer.adminPrivacyOverride
-                                                ? "Respect privacy"
-                                                : "Admin: view private lists"}
-                                    </span>
-                                </Button>
-                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -463,7 +400,7 @@ function PublicProfileRoute() {
                                     <span className="min-w-0 truncate">{category.name}</span>
                                     <span className="flex shrink-0 items-center gap-1.5">
                                         {showCategoryVisibility ? (
-                                            <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profile.isPublic} />
+                                            <CategoryVisibilityBadge isPublic={category.isPublic} visibility={category.visibility} profileIsPublic={profile.isPublic} />
                                         ) : null}
                                         <span className="text-xs tabular-nums text-muted-foreground">{category.entries.length}</span>
                                     </span>
@@ -477,7 +414,7 @@ function PublicProfileRoute() {
                                 category={selectedCategory}
                                 copyDisabled={copyingCategoryId === selectedCategory.id}
                                 onCopy={
-                                    viewer.isSignedIn && !viewer.isSelf && selectedCategory.isPublic && canCopySharedCategories
+                                    viewer.isSignedIn && !viewer.isSelf && selectedCategory.visibility !== "private" && canCopySharedCategories
                                         ? () => openCopyDialog(selectedCategory)
                                         : undefined
                                 }
@@ -965,7 +902,7 @@ function PublicCategory({
                 <div className="grid min-w-0 gap-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <h2 className="min-w-0 truncate text-[clamp(1.5rem,3vw,2.1rem)] leading-none" id={`shelf-${category.id}`}>{category.name}</h2>
-                        {showVisibility ? <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={profileIsPublic} /> : null}
+                        {showVisibility ? <CategoryVisibilityBadge isPublic={category.isPublic} visibility={category.visibility} profileIsPublic={profileIsPublic} /> : null}
                     </div>
                     <p className="m-0 text-sm text-muted-foreground">
                         {entries.length} {entries.length === 1 ? "entry" : "entries"}, ranked by head-to-head picks

@@ -44,7 +44,7 @@ export const Route = createFileRoute("/api/images/$entryId")({
 
                 return await storedImageResponse(
                     entry.image_key,
-                    "private, max-age=31536000, immutable",
+                    "no-store",
                     "image/png"
                 ) ?? new Response("Not found", { status: 404 });
             },

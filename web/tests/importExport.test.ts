@@ -128,6 +128,7 @@ function category(name: string, entries: Entry[]): CategoryWithEntries {
         sortOrder: 0,
         createdAt: 0,
         isPublic: false,
+        visibility: "private",
         entryCount: entries.length,
         entries
     };

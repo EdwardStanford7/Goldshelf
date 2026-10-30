@@ -9,6 +9,7 @@ import {
     declineFollowRequest,
     followProfile,
     loadProfileSettings,
+    removeFollower,
     removeFollow,
     requestFollowByProfileSlug,
     searchPublicProfiles,
@@ -35,7 +36,7 @@ import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage } from "@/lib/images";
 import { applyThemeMode, readInitialThemeMode, saveThemeMode, type ThemeMode } from "@/lib/theme";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
-import type { ActivityVisibility, FollowProfileSummary, FollowSearchResult, ProfileSettingsData } from "@/lib/types";
+import type { ActivityVisibility, CategoryVisibility, FollowProfileSummary, FollowSearchResult, ProfileSettingsData } from "@/lib/types";
 
 const AVATAR_SIZE = 256;
 const MAX_LOCAL_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -187,6 +188,9 @@ function ProfileRoute() {
 
     async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (settings?.user.isPublic && !profileIsPublic && !window.confirm("Making your profile private removes all current followers. They can request access again.")) {
+            return;
+        }
         setSavingProfile(true);
         setStatus(null);
         setError(null);
@@ -322,13 +326,13 @@ function ProfileRoute() {
         }
     }
 
-    async function handleCategoryVisibility(categoryId: string, isPublic: boolean) {
+    async function handleCategoryVisibility(categoryId: string, visibility: CategoryVisibility) {
         setSavingCategoryId(categoryId);
         setStatus(null);
         setError(null);
 
         try {
-            await updateCategoryVisibility({ data: { categoryId, isPublic } });
+            await updateCategoryVisibility({ data: { categoryId, visibility } });
             await refreshSettingsAfterMutation();
             setStatus("Profile sharing saved.");
         } catch (visibilityError) {
@@ -432,6 +436,19 @@ function ProfileRoute() {
             setStatus("Profile unfollowed.");
         } catch (followError) {
             setActionError(followError);
+        } finally {
+            setSavingFollowId(null);
+        }
+    }
+
+    async function handleRemoveFollower(profile: FollowProfileSummary) {
+        setSavingFollowId(profile.userId);
+        try {
+            await removeFollower({ data: { followerUserId: profile.userId } });
+            await refreshSettingsAfterMutation();
+            setStatus(`Removed ${profile.name} from your followers.`);
+        } catch (error) {
+            setActionError(error);
         } finally {
             setSavingFollowId(null);
         }
@@ -556,6 +573,9 @@ function ProfileRoute() {
         return (
             <div className="flex flex-wrap justify-end gap-[0.4rem]">
                 {relationAction}
+                <Button size="sm" variant="outline" disabled={savingFollowId === profile.userId} type="button" onClick={() => void handleRemoveFollower(profile)}>
+                    {savingFollowId === profile.userId ? "Saving..." : "Remove"}
+                </Button>
                 {blockButton}
             </div>
         );
@@ -722,10 +742,10 @@ function ProfileRoute() {
                                 <h2 className="m-0 text-2xl font-normal">Manage shelves</h2>
                                 <p className="mb-0 mt-1 text-sm text-muted-foreground">Choose which rankings appear on your profile.</p>
                             </div>
-                            <span className="text-muted-foreground">{settings.categories.filter((category) => category.isPublic).length}</span>
+                            <span className="text-muted-foreground">{settings.categories.filter((category) => category.visibility !== "private").length}</span>
                         </div>
                         <p className="m-0 text-sm text-muted-foreground">
-                            Shown lists appear on your profile. On a private profile, accepted followers can see shown lists; hidden lists stay private.
+                            Choose an audience for each shelf. A private profile caps every shared shelf at accepted followers.
                         </p>
                         {settings.categories.length > 0 ? (
                             <div className="grid gap-[0.65rem]">
@@ -734,17 +754,21 @@ function ProfileRoute() {
                                         <span className="min-w-0">
                                             <span className="flex min-w-0 flex-wrap items-center gap-2">
                                                 <strong className="min-w-0 truncate">{category.name}</strong>
-                                                <CategoryVisibilityBadge isPublic={category.isPublic} profileIsPublic={settings.user.isPublic} />
+                                                <CategoryVisibilityBadge isPublic={category.isPublic} visibility={category.visibility} profileIsPublic={settings.user.isPublic} />
                                             </span>
                                             <small className="m-0 mt-[0.15rem] block text-muted-foreground">{category.entryCount} entries</small>
                                         </span>
-                                        <input
-                                            checked={category.isPublic}
-                                            className="w-auto"
+                                        <select
+                                            aria-label={`${category.name} visibility`}
+                                            className="h-9 rounded-lg border border-input bg-background px-2 text-sm"
                                             disabled={savingCategoryId === category.id}
-                                            type="checkbox"
-                                            onChange={(event) => void handleCategoryVisibility(category.id, event.target.checked)}
-                                        />
+                                            value={category.visibility}
+                                            onChange={(event) => void handleCategoryVisibility(category.id, event.target.value as CategoryVisibility)}
+                                        >
+                                            <option value="private">Private</option>
+                                            <option value="followers">Followers</option>
+                                            <option value="public">Public</option>
+                                        </select>
                                     </label>
                                 ))}
                             </div>

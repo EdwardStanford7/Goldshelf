@@ -34,9 +34,12 @@ export interface CategoryWithEntries {
     sortOrder: number;
     createdAt: number;
     isPublic: boolean;
+    visibility: CategoryVisibility;
     entryCount: number;
     entries: Entry[];
 }
+
+export type CategoryVisibility = "private" | "followers" | "public";
 
 export interface CurrentUserProfile {
     userId: string;
@@ -67,6 +70,7 @@ export interface ProfileSettingsCategory {
     sortOrder: number;
     entryCount: number;
     isPublic: boolean;
+    visibility: CategoryVisibility;
 }
 
 export type FollowStatus = "pending" | "accepted";
@@ -137,8 +141,6 @@ export interface PublicProfileData {
         isSelf: boolean;
         relationState: FollowRelationState;
         categories: ProfileCopyTargetCategory[];
-        canUseAdminPrivacyOverride: boolean;
-        adminPrivacyOverride: boolean;
     };
 }
 

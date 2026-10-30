@@ -1,11 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { hasAdminRole } from "@/lib/admin";
 import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
 import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
 import { orderEntries } from "@/lib/ranking";
 import type {
-    ActivityVisibility,
+    ActivityVisibility, CategoryVisibility,
     CategoryWithEntries,
     CurrentUserProfile,
     Entry,
@@ -50,6 +49,7 @@ interface ProfileSettingsCategoryRow {
     sort_order: number;
     entry_count: number;
     is_public: number;
+    visibility: CategoryVisibility;
 }
 
 interface FollowProfileRow {
@@ -85,6 +85,7 @@ interface CopyableCategoryRow {
     name: string;
     profile_is_public: number;
     owner_name: string;
+    visibility: CategoryVisibility;
 }
 
 type PublicProfileViewerUser = { id: string; role?: string | string[] | null };
@@ -121,6 +122,7 @@ export const updateUserProfile = createServerFn({ method: "POST" })
         );
         const updatedAt = now();
         const db = getDb();
+        const privacyChangedToPrivate = Boolean(profile.is_public) && !nextIsPublic;
         await db.batch([
             db
                 .prepare(
@@ -135,7 +137,10 @@ export const updateUserProfile = createServerFn({ method: "POST" })
            SET slug = ?, is_public = ?, activity_visibility = ?, updated_at = ?
            WHERE user_id = ?`
                 )
-                .bind(nextSlug, nextIsPublic ? 1 : 0, nextActivityVisibility, updatedAt, userId)
+                .bind(nextSlug, nextIsPublic ? 1 : 0, nextActivityVisibility, updatedAt, userId),
+            ...(privacyChangedToPrivate ? [
+                db.prepare(`DELETE FROM user_follows WHERE followed_user_id = ? AND status = 'accepted'`).bind(userId)
+            ] : [])
         ]);
 
         return {
@@ -155,13 +160,13 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
             getDb()
                 .prepare(
                     `SELECT categories.id, categories.name, categories.sort_order,
-                    categories.is_public, COUNT(entries.id) AS entry_count
+                    categories.is_public, categories.visibility, COUNT(entries.id) AS entry_count
              FROM categories
              LEFT JOIN entries ON entries.category_id = categories.id
                AND entries.user_id = categories.user_id
                AND entries.status = 'active'
              WHERE categories.user_id = ?
-             GROUP BY categories.id, categories.name, categories.sort_order, categories.is_public
+             GROUP BY categories.id, categories.name, categories.sort_order, categories.is_public, categories.visibility
              ORDER BY categories.sort_order ASC, categories.name ASC`
                 )
                 .bind(userId)
@@ -181,7 +186,8 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
                 name: category.name,
                 sortOrder: category.sort_order,
                 entryCount: category.entry_count,
-                isPublic: Boolean(category.is_public)
+                isPublic: category.visibility !== "private"
+                , visibility: category.visibility
             })),
             queueSettings: await getQueueSettings(userId),
             following: await listFollowProfiles(userId, "following"),
@@ -218,7 +224,7 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
              FROM user_profiles
              INNER JOIN "user" ON "user".id = user_profiles.user_id
              LEFT JOIN categories ON categories.user_id = user_profiles.user_id
-               AND categories.is_public = 1
+               AND categories.visibility = 'public'
              LEFT JOIN user_follows outgoing
                ON outgoing.follower_user_id = ?
               AND outgoing.followed_user_id = user_profiles.user_id
@@ -436,6 +442,18 @@ export const removeFollow = createServerFn({ method: "POST" })
         return { followedUserId };
     });
 
+/** Revokes a follower's access without blocking either account. */
+export const removeFollower = createServerFn({ method: "POST" })
+    .middleware([authMiddleware])
+    .validator((data: { followerUserId: string }) => data)
+    .handler(async ({ context, data }) => {
+        await getDb()
+            .prepare(`DELETE FROM user_follows WHERE follower_user_id = ? AND followed_user_id = ? AND status = 'accepted'`)
+            .bind(data.followerUserId, context.user.id)
+            .run();
+        return { followerUserId: data.followerUserId };
+    });
+
 export const blockProfile = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
     .validator((data: { profileUserId: string }) => data)
@@ -487,26 +505,24 @@ export const unblockProfile = createServerFn({ method: "POST" })
     });
 
 export const loadPublicProfile = createServerFn({ method: "GET" })
-    .validator((data: { profileSlug: string; adminViewPrivate?: boolean }) => data)
-    .handler(({ data }) => loadPublicProfileFromCurrentRequest(data.profileSlug, {
-        adminViewPrivate: Boolean(data.adminViewPrivate)
-    }));
+    .validator((data: { profileSlug: string }) => data)
+    .handler(({ data }) => loadPublicProfileFromCurrentRequest(data.profileSlug));
 
 async function loadPublicProfileFromCurrentRequest(
     profileSlug: string,
-    options: { adminViewPrivate?: boolean } = {}
+    _options: Record<string, never> = {}
 ) {
     const headers = getRequestHeaders();
     const session = requestHasSessionCookie(headers)
         ? await auth.api.getSession({ headers })
         : null;
-    return loadPublicProfileForViewer(profileSlug, session?.user ?? null, options);
+    return loadPublicProfileForViewer(profileSlug, session?.user ?? null);
 }
 
 async function loadPublicProfileForViewer(
     profileSlug: string,
     viewerUser: PublicProfileViewerUser | null | undefined,
-    options: { adminViewPrivate?: boolean } = {}
+    _options: Record<string, never> = {}
 ): Promise<PublicProfileData | null> {
     const viewerUserId = viewerUser?.id ?? null;
     const slug = parseProfileSlugInput(profileSlug);
@@ -519,7 +535,6 @@ async function loadPublicProfileForViewer(
     const relationState = viewerUserId
         ? await getFollowRelationState(viewerUserId, profile.user_id)
         : "none";
-    const isAdminViewer = hasAdminRole(viewerUser);
     if (!isSelf && viewerUserId) {
         const blockRelation = await getBlockRelation(viewerUserId, profile.user_id);
         if (blockRelation.viewerBlockedTarget || blockRelation.targetBlockedViewer) {
@@ -530,10 +545,8 @@ async function loadPublicProfileForViewer(
         return null;
     }
 
-    const canUseAdminPrivacyOverride = Boolean(isAdminViewer && !isSelf);
-    const adminPrivacyOverride = Boolean(options.adminViewPrivate && canUseAdminPrivacyOverride);
     const [categories, viewerCategories, followCounts] = await Promise.all([
-        loadPublicCategories(profile.user_id, { includePrivate: adminPrivacyOverride }),
+        loadPublicCategories(profile.user_id, { isSelf, isFollower: relationState === "following" || relationState === "mutual" }),
         viewerUserId ? listCopyTargetCategories(viewerUserId) : Promise.resolve([]),
         getFollowCounts(profile.user_id)
     ]);
@@ -555,9 +568,7 @@ async function loadPublicProfileForViewer(
             isSignedIn: Boolean(viewerUserId),
             isSelf,
             relationState,
-            categories: viewerCategories,
-            canUseAdminPrivacyOverride,
-            adminPrivacyOverride
+            categories: viewerCategories
         }
     };
 }
@@ -576,12 +587,12 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             getDb()
                 .prepare(
                     `SELECT categories.id, categories.user_id, categories.name,
-                    user_profiles.is_public AS profile_is_public,
+                    user_profiles.is_public AS profile_is_public, categories.visibility,
                     "user".name AS owner_name
              FROM categories
              INNER JOIN user_profiles ON user_profiles.user_id = categories.user_id
              INNER JOIN "user" ON "user".id = categories.user_id
-             WHERE categories.id = ? AND categories.is_public = 1`
+             WHERE categories.id = ? AND categories.visibility != 'private'`
                 )
                 .bind(sourceCategoryId)
         );
@@ -596,7 +607,8 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
         if (
             blockRelation.viewerBlockedTarget ||
             blockRelation.targetBlockedViewer ||
-            !canViewProfile(Boolean(sourceCategory.profile_is_public), false, relationState)
+            !canViewProfile(Boolean(sourceCategory.profile_is_public), false, relationState) ||
+            (sourceCategory.visibility === "followers" && relationState !== "following" && relationState !== "mutual")
         ) {
             throw new Error("Shared category not found");
         }
@@ -634,8 +646,8 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
             );
             categoryInsertStatement = db
                 .prepare(
-                    `INSERT INTO categories (id, user_id, name, sort_order, created_at, updated_at, is_public)
-             VALUES (?, ?, ?, ?, ?, ?, 0)`
+                    `INSERT INTO categories (id, user_id, name, sort_order, created_at, updated_at, is_public, visibility)
+             VALUES (?, ?, ?, ?, ?, ?, 0, 'private')`
                 )
                 .bind(
                     targetCategoryId,
@@ -818,19 +830,21 @@ async function listCopyTargetCategories(userId: string): Promise<ProfileCopyTarg
 
 async function loadPublicCategories(
     userId: string,
-    options: { includePrivate?: boolean } = {}
+    options: { isSelf: boolean; isFollower: boolean }
 ): Promise<CategoryWithEntries[]> {
-    const categoryVisibilityFilter = options.includePrivate ? "" : "AND is_public = 1";
-    const entryVisibilityFilter = options.includePrivate ? "" : "AND categories.is_public = 1";
+    // A profile page never exposes private shelves, including to its owner.
+    // Owners manage those from the dashboard; followers additionally see the
+    // shelves explicitly shared with followers.
+    const allowedVisibility = options.isSelf || options.isFollower ? ["followers", "public"] : ["public"];
     const categories = await all<CategoryRow>(
         getDb()
             .prepare(
-                `SELECT id, name, sort_order, created_at, is_public
+                `SELECT id, name, sort_order, created_at, is_public, visibility
          FROM categories
-         WHERE user_id = ? ${categoryVisibilityFilter}
+         WHERE user_id = ? AND visibility IN (${allowedVisibility.map(() => "?").join(", ")})
          ORDER BY sort_order ASC, name ASC`
             )
-            .bind(userId)
+            .bind(userId, ...allowedVisibility)
     );
 
     if (categories.length === 0) {
@@ -846,10 +860,10 @@ async function loadPublicCategories(
          INNER JOIN categories ON categories.id = entries.category_id
          WHERE entries.user_id = ? AND entries.status = 'active'
            AND categories.user_id = entries.user_id
-           ${entryVisibilityFilter}
+           AND categories.visibility IN (${allowedVisibility.map(() => "?").join(", ")})
          ORDER BY entries.category_id ASC, entries.rank_position ASC`
             )
-            .bind(userId)
+            .bind(userId, ...allowedVisibility)
     );
     const entriesByCategory = new Map<string, Entry[]>();
     for (const row of entryRows) {
@@ -865,7 +879,8 @@ async function loadPublicCategories(
             name: category.name,
             sortOrder: category.sort_order,
             createdAt: category.created_at,
-            isPublic: Boolean(category.is_public),
+            isPublic: category.visibility !== "private",
+            visibility: category.visibility,
             entryCount: entries.length,
             entries
         };
@@ -898,7 +913,7 @@ async function listFollowProfiles(
              INNER JOIN "user" ON "user".id = user_follows.followed_user_id
              INNER JOIN user_profiles ON user_profiles.user_id = user_follows.followed_user_id
              LEFT JOIN categories ON categories.user_id = user_follows.followed_user_id
-               AND categories.is_public = 1
+               AND categories.visibility = 'public'
              LEFT JOIN user_follows reciprocal
                ON reciprocal.follower_user_id = user_follows.followed_user_id
               AND reciprocal.followed_user_id = ?
@@ -932,7 +947,7 @@ async function listFollowProfiles(
              INNER JOIN "user" ON "user".id = user_follows.follower_user_id
              INNER JOIN user_profiles ON user_profiles.user_id = user_follows.follower_user_id
              LEFT JOIN categories ON categories.user_id = user_follows.follower_user_id
-               AND categories.is_public = 1
+               AND categories.visibility = 'public'
              LEFT JOIN user_follows reciprocal
                ON reciprocal.follower_user_id = ?
               AND reciprocal.followed_user_id = user_follows.follower_user_id
@@ -962,7 +977,7 @@ async function listFollowProfiles(
              INNER JOIN "user" ON "user".id = user_follows.follower_user_id
              INNER JOIN user_profiles ON user_profiles.user_id = user_follows.follower_user_id
              LEFT JOIN categories ON categories.user_id = user_follows.follower_user_id
-               AND categories.is_public = 1
+               AND categories.visibility = 'public'
              WHERE user_follows.followed_user_id = ?
                AND user_follows.status = 'pending'
              GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
@@ -986,7 +1001,7 @@ async function listFollowProfiles(
          INNER JOIN "user" ON "user".id = user_follows.followed_user_id
          INNER JOIN user_profiles ON user_profiles.user_id = user_follows.followed_user_id
          LEFT JOIN categories ON categories.user_id = user_follows.followed_user_id
-           AND categories.is_public = 1
+           AND categories.visibility = 'public'
          WHERE user_follows.follower_user_id = ?
            AND user_follows.status = 'pending'
          GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
@@ -1011,7 +1026,7 @@ async function listBlockedProfiles(userId: string): Promise<FollowProfileSummary
          INNER JOIN "user" ON "user".id = user_blocks.blocked_user_id
          INNER JOIN user_profiles ON user_profiles.user_id = user_blocks.blocked_user_id
          LEFT JOIN categories ON categories.user_id = user_blocks.blocked_user_id
-           AND categories.is_public = 1
+           AND categories.visibility = 'public'
          WHERE user_blocks.blocker_user_id = ?
          GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
            user_profiles.is_public, user_blocks.created_at

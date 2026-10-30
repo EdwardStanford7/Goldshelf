@@ -153,7 +153,7 @@ export function CategoryListItem({
                     >
                         <span className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="truncate">{category.name}</span>
-                            {!category.isPublic ? <Lock aria-hidden="true" className="size-3 shrink-0 opacity-60"><title>Hidden from profile</title></Lock> : null}
+                            {category.visibility === "private" ? <Lock aria-hidden="true" className="size-3 shrink-0 opacity-60"><title>Hidden from profile</title></Lock> : null}
                         </span>
                         <span className="sr-only"> · </span>
                         <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{category.entryCount}</span>
