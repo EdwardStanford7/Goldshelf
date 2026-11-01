@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { ACTIVE_RANKING_LABEL, gotoApp, openDesktopNewEntry, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, signInViaApi, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, finalizeNewEntryWithoutImage, gotoApp, openDesktopNewEntry, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, signInViaApi, winMatchups } from "./helpers";
 import { BASE_URL } from "./constants";
 
 const RANKER = {
@@ -87,10 +87,11 @@ test.describe("Ranking", () => {
         await expect(page.getByText("New Category")).toBeHidden();
 
         await mobileHeader.getByRole("button", { name: "New entry" }).click();
-        await expect(page.getByRole("heading", { name: "New Entry" })).toBeVisible();
-        const newEntrySheet = page.locator('[data-slot="sheet-content"]');
-        await expect(newEntrySheet.getByPlaceholder("New entry")).toBeVisible();
-        await newEntrySheet.getByRole("button", { name: "Close" }).click();
+        const newEntryDialog = page.getByRole("dialog", { name: "New Entry" });
+        const newEntryInput = newEntryDialog.getByPlaceholder("New entry");
+        await expect(newEntryInput).toBeVisible();
+        await expect(newEntryInput).toBeFocused();
+        await newEntryDialog.getByRole("button", { name: "Close" }).click();
 
         const headerBox = await mobileHeader.boundingBox();
         expect(headerBox?.height).toBeLessThan(140);
@@ -119,6 +120,7 @@ test.describe("Ranking", () => {
         await mobilePanel.getByPlaceholder("New entry").fill("Memento");
         await mobilePanel.getByPlaceholder("New entry").press("Enter");
         await expect(mobilePanel).toBeHidden({ timeout: 15_000 });
+        await finalizeNewEntryWithoutImage(page);
 
         await page.getByTestId("mobile-tools-trigger").click();
         drawer = page.getByRole("dialog", { name: "Dashboard tools" });
@@ -136,6 +138,8 @@ test.describe("Ranking", () => {
         const imagePicker = page.locator("section", { hasText: "Pick Image" }).first();
         await expect(imagePicker.getByRole("button", { name: "Close" })).toBeVisible();
         await expect(imagePicker.getByRole("button", { name: "Paste Image" })).toBeVisible();
+        const imagePickerFitsViewport = await imagePicker.evaluate((element) => element.scrollHeight <= element.clientHeight);
+        expect(imagePickerFitsViewport).toBe(true);
         await imagePicker.getByRole("button", { name: "Close" }).click();
         await expect(imagePicker).toBeHidden();
 
@@ -187,6 +191,7 @@ test.describe("Ranking", () => {
         await newEntryPanel.getByPlaceholder("New entry").fill("Zeta");
         await newEntryPanel.getByPlaceholder("New entry").press("Enter");
         await expect(newEntryPanel).toBeHidden({ timeout: 15_000 });
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId("ranking-choice-card")).toHaveCount(2);
         const choiceBoxes = await page.getByTestId("ranking-choice-card").evaluateAll((nodes) =>
@@ -260,6 +265,27 @@ test.describe("Ranking", () => {
         expect(metrics.scrollRegionTop).toBeGreaterThanOrEqual(metrics.topbarBottom - 1);
         expect(metrics.firstRowCardWidth).toBeGreaterThan(200);
         expect(metrics.firstRowRightGap).toBeLessThanOrEqual(12);
+    });
+
+    test("new entries are discarded when image selection is cancelled", async ({ page, context }) => {
+        await seedUsers([{
+            email: "staged-entry@e2e.test",
+            name: "Staged Entry",
+            queueSettings: { enabled: true },
+            categories: [{ name: "Books" }]
+        }]);
+        await signInViaApi(context, "staged-entry@e2e.test");
+        await gotoApp(page);
+
+        const draft = await openDesktopNewEntry(page);
+        await draft.fill("Dune");
+        await draft.press("Enter");
+        await expect(page.getByRole("button", { name: "Cancel entry" })).toBeVisible();
+        await page.getByRole("button", { name: "Cancel entry" }).click();
+        await expect(page.getByRole("button", { name: "Cancel entry" })).toBeHidden({ timeout: 15_000 });
+
+        await openQueueWorkspace(page);
+        await expect(page.getByText("Queue Empty")).toBeVisible();
     });
 
     test("clearing entry search restores the previous list scroll position", async ({
@@ -477,6 +503,7 @@ test.describe("Ranking", () => {
         const omegaEntry = await openDesktopNewEntry(page);
         await omegaEntry.fill("Omega");
         await omegaEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText("Queued Omega for ranking.")).toBeVisible();
         await expect(page.getByRole("button", { name: /^Queue\s+1$/ })).toBeVisible();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible();
@@ -627,6 +654,7 @@ test.describe("Ranking", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Dune");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText("#1 Dune")).toBeVisible();
     });
 
@@ -642,6 +670,7 @@ test.describe("Ranking", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Zeta");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
 
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Zeta");
@@ -662,6 +691,7 @@ test.describe("Ranking", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Zeta");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         const panel = page.locator("section", { hasText: ACTIVE_RANKING_LABEL }).first();
         await expect(panel).toBeVisible({ timeout: 15_000 });
         await expect(panel.getByText(/0 comparisons/)).toBeVisible();
@@ -695,6 +725,7 @@ test.describe("Ranking", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Zeta");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         const panel = page.locator("section", { hasText: ACTIVE_RANKING_LABEL }).first();
         await expect(panel).toBeVisible({ timeout: 15_000 });
 
@@ -723,6 +754,7 @@ test.describe("Ranking", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Zeta");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
 
         const binaryPanel = rankingPanel(page, "Binary Rank");
         await expect(binaryPanel).toBeVisible({ timeout: 15_000 });
@@ -754,6 +786,7 @@ test.describe("Ranking", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Zeta");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
 
         await page.getByTestId("dashboard-sidebar").getByRole("button", { name: /Ranker/ }).click();
@@ -778,6 +811,7 @@ test.describe("Ranking", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Zeta");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
 
         await page.getByRole("button", { name: /^Zeta\b/ }).click({ button: "right" });

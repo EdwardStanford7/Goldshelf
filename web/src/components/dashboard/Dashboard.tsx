@@ -118,7 +118,6 @@ import {
 import { loadDashboard, loadDashboardFreshness } from "@/server/dashboard";
 import { loadExplore } from "@/server/explore";
 import {
-    createEntryWithBinaryRanking,
     deleteEntry,
     moveEntryRelativeToEntry,
     renameEntry,
@@ -152,6 +151,11 @@ import type {
     QueueSettings,
     RepairSessionView
 } from "@/lib/types";
+
+interface PendingNewEntry {
+    queuedEntry: QueuedEntry;
+    shouldRemainQueued: boolean;
+}
 
 export function Dashboard({
     initialDashboard,
@@ -193,6 +197,7 @@ export function Dashboard({
     const [statsCategoryId, setStatsCategoryId] = useState<string | null>(null);
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const [mobilePanel, setMobilePanel] = useState<MobilePanel | null>(null);
+    const [newEntryDialogOpen, setNewEntryDialogOpen] = useState(false);
     const [desktopWorkspace, setDesktopWorkspace] = useState<"rankings" | "queue" | "explore">(initialWorkspace);
     const [exploreData, setExploreData] = useState<ExploreData | null>(initialExploreData);
     const [exploreLoading, setExploreLoading] = useState(false);
@@ -211,6 +216,7 @@ export function Dashboard({
     const [categoryDraftName, setCategoryDraftName] = useState("");
     const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
     const [entryDraftName, setEntryDraftName] = useState("");
+    const entryNameInputRef = useRef<HTMLInputElement | null>(null);
     const [entryCategoryId, setEntryCategoryId] = useState(
         initialDashboard.activeBinarySession?.categoryId ??
         initialDashboard.activeRepairSession?.categoryId ??
@@ -221,6 +227,7 @@ export function Dashboard({
     const busyRef = useRef(false);
     const [busyLabel, setBusyLabel] = useState<string | null>(null);
     const [imagePickerTarget, setImagePickerTarget] = useState<ImagePickerTarget | null>(null);
+    const [pendingNewEntry, setPendingNewEntry] = useState<PendingNewEntry | null>(null);
     const [importToastOpen, setImportToastOpen] = useState(false);
 
     useEffect(() => {
@@ -1116,6 +1123,61 @@ export function Dashboard({
         await refreshAfterMutation();
     }
 
+    async function handleNewEntryImageSaved() {
+        const pendingEntry = pendingNewEntry;
+        if (!pendingEntry) {
+            await handleImageSaved();
+            return;
+        }
+
+        startBusy(pendingEntry.shouldRemainQueued ? "Adding to queue..." : "Starting ranking...");
+        try {
+            if (pendingEntry.shouldRemainQueued) {
+                setMessage(`Queued ${pendingEntry.queuedEntry.name} for ranking.`);
+                await refreshAfterMutation();
+            } else {
+                const result = await startQueuedEntryRanking({
+                    data: { queuedEntryId: pendingEntry.queuedEntry.id }
+                });
+                setSelectedCategoryId(pendingEntry.queuedEntry.categoryId);
+                if (result.kind === "session") {
+                    setActiveBinarySessionId(result.sessionId);
+                }
+                await refreshAfterMutation();
+            }
+
+            setPendingNewEntry(null);
+            setImagePickerTarget(null);
+            setImageRefreshVersion((version) => version + 1);
+        } catch (error) {
+            setErrorMessage(error);
+            throw error;
+        } finally {
+            finishBusy();
+        }
+    }
+
+    async function handleCancelPendingNewEntry() {
+        const pendingEntry = pendingNewEntry;
+        if (!pendingEntry) {
+            setImagePickerTarget(null);
+            return;
+        }
+
+        startBusy("Discarding entry...");
+        try {
+            await deleteQueuedEntry({ data: { queuedEntryId: pendingEntry.queuedEntry.id } });
+            setPendingNewEntry(null);
+            setImagePickerTarget(null);
+            await refreshAfterMutation();
+        } catch (error) {
+            setErrorMessage(error);
+            throw error;
+        } finally {
+            finishBusy();
+        }
+    }
+
     async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const formElement = event.currentTarget;
@@ -1394,41 +1456,7 @@ export function Dashboard({
         const queueSettings = queueSettingsRef.current;
 
         try {
-            const shouldQueueEntry = queueSettings.enabled || forceQueueNewEntry;
-            if (shouldQueueEntry) {
-                const result = await createQueuedEntry({
-                    data: {
-                        categoryId: targetCategory.id,
-                        name: cleanName,
-                        createdAt: addedAt
-                    }
-                });
-                formElement.reset();
-                setEntryDraftName("");
-                setEntryCategoryId(targetCategory.id);
-                setMessage(`Queued ${cleanName} for ranking.`);
-                setDashboard((currentDashboard) => ({
-                    ...currentDashboard,
-                    queuedEntries: [
-                        ...currentDashboard.queuedEntries.filter((entry) => entry.id !== result.queuedEntry.id),
-                        result.queuedEntry
-                    ]
-                }));
-                if (queueSettings.promptForMissingImages) {
-                    setImagePickerTarget({
-                        kind: "queue",
-                        item: {
-                            id: result.queuedEntry.id,
-                            name: result.queuedEntry.name,
-                            imageKey: result.queuedEntry.imageKey
-                        },
-                        category: targetCategory
-                    });
-                }
-                return;
-            }
-
-            const result = await createEntryWithBinaryRanking({
+            const result = await createQueuedEntry({
                 data: {
                     categoryId: targetCategory.id,
                     name: cleanName,
@@ -1438,13 +1466,19 @@ export function Dashboard({
             formElement.reset();
             setEntryDraftName("");
             setEntryCategoryId(targetCategory.id);
-
-            setSelectedCategoryId(targetCategory.id);
-            if (result.kind === "session") {
-                setActiveBinarySessionId(result.sessionId);
-            }
-
-            await refreshAfterMutation();
+            setPendingNewEntry({
+                queuedEntry: result.queuedEntry,
+                shouldRemainQueued: queueSettings.enabled || forceQueueNewEntry
+            });
+            setImagePickerTarget({
+                kind: "queue",
+                item: {
+                    id: result.queuedEntry.id,
+                    name: result.queuedEntry.name,
+                    imageKey: result.queuedEntry.imageKey
+                },
+                category: targetCategory
+            });
         } catch (error) {
             setErrorMessage(error);
         } finally {
@@ -2250,6 +2284,11 @@ export function Dashboard({
         scheduleAfterMobileLayerClose(() => setMobilePanel(panel));
     }
 
+    function openNewEntryDialogFromDrawer() {
+        setMobileDrawerOpen(false);
+        scheduleAfterMobileLayerClose(() => setNewEntryDialogOpen(true));
+    }
+
     function openCategoryDialog(closeDrawer = false) {
         if (closeDrawer) {
             setMobileDrawerOpen(false);
@@ -2259,8 +2298,8 @@ export function Dashboard({
         setCategoryDialogOpen(true);
     }
 
-    async function handleCreateEntryFromMobilePanel(event: FormEvent<HTMLFormElement>) {
-        setMobilePanel(null);
+    async function handleCreateEntryFromDialog(event: FormEvent<HTMLFormElement>) {
+        setNewEntryDialogOpen(false);
         await handleCreateEntry(event);
         scrollMainToTop();
     }
@@ -2693,52 +2732,64 @@ export function Dashboard({
         );
     }
 
-    function renderNewEntryPanel(onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>) {
+    function renderNewEntryDialog() {
         if (!selectedCategory) {
             return null;
         }
 
         return (
-            <section className={SIDEBAR_PANEL_CLASS}>
-                <strong className="min-w-0 max-w-full">New Entry</strong>
-                <form className="grid max-w-full min-w-0 gap-2" onSubmit={onSubmit}>
-                    <Input
-                        disabled={busy}
-                        name="name"
-                        placeholder="New entry"
-                        required
-                        value={entryDraftName}
-                        onChange={(event) => setEntryDraftName(event.target.value)}
-                    />
-                    <div className="grid min-w-0 grid-cols-[minmax(10.5rem,1fr)_auto] gap-2 max-[720px]:grid-cols-1">
-                        <Select
+            <Dialog open={newEntryDialogOpen} onOpenChange={setNewEntryDialogOpen}>
+                <DialogContent
+                    className="w-[min(30rem,calc(100vw-2rem))]"
+                    onOpenAutoFocus={(event) => {
+                        event.preventDefault();
+                        entryNameInputRef.current?.focus();
+                    }}
+                >
+                    <DialogHeader>
+                        <DialogTitle>New Entry</DialogTitle>
+                        <DialogDescription>Add an entry to the selected category.</DialogDescription>
+                    </DialogHeader>
+                    <form className="grid min-w-0 gap-3" onSubmit={handleCreateEntryFromDialog}>
+                        <Input
                             disabled={busy}
-                            value={entryCategoryId || selectedCategory.id}
-                            onValueChange={setEntryCategoryId}
-                        >
-                            <SelectTrigger aria-label="Category" className="w-full min-w-0">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {dashboard.categories.map((category) => (
-                                        <SelectItem key={category.id} value={category.id}>
-                                            {category.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                        <Button
-                            size="lg"
-                            disabled={busy || !canCreateEntry}
-                            type="submit"
-                        >
-                            {forceQueueNewEntry ? "Queue" : "Add"}
-                        </Button>
-                    </div>
-                </form>
-            </section>
+                            name="name"
+                            placeholder="New entry"
+                            ref={entryNameInputRef}
+                            required
+                            value={entryDraftName}
+                            onChange={(event) => setEntryDraftName(event.target.value)}
+                        />
+                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 max-[420px]:grid-cols-1">
+                            <Select
+                                disabled={busy}
+                                value={entryCategoryId || selectedCategory.id}
+                                onValueChange={setEntryCategoryId}
+                            >
+                                <SelectTrigger aria-label="Category" className="w-full min-w-0">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {dashboard.categories.map((category) => (
+                                            <SelectItem key={category.id} value={category.id}>
+                                                {category.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                size="lg"
+                                disabled={busy || !canCreateEntry}
+                                type="submit"
+                            >
+                                {forceQueueNewEntry ? "Queue" : "Add"}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
         );
     }
 
@@ -2879,7 +2930,7 @@ export function Dashboard({
                             disabled={busy || !selectedCategory}
                             type="button"
                             variant="outline"
-                            onClick={() => openMobilePanelFromDrawer("newEntry")}
+                            onClick={openNewEntryDialogFromDrawer}
                         >
                             <ListPlus data-icon="inline-start" />
                             <span>New Entry</span>
@@ -2912,11 +2963,6 @@ export function Dashboard({
     }
 
     function renderMobilePanelSheet() {
-        const title = mobilePanel === "newEntry" ? "New Entry" : "Queue";
-        const description = mobilePanel === "newEntry"
-            ? "Add an entry to the selected category."
-            : "Manage queued entries.";
-
         return (
             <Sheet
                 open={mobilePanel !== null}
@@ -2928,13 +2974,12 @@ export function Dashboard({
             >
                 <SheetContent side="right" className="w-[min(28rem,calc(100vw-1.25rem))] max-[720px]:w-full max-[720px]:max-w-none max-[720px]:border-l-0">
                     <SheetHeader>
-                        <SheetTitle>{title}</SheetTitle>
-                        <SheetDescription className="sr-only">{description}</SheetDescription>
+                        <SheetTitle>Queue</SheetTitle>
+                        <SheetDescription className="sr-only">Manage queued entries.</SheetDescription>
                         <SheetCloseButton />
                     </SheetHeader>
                     <SheetBody>
                         <div className="grid content-start gap-3">
-                            {mobilePanel === "newEntry" ? renderNewEntryPanel(handleCreateEntryFromMobilePanel) : null}
                             {mobilePanel === "queue" ? renderQueuePanel({ mobilePanel: true }) : null}
                         </div>
                     </SheetBody>
@@ -3003,9 +3048,11 @@ export function Dashboard({
                 <ImagePickerModal
                     target={imagePickerTarget}
                     onClose={() => setImagePickerTarget(null)}
-                    onSaved={handleImageSaved}
+                    onCancel={pendingNewEntry ? handleCancelPendingNewEntry : undefined}
+                    onSaved={pendingNewEntry ? handleNewEntryImageSaved : handleImageSaved}
                 />
             ) : null}
+            {renderNewEntryDialog()}
             {renderCategoryStatsSheet()}
             {renderNewCategoryDialog()}
             {renderMobilePanelSheet()}
@@ -3096,7 +3143,7 @@ export function Dashboard({
                         title="New entry"
                         type="button"
                         variant="outline"
-                        onClick={() => setMobilePanel("newEntry")}
+                        onClick={() => setNewEntryDialogOpen(true)}
                     >
                         <Plus className="size-5" />
                     </Button>
@@ -3136,7 +3183,7 @@ export function Dashboard({
                         disabled={busy || !selectedCategory}
                         size="lg"
                         type="button"
-                        onClick={() => setMobilePanel("newEntry")}
+                        onClick={() => setNewEntryDialogOpen(true)}
                     >
                         <Plus data-icon="inline-start" />
                         Add entry

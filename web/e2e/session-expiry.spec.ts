@@ -1,6 +1,6 @@
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { ACTIVE_RANKING_LABEL, gotoApp, openDesktopNewEntry, openNewCategoryDialog, seedUsers, signInViaApi, triggerResumeDashboardRefresh } from "./helpers";
+import { ACTIVE_RANKING_LABEL, finalizeNewEntryWithoutImage, gotoApp, openDesktopNewEntry, openNewCategoryDialog, seedUsers, signInViaApi, triggerResumeDashboardRefresh } from "./helpers";
 
 const USER = {
     email: "expiry@e2e.test",
@@ -69,6 +69,7 @@ test.describe("Session expiry", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Gamma");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
 
         const staleResponse = await page.request.post(`${BASE_URL}/api/test/stale-ranking`, {

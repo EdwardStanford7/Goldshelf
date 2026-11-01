@@ -29,7 +29,7 @@ export async function openNewCategoryDialog(page: Page): Promise<Locator> {
     return dialog;
 }
 
-/** The desktop redesign keeps entry creation in the focused Add entry sheet. */
+/** Entry creation is a focused dialog from either desktop or mobile controls. */
 export async function openDesktopNewEntry(page: Page): Promise<Locator> {
     const input = page.getByPlaceholder("New entry");
     if (!await input.isVisible().catch(() => false)) {
@@ -37,6 +37,14 @@ export async function openDesktopNewEntry(page: Page): Promise<Locator> {
     }
     await expect(input).toBeVisible();
     return input;
+}
+
+/** New entries remain provisional until the picker gets an explicit image choice. */
+export async function finalizeNewEntryWithoutImage(page: Page) {
+    const noImage = page.getByRole("button", { name: "Use No Image" });
+    await expect(noImage).toBeVisible();
+    await noImage.click();
+    await expect(noImage).toBeHidden({ timeout: 15_000 });
 }
 
 /** The desktop redesign gives Queue its own workspace instead of mounting it in the rail. */

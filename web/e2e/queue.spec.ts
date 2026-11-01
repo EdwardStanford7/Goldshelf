@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { ACTIVE_RANKING_LABEL, gotoApp, openDesktopNewEntry, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, finalizeNewEntryWithoutImage, gotoApp, openDesktopNewEntry, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
 
 const QUINN = {
     email: "quinn@e2e.test",
@@ -130,8 +130,8 @@ test.describe("Queue", () => {
         const newEntry = await openDesktopNewEntry(page);
         await newEntry.fill("Dune");
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText("Queued Dune for ranking.")).toBeVisible();
-        await page.getByRole("button", { name: "Close", exact: true }).first().click();
         await page.getByRole("button", { name: /^Queue/ }).click();
         await expect(queueCount(page, 1)).toBeVisible();
 
@@ -149,6 +149,7 @@ test.describe("Queue", () => {
         const directEntry = await openDesktopNewEntry(page);
         await directEntry.fill("Hyperion");
         await directEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
     });
 
@@ -195,6 +196,7 @@ test.describe("Queue", () => {
         const solarisEntry = await openDesktopNewEntry(page);
         await solarisEntry.fill("Solaris");
         await solarisEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText("Queued Solaris for ranking.")).toBeVisible();
         await openQueueWorkspace(page);
         await expect(queueCount(page, 1)).toBeVisible();
@@ -230,12 +232,14 @@ test.describe("Queue", () => {
         const mementoEntry = await openDesktopNewEntry(page);
         await mementoEntry.fill("Memento");
         await mementoEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await openQueueWorkspace(page);
         await expect(queueCount(page, 1)).toBeVisible();
 
         const kluteEntry = await openDesktopNewEntry(page);
         await kluteEntry.fill("Klute");
         await kluteEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(queueCount(page, 2)).toBeVisible();
         await openQueueWorkspace(page);
         await expect(page.getByRole("button", { name: "Rank Queue" })).toBeEnabled();
@@ -277,6 +281,7 @@ test.describe("Queue", () => {
         const tronEntry = await openDesktopNewEntry(page);
         await tronEntry.fill("Tron");
         await tronEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await winMatchups(page, "Tron");
         await expect(page.getByText("#1 Tron")).toBeVisible({ timeout: 15_000 });
@@ -329,12 +334,14 @@ test.describe("Queue", () => {
         const mementoEntry = await openDesktopNewEntry(page);
         await mementoEntry.fill("Memento");
         await mementoEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await openQueueWorkspace(page);
         await expect(queueCount(page, 1)).toBeVisible();
 
         const kluteEntry = await openDesktopNewEntry(page);
         await kluteEntry.fill("Klute");
         await kluteEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(queueCount(page, 2)).toBeVisible();
 
         await gotoApp(page);
@@ -551,12 +558,14 @@ test.describe("Queue", () => {
         const zetaEntry = await openDesktopNewEntry(page);
         await zetaEntry.fill("Zeta");
         await zetaEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible({ timeout: 15_000 });
         await expect(page.getByRole("button", { name: "Add entry", exact: true })).toBeVisible();
 
         const bladeRunnerEntry = await openDesktopNewEntry(page);
         await bladeRunnerEntry.fill("Blade Runner");
         await bladeRunnerEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText("Queued Blade Runner for ranking.")).toBeVisible();
         const queuePanel = await openQueueWorkspace(page);
         await expect(queuePanel.getByText("2 queued", { exact: true })).toBeVisible();
@@ -575,8 +584,8 @@ test.describe("Queue", () => {
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible();
 
         await page.getByRole("button", { name: "Ranking actions" }).click();
-        await page.getByRole("menuitem", { name: "Cancel and Queue Zeta" }).click();
-        await expect(page.getByText("Cancelled adding Zeta and moved it to the queue.")).toBeVisible();
+        await page.getByRole("menuitem", { name: "Cancel Adding Zeta" }).click();
+        await expect(page.getByText("Cancelled ranking Zeta and returned it to the queue.")).toBeVisible();
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeHidden();
         await openQueueWorkspace(page);
         await expect(queueCount(page, 2)).toBeVisible();
@@ -656,6 +665,7 @@ test.describe("Queue", () => {
         await page.getByRole("combobox", { name: "Category" }).click();
         await page.getByRole("option", { name: "Books" }).click();
         await newEntry.press("Enter");
+        await finalizeNewEntryWithoutImage(page);
 
         await expect(page.getByText("Queued Dune for ranking.")).toBeVisible();
         await openQueueWorkspace(page);

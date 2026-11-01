@@ -25,7 +25,7 @@ export const TRANSIENT_REFRESH_RETRY_DELAYS_MS = [750, 1500, 3000, 5000] as cons
 export const SIDEBAR_PANEL_CLASS =
     "grid h-fit min-h-max min-w-0 max-w-full content-start gap-[0.75rem] rounded-lg border border-border bg-card/70 p-4 shadow-panel";
 
-export type MobilePanel = "newEntry" | "queue";
+export type MobilePanel = "queue";
 export type EntryDateFilterPreset = "all" | "today" | "last7" | "last30" | "year" | "custom";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
