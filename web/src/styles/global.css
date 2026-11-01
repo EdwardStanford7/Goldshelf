@@ -208,19 +208,31 @@
  */
 @layer base {
     html {
-        /* Scale gently with viewport width but never below a comfortable 14px. */
-        font-size: clamp(14px, 0.6vw + 6px, 16px);
+        /* Keep dense desktop workspaces comfortably compact. Browser zoom
+         * remains the primary control for larger text. */
+        font-size: clamp(13px, 0.4vw + 8px, 16px);
         -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;
     }
 
     body {
+        min-inline-size: 0;
+        overflow-x: clip;
         background: var(--background);
         color: var(--foreground);
         font-family: var(--font-sans);
     }
 
-    h1, h2, h3 {
+    img,
+    svg,
+    video,
+    canvas {
+        max-inline-size: 100%;
+    }
+
+    h1,
+    h2,
+    h3 {
         font-family: var(--app-font-display);
         font-weight: 400;
         letter-spacing: -0.02em;

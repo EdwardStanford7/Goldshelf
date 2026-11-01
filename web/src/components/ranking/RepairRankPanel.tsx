@@ -420,7 +420,7 @@ export function RepairRankPanel({
             {recovering ? (
                 <div className={STATUS_CLASS}>Reconnecting...</div>
             ) : null}
-            <div className="grid min-w-0 grid-cols-2 gap-5 mx-auto w-full max-w-[min(72rem,calc((100dvh-21rem)*1.8+1.25rem))] max-[720px]:max-w-none max-[720px]:gap-2" data-testid="repair-choice-grid">
+            <div className="grid min-w-0 grid-cols-2 gap-5 mx-auto w-full max-w-[min(72rem,calc((100dvh-23rem)*1.6+1.25rem))] min-[721px]:max-w-[min(72rem,calc((100cqh-16rem)*1.6+1.25rem))] max-[720px]:max-w-[min(100%,calc((100dvh-19rem)*2+0.5rem))] max-[720px]:gap-2" data-testid="repair-choice-grid">
                 {[session.subject, session.opponent].map((entry) => (
                     <RepairMatchCard
                         disabled={controlsDisabled}

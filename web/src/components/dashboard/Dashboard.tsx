@@ -3111,7 +3111,7 @@ export function Dashboard({
                 </div>
 
                 <div
-                    className="grid min-h-0 min-w-0 content-start gap-6 overflow-x-hidden overflow-y-auto px-[clamp(1.5rem,4vw,3.75rem)] py-8 max-[720px]:gap-3 max-[720px]:overflow-y-visible max-[720px]:px-3 max-[720px]:pt-3 max-[720px]:pb-22"
+                    className="grid min-h-0 min-w-0 content-start gap-6 overflow-x-hidden overflow-y-auto px-[clamp(1.5rem,4vw,3.75rem)] py-8 min-[721px]:[container-type:size] max-[720px]:gap-3 max-[720px]:overflow-y-visible max-[720px]:px-3 max-[720px]:pt-3 max-[720px]:pb-22"
                     data-testid="dashboard-scroll-region"
                     ref={mainRef}
                 >
@@ -3208,8 +3208,8 @@ export function Dashboard({
                         >
                             <section
                                 className={`grid min-w-0 gap-3 max-[720px]:grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] max-[720px]:gap-2 ${entryFilterActive
-                                    ? "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
-                                    : "grid-cols-[repeat(auto-fill,minmax(min(100%,16.5rem),1fr))]"
+                                    ? "grid-cols-[repeat(auto-fill,minmax(min(100%,clamp(12rem,15vw,15rem)),1fr))]"
+                                    : "grid-cols-[repeat(auto-fill,minmax(min(100%,clamp(12rem,15vw,15rem)),1fr))]"
                                     }`}
                             >
                                 {selectedCategory ? orderedEntries.map((entry) => (

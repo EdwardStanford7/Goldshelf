@@ -497,7 +497,7 @@ export function BinaryRankPanel({
             {recovering ? (
                 <div className={STATUS_CLASS}>Reconnecting...</div>
             ) : null}
-            <div className="relative grid min-w-0 grid-cols-2 gap-5 mx-auto w-full max-w-[min(72rem,calc((100dvh-21rem)*1.8+1.25rem))] max-[720px]:max-w-none max-[720px]:gap-2" data-testid="ranking-choice-grid">
+            <div className="relative grid min-w-0 grid-cols-2 gap-5 mx-auto w-full max-w-[min(72rem,calc((100dvh-23rem)*1.6+1.25rem))] min-[721px]:max-w-[min(72rem,calc((100cqh-16rem)*1.6+1.25rem))] max-[720px]:max-w-[min(100%,calc((100dvh-19rem)*2+0.5rem))] max-[720px]:gap-2" data-testid="ranking-choice-grid">
                 <span
                     aria-hidden="true"
                     className="pointer-events-none absolute top-[38%] left-1/2 z-10 grid size-10 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-[#d8ae5e]/40 bg-[#201e19] font-[family-name:var(--app-font-display)] text-sm italic text-[#d8ae5e] shadow-floating max-[720px]:size-8 max-[720px]:text-xs"

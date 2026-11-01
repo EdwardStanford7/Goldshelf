@@ -48,8 +48,27 @@ if (finalResult.failingAdvisories.length === 0) {
     process.exit(0);
 }
 
+const overrides = await resolveProductionOverrides(finalResult.failingAdvisories);
+if (overrides.size > 0) {
+    const changed = await addPnpmOverrides(overrides);
+    if (changed) {
+        console.log(`Applying patched production dependency overrides: ${formatOverrides(overrides)}`);
+        await runCommand("pnpm", ["install", "--lockfile-only"]);
+    }
+
+    const overrideResult = await auditProductionDependencies(auditLevel);
+    if (overrideResult.failingAdvisories.length === 0) {
+        console.log(`Production dependency audit passed after applying overrides (${overrideResult.packageCount} packages checked).`);
+        process.exit(0);
+    }
+
+    console.error("Production dependency overrides did not clear every advisory.");
+    printAdvisories(overrideResult.failingAdvisories, auditLevel);
+    process.exit(1);
+}
+
 console.error("Targeted dependency updates did not clear every production advisory.");
-console.error("This usually means a patched version is outside an upstream package range or needs an explicit pnpm override.");
+console.error("No safe patched version was available for an automatic pnpm override.");
 printAdvisories(finalResult.failingAdvisories, auditLevel);
 process.exit(1);
 
@@ -193,4 +212,75 @@ function advisoryPackageName(advisory) {
 
 function severityRank(severity) {
     return SEVERITY_RANK.get(String(severity ?? "").toLowerCase()) ?? -1;
+}
+
+async function resolveProductionOverrides(advisories) {
+    const overrides = new Map();
+
+    for (const advisory of advisories) {
+        const packageName = advisoryPackageName(advisory);
+        if (!packageName || overrides.has(packageName)) {
+            continue;
+        }
+
+        const patchedVersion = patchedVersionFromAdvisory(advisory) ?? await latestPublishedVersion(packageName);
+        if (patchedVersion) {
+            overrides.set(packageName, patchedVersion);
+        }
+    }
+
+    return overrides;
+}
+
+function patchedVersionFromAdvisory(advisory) {
+    const patchedVersions = advisory.patched_versions ?? advisory.patchedVersions;
+    if (typeof patchedVersions !== "string") {
+        return null;
+    }
+
+    // npm advisories commonly return ranges such as ">= 11.0.1". An exact
+    // lower bound is a deterministic pnpm override and avoids a broad range.
+    return patchedVersions.match(/\b\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\b/)?.[0] ?? null;
+}
+
+async function latestPublishedVersion(packageName) {
+    const response = await fetchWithTimeout(`https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`, {
+        headers: { accept: "application/json" }
+    });
+    if (!response.ok) {
+        return null;
+    }
+
+    const metadata = await response.json();
+    return typeof metadata.version === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(metadata.version)
+        ? metadata.version
+        : null;
+}
+
+async function addPnpmOverrides(overrides) {
+    const packageJsonUrl = new URL("../package.json", import.meta.url);
+    const packageJson = JSON.parse(await (await import("node:fs/promises")).readFile(packageJsonUrl, "utf8"));
+    const currentOverrides = packageJson.pnpm?.overrides ?? {};
+    let changed = false;
+
+    for (const [packageName, version] of overrides) {
+        if (currentOverrides[packageName] === version) {
+            continue;
+        }
+        currentOverrides[packageName] = version;
+        changed = true;
+    }
+
+    if (!changed) {
+        return false;
+    }
+
+    packageJson.pnpm = { ...packageJson.pnpm, overrides: currentOverrides };
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(packageJsonUrl, `${JSON.stringify(packageJson, null, 2)}\n`);
+    return true;
+}
+
+function formatOverrides(overrides) {
+    return Array.from(overrides, ([packageName, version]) => `${packageName}@${version}`).join(", ");
 }

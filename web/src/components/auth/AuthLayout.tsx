@@ -20,10 +20,10 @@ export function AuthLayout({
 }) {
     return (
         <main className="grid min-h-screen w-full max-w-full min-w-0 place-items-center bg-background bg-[radial-gradient(circle_at_18%_12%,color-mix(in_srgb,var(--primary)_22%,transparent),transparent_34rem)] p-[clamp(1rem,4vw,2rem)] max-[720px]:items-stretch max-[720px]:p-0">
-            <div className="grid w-[min(1060px,100%)] min-h-[min(720px,calc(100vh-2rem))] grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] overflow-hidden rounded-2xl border border-border bg-card shadow-floating max-[720px]:min-h-screen max-[720px]:grid-cols-1 max-[720px]:rounded-none max-[720px]:border-0">
+            <div className="grid w-[min(66.25rem,100%)] min-h-[min(45rem,calc(100dvh-2rem))] grid-cols-[minmax(0,1.05fr)_minmax(22.5rem,0.95fr)] overflow-hidden rounded-2xl border border-border bg-card shadow-floating max-[900px]:min-h-dvh max-[900px]:grid-cols-1 max-[900px]:rounded-none max-[900px]:border-0">
                 <section
                     aria-label="Goldshelf"
-                    className="relative isolate grid min-h-168 content-between overflow-hidden bg-[linear-gradient(180deg,rgba(39,25,8,0.02),rgba(39,25,8,0.58)),url(/auth-hero.svg)] bg-cover bg-center bg-no-repeat p-[clamp(1.5rem,4vw,3rem)] text-white after:absolute after:inset-0 after:-z-10 after:bg-[linear-gradient(135deg,rgba(183,121,23,0.14),rgba(40,27,10,0.7))] after:content-[''] max-[720px]:min-h-88"
+                    className="relative isolate grid min-h-168 content-between overflow-hidden bg-[linear-gradient(180deg,rgba(39,25,8,0.02),rgba(39,25,8,0.58)),url(/auth-hero.svg)] bg-cover bg-center bg-no-repeat p-[clamp(1.5rem,4vw,3rem)] text-white after:absolute after:inset-0 after:-z-10 after:bg-[linear-gradient(135deg,rgba(183,121,23,0.14),rgba(40,27,10,0.7))] after:content-[''] max-[900px]:min-h-88"
                 >
                     <h1 className="m-0 self-start text-[clamp(3.25rem,8vw,6.8rem)] leading-[0.9] tracking-normal [text-shadow:0_10px_30px_rgba(0,0,0,0.32)]">
                         <Link
