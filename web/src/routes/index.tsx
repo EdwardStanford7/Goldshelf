@@ -14,7 +14,10 @@ export const Route = createFileRoute("/")({
         search.workspace === "queue" ? { workspace: "queue" } : {}
     ),
     loader: async () => {
-        const [home, trendingProfiles] = await Promise.all([loadHome(), loadPublicExplore()]);
+        const home = await loadHome();
+        // The marketing page is the only consumer of the anonymous directory.
+        // Avoid its global aggregation for every signed-in dashboard navigation.
+        const trendingProfiles = home.dashboard && home.user ? [] : await loadPublicExplore();
         return { ...home, trendingProfiles };
     },
     component: Home

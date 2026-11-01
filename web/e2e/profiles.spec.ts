@@ -105,6 +105,8 @@ test.describe("Profiles", () => {
         await gotoApp(viewerPage, "/explore");
         await expect(viewerPage.getByRole("heading", { name: "Explore" })).toBeVisible();
         await expect(viewerPage.getByText("Arrival").first()).toBeVisible();
+        await viewerPage.getByRole("searchbox", { name: "Search profiles" }).fill("Explore");
+        await expect(viewerPage.getByText("Explore Owner", { exact: true })).toBeVisible();
 
         await openSettingsSection(ownerPage, "Profile");
         await ownerPage.getByLabel("Recent additions visibility").selectOption("off");

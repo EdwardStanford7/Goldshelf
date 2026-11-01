@@ -200,6 +200,7 @@ test.describe("Entry operations", () => {
             `${BASE_URL}/api/images/${encodeURIComponent(entryIds[1]!)}`
         );
         expect(remainingImage.ok()).toBe(true);
+        expect(remainingImage.headers()["cache-control"]).toBe("private, max-age=31536000, immutable");
 
         const secondDelete = await page.request.delete(
             `${BASE_URL}/api/images/${encodeURIComponent(entryIds[1]!)}`,

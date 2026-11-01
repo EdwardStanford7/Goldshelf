@@ -156,9 +156,10 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
     .handler(async ({ context }) => {
         const userId = context.user.id;
         const profile = await ensureUserProfile(userId);
-        const categories = await all<ProfileSettingsCategoryRow>(
-            getDb()
-                .prepare(
+        const [categories, queueSettings, following, followers, incomingFollowRequests, outgoingFollowRequests, blockedProfiles] = await Promise.all([
+            all<ProfileSettingsCategoryRow>(
+                getDb()
+                    .prepare(
                     `SELECT categories.id, categories.name, categories.sort_order,
                     categories.is_public, categories.visibility, COUNT(entries.id) AS entry_count
              FROM categories
@@ -168,9 +169,16 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
              WHERE categories.user_id = ?
              GROUP BY categories.id, categories.name, categories.sort_order, categories.is_public, categories.visibility
              ORDER BY categories.sort_order ASC, categories.name ASC`
-                )
-                .bind(userId)
-        );
+                    )
+                    .bind(userId)
+            ),
+            getQueueSettings(userId),
+            listFollowProfiles(userId, "following"),
+            listFollowProfiles(userId, "followers"),
+            listFollowProfiles(userId, "incoming_requests"),
+            listFollowProfiles(userId, "outgoing_requests"),
+            listBlockedProfiles(userId)
+        ]);
 
         return {
             user: {
@@ -189,12 +197,12 @@ export const loadProfileSettings = createServerFn({ method: "GET" })
                 isPublic: category.visibility !== "private"
                 , visibility: category.visibility
             })),
-            queueSettings: await getQueueSettings(userId),
-            following: await listFollowProfiles(userId, "following"),
-            followers: await listFollowProfiles(userId, "followers"),
-            incomingFollowRequests: await listFollowProfiles(userId, "incoming_requests"),
-            outgoingFollowRequests: await listFollowProfiles(userId, "outgoing_requests"),
-            blockedProfiles: await listBlockedProfiles(userId)
+            queueSettings,
+            following,
+            followers,
+            incomingFollowRequests,
+            outgoingFollowRequests,
+            blockedProfiles
         };
     });
 
@@ -208,7 +216,14 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
             return [];
         }
 
-        const searchPattern = `%${cleanQuery.replace(/[%_]/g, "")}%`;
+        const searchTerms = cleanQuery
+            .replace(/[^a-z0-9]+/g, " ")
+            .split(" ")
+            .filter(Boolean);
+        if (searchTerms.length === 0) {
+            return [];
+        }
+        const searchExpression = searchTerms.map((term) => `\"${term.replace(/\"/g, "")}\"*`).join(" AND ");
         const rows = await all<FollowSearchRow>(
             getDb()
                 .prepare(
@@ -223,6 +238,7 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
                     incoming.accepted_at AS incoming_accepted_at
              FROM user_profiles
              INNER JOIN "user" ON "user".id = user_profiles.user_id
+             INNER JOIN profile_search ON profile_search.user_id = user_profiles.user_id
              LEFT JOIN categories ON categories.user_id = user_profiles.user_id
                AND categories.visibility = 'public'
              LEFT JOIN user_follows outgoing
@@ -239,7 +255,7 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
                  WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id)
                     OR (blocks.blocker_user_id = user_profiles.user_id AND blocks.blocked_user_id = ?)
                )
-               AND (lower(user_profiles.slug) LIKE ? OR lower("user".name) LIKE ?)
+               AND profile_search MATCH ?
              GROUP BY "user".id, "user".name, "user".image, user_profiles.slug,
                user_profiles.is_public, outgoing.status, outgoing.created_at,
                outgoing.accepted_at, incoming.status, incoming.created_at,
@@ -254,7 +270,7 @@ export const searchPublicProfiles = createServerFn({ method: "GET" })
                user_profiles.slug ASC
              LIMIT 12`
                 )
-                .bind(userId, userId, userId, userId, userId, searchPattern, searchPattern, cleanQuery, `${cleanQuery}%`)
+                .bind(userId, userId, userId, userId, userId, searchExpression, cleanQuery, `${cleanQuery}%`)
         );
 
         return rows.map((row): FollowSearchResult => ({

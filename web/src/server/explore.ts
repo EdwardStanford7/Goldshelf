@@ -7,6 +7,12 @@ const ACTIVITY_LIMIT = 24;
 const PROFILE_LIMIT = 24;
 const TRENDING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const NEW_PROFILE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const PUBLIC_TRENDING_CACHE_TTL_MS = 5 * 60 * 1000;
+const PUBLIC_TRENDING_CACHE_URL = "https://explore-cache.goldshelf.internal/public-trending";
+
+interface CloudflareCacheStorage extends CacheStorage {
+    default: Cache;
+}
 
 interface RecentActivityRow {
     entry_id: string;
@@ -200,4 +206,44 @@ async function loadTrendingProfiles(viewerUserId?: string): Promise<ExploreProfi
 
 /** Anonymous-safe community directory used on the marketing page. */
 export const loadPublicExplore = createServerFn({ method: "GET" })
-    .handler(() => loadTrendingProfiles());
+    .handler(() => loadCachedPublicTrendingProfiles());
+
+/**
+ * Anonymous marketing traffic sees the same public directory, so a short
+ * per-edge cache removes repeated global aggregation without caching any
+ * viewer-specific relationship data.
+ */
+async function loadCachedPublicTrendingProfiles() {
+    const cacheRequest = new Request(PUBLIC_TRENDING_CACHE_URL);
+    let cache: Cache | null = null;
+    try {
+        cache = (caches as CloudflareCacheStorage).default;
+        const cached = await cache.match(cacheRequest);
+        const expiresAt = Number(cached?.headers.get("x-goldshelf-expires-at"));
+        if (cached && Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+            return await cached.json() as ExploreProfile[];
+        }
+        if (cached) {
+            await cache.delete(cacheRequest);
+        }
+    } catch {
+        // Cache API is best-effort and unavailable in local development.
+        cache = null;
+    }
+
+    const profiles = await loadTrendingProfiles();
+    if (cache) {
+        try {
+            const response = Response.json(profiles, {
+                headers: {
+                    "cache-control": `public, max-age=${PUBLIC_TRENDING_CACHE_TTL_MS / 1000}`,
+                    "x-goldshelf-expires-at": String(Date.now() + PUBLIC_TRENDING_CACHE_TTL_MS)
+                }
+            });
+            await cache.put(cacheRequest, response.clone());
+        } catch {
+            // A cache write must not repeat or fail the directory query.
+        }
+    }
+    return profiles;
+}

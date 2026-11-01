@@ -5,6 +5,7 @@ import { all, assertOwned, getDb, newId, now, runBatches } from "@/server/lib/db
 import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import { getOwnedCategory } from "./stores/categoryStore";
+import { repairInterruptedRankingState } from "./engine/rankingSessions";
 import {
     getOwnedQueuedEntry,
     getOwnedQueuedEntryIncludingDeleted,
@@ -258,6 +259,7 @@ export const restoreQueuedEntries = createServerFn({ method: "POST" })
         const updatedAt = now();
         const statements: D1PreparedStatement[] = [];
         const restoringNames = new Set<string>();
+        const restoreCandidates: QueuedEntryStatusRow[] = [];
         let skippedCount = 0;
 
         for (const queuedEntryId of queuedEntryIds) {
@@ -276,13 +278,6 @@ export const restoreQueuedEntries = createServerFn({ method: "POST" })
                 continue;
             }
 
-            try {
-                await assertEntryNameAvailable(userId, queuedEntry.category_id, queuedEntry.name, queuedEntry.id);
-            } catch {
-                skippedCount += 1;
-                continue;
-            }
-
             const restoringNameKey = `${queuedEntry.category_id}\0${queuedEntry.name}`;
             if (restoringNames.has(restoringNameKey)) {
                 skippedCount += 1;
@@ -290,15 +285,64 @@ export const restoreQueuedEntries = createServerFn({ method: "POST" })
             }
             restoringNames.add(restoringNameKey);
 
-            statements.push(
-                db
-                    .prepare(
+            restoreCandidates.push(queuedEntry);
+        }
+
+        if (restoreCandidates.length > 0) {
+            await repairInterruptedRankingState(userId);
+            const conflictRows = await all<{ id: string }>(
+                db.prepare(
+                    `WITH requested AS (
+                       SELECT json_extract(value, '$.id') AS id,
+                              json_extract(value, '$.categoryId') AS category_id,
+                              json_extract(value, '$.name') AS name
+                       FROM json_each(?)
+                     )
+                     SELECT requested.id
+                     FROM requested
+                     WHERE EXISTS (
+                       SELECT 1 FROM entries
+                       WHERE entries.user_id = ?
+                         AND entries.category_id = requested.category_id
+                         AND entries.name = requested.name
+                         AND entries.status != 'deleted'
+                     )
+                     OR EXISTS (
+                       SELECT 1 FROM entry_queue
+                       WHERE entry_queue.user_id = ?
+                         AND entry_queue.category_id = requested.category_id
+                         AND entry_queue.name = requested.name
+                         AND entry_queue.status = 'queued'
+                         AND entry_queue.id != requested.id
+                     )`
+                ).bind(
+                    JSON.stringify(restoreCandidates.map((entry) => ({
+                        id: entry.id,
+                        categoryId: entry.category_id,
+                        name: entry.name
+                    }))),
+                    userId,
+                    userId
+                )
+            );
+            const conflictingIds = new Set(conflictRows.map((row) => row.id));
+
+            for (const queuedEntry of restoreCandidates) {
+                if (conflictingIds.has(queuedEntry.id)) {
+                    skippedCount += 1;
+                    continue;
+                }
+
+                statements.push(
+                    db
+                        .prepare(
                         `UPDATE entry_queue
                SET status = 'queued', updated_at = ?
                WHERE id = ? AND user_id = ? AND status = 'deleted'`
-                    )
-                    .bind(updatedAt, queuedEntry.id, userId)
-            );
+                        )
+                        .bind(updatedAt, queuedEntry.id, userId)
+                );
+            }
         }
 
         if (statements.length > 0) {
