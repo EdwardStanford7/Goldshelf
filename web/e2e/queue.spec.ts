@@ -137,9 +137,10 @@ test.describe("Queue", () => {
 
         await queueItem(page, "Dune").click({ button: "right" });
         await page.getByRole("menuitem", { name: "Rank Now" }).click();
+        await expect(page.getByText("#1 Dune")).toBeVisible({ timeout: 15_000 });
+        await openQueueWorkspace(page);
         await expect(page.getByText("Queue Empty")).toBeVisible();
         await page.getByRole("button", { name: "My rankings", exact: true }).click();
-        await expect(page.getByText("#1 Dune")).toBeVisible({ timeout: 15_000 });
 
         await openQueueSettings(page);
         await page.getByLabel("Enable the queue").click();
@@ -258,14 +259,15 @@ test.describe("Queue", () => {
         // Undo/restore can alter the transient queue order, so finish Memento if it was second.
         await winMatchups(page, "Memento");
 
-        await expect(page.getByText("Queue Empty")).toBeVisible();
-
-        await page.getByRole("button", { name: "My rankings", exact: true }).click();
         await expect(page.getByText(/^#1 (Klute|Memento)$/)).toBeVisible();
         await expect(page.getByText(/^#2 (Klute|Memento)$/)).toBeVisible();
         await expect(page.getByText("#3 Stalker")).toBeVisible();
         await expect(page.getByText("#4 Arrival")).toBeVisible();
         await expect(page.getByText("#5 Dune")).toBeVisible();
+
+        await page.getByRole("button", { name: "Queue", exact: true }).click();
+        await expect(page.getByText("Queue Empty")).toBeVisible();
+        await page.getByRole("button", { name: "My rankings", exact: true }).click();
 
         // --- Disabling the queue routes new entries straight to ranking. ---
         await openQueueSettings(page);
@@ -408,6 +410,7 @@ test.describe("Queue", () => {
 
         await winMatchups(page, "Klute");
         await expect(page.getByText("No unskipped queued entries remain.")).toBeVisible({ timeout: 15_000 });
+        await openQueueWorkspace(page);
         await expect(queueCount(page, 1)).toBeVisible();
         await expect(queueItem(page, "Memento")).toBeVisible();
         await page.getByRole("button", { name: "My rankings", exact: true }).click();
@@ -443,6 +446,7 @@ test.describe("Queue", () => {
 
         await winMatchups(page, "Klute");
         await expect(page.getByText("No queued entries remain.")).toBeVisible({ timeout: 15_000 });
+        await openQueueWorkspace(page);
         await expect(page.getByText("Queue Empty")).toBeVisible();
     });
 
@@ -574,6 +578,7 @@ test.describe("Queue", () => {
         await page.getByRole("menuitem", { name: "Cancel and Queue Zeta" }).click();
         await expect(page.getByText("Cancelled adding Zeta and moved it to the queue.")).toBeVisible();
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeHidden();
+        await openQueueWorkspace(page);
         await expect(queueCount(page, 2)).toBeVisible();
         await expect(queueItem(page, "Zeta")).toBeVisible();
         await expect(queueItem(page, "Blade Runner")).toBeHidden();
@@ -585,6 +590,7 @@ test.describe("Queue", () => {
         await page.getByRole("button", { name: "Ranking actions" }).click();
         await page.getByRole("menuitem", { name: "Delete Solaris from Queue" }).click();
         await expect(page.getByText("Cancelled ranking Solaris and removed it from the queue.")).toBeVisible();
+        await openQueueWorkspace(page);
         await expect(queueCount(page, 1)).toBeVisible();
         await expect(queueItem(page, "Zeta")).toBeVisible();
         await expect(queueItem(page, "Solaris")).toBeHidden();

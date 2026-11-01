@@ -1,7 +1,7 @@
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Compass, Search, Sparkles, UserPlus, Users } from "lucide-react";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { Dashboard } from "@/components/dashboard/Dashboard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -10,11 +10,11 @@ import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import { formatDate } from "@/lib/format";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { showToast } from "@/lib/toast";
-import type { ExploreProfile, FollowRelationState, FollowSearchResult, RecentActivityItem } from "@/lib/types";
+import type { ExploreData, ExploreProfile, FollowRelationState, FollowSearchResult, RecentActivityItem } from "@/lib/types";
 import { getSession } from "@/server/session";
 import { loadExplore } from "@/server/explore";
 import { followProfile, searchPublicProfiles } from "@/server/profiles";
-import { loadViewer } from "@/server/viewer";
+import { loadHome } from "@/server/dashboard";
 
 const SEARCH_DELAY_MS = 250;
 type Feed = "following" | "everyone";
@@ -26,14 +26,35 @@ export const Route = createFileRoute("/explore")({
             throw redirect({ to: "/signin" });
         }
 
-        const [data, viewer] = await Promise.all([loadExplore(), loadViewer()]);
-        return { data, viewer };
+        const [data, home] = await Promise.all([loadExplore(), loadHome()]);
+        if (!home.dashboard || !home.user) {
+            throw redirect({ to: "/signin" });
+        }
+
+        return { data, home };
     },
     component: ExploreRoute
 });
 
 function ExploreRoute() {
-    const { data, viewer } = Route.useLoaderData();
+    const { data, home } = Route.useLoaderData();
+    if (!home.dashboard || !home.user) {
+        return null;
+    }
+
+    return (
+        <Dashboard
+            initialDashboard={home.dashboard}
+            initialExploreData={data}
+            initialWorkspace="explore"
+            userImage={home.user.image}
+            userIsAdmin={home.user.isAdmin}
+            userName={home.user.name}
+        />
+    );
+}
+
+export function ExploreContent({ data }: { data: ExploreData }) {
     const { followingEntries, recentPublicEntries, publicProfiles } = data;
     const [feed, setFeed] = useState<Feed>(followingEntries.length > 0 ? "following" : "everyone");
     const [query, setQuery] = useState("");
@@ -79,9 +100,7 @@ function ExploreRoute() {
     const searchActive = query.trim().length >= 2;
 
     return (
-        <main className="mx-auto grid min-h-screen w-full max-w-7xl content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
-            <AppHeader viewer={viewer} />
-
+        <>
             <section className="grid gap-5 pt-2 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-end">
                 <div className="grid gap-2">
                     <p className="m-0 text-xs font-semibold tracking-[0.14em] text-accent-strong uppercase">Community</p>
@@ -167,7 +186,7 @@ function ExploreRoute() {
                     </section>
                 </>
             )}
-        </main>
+        </>
     );
 }
 

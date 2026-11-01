@@ -478,8 +478,7 @@ test.describe("Ranking", () => {
         await omegaEntry.fill("Omega");
         await omegaEntry.press("Enter");
         await expect(page.getByText("Queued Omega for ranking.")).toBeVisible();
-        await openQueueWorkspace(page);
-        await expect(queueCount(page, 1)).toBeVisible();
+        await expect(page.getByRole("button", { name: /^Queue\s+1$/ })).toBeVisible();
         await expect(page.getByText("Repair Check · Movies")).toBeVisible();
 
         await page.getByRole("button", { name: "Skip" }).click();

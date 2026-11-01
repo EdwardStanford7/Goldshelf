@@ -4,8 +4,9 @@ import { all, getDb } from "@/server/lib/db";
 import { authMiddleware } from "@/server/middleware/auth";
 
 const ACTIVITY_LIMIT = 24;
-const PROFILE_LIMIT = 12;
+const PROFILE_LIMIT = 24;
 const TRENDING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const NEW_PROFILE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface RecentActivityRow {
     entry_id: string;
@@ -167,6 +168,13 @@ async function loadTrendingProfiles(viewerUserId?: string): Promise<ExploreProfi
              LEFT JOIN public_entries ON public_entries.user_id = user_profiles.user_id
              LEFT JOIN followers ON followers.user_id = user_profiles.user_id
              WHERE user_profiles.is_public = 1
+               AND (
+                 (COALESCE(public_shelves.public_category_count, 0) > 0 AND (
+                   public_entries.latest_public_activity_at >= ?
+                   OR user_profiles.updated_at >= ?
+                 ))
+                 OR user_profiles.created_at >= ?
+               )
                AND (? = '' OR user_profiles.user_id != ?)
                AND (? = '' OR NOT EXISTS (SELECT 1 FROM user_blocks blocks WHERE
                     (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id) OR
@@ -177,7 +185,13 @@ async function loadTrendingProfiles(viewerUserId?: string): Promise<ExploreProfi
                   MAX(0, 12 * (1 - MIN(1, (? - latest_public_activity_at) / ?)))
                 END
              ) DESC, lower("user".name) ASC LIMIT ?`
-        ).bind(viewerId, viewerId, viewerId, viewerId, viewerId, Date.now(), TRENDING_WINDOW_MS, PROFILE_LIMIT)
+        ).bind(
+            Date.now() - TRENDING_WINDOW_MS,
+            Date.now() - TRENDING_WINDOW_MS,
+            Date.now() - NEW_PROFILE_WINDOW_MS,
+            viewerId, viewerId, viewerId, viewerId, viewerId,
+            Date.now(), TRENDING_WINDOW_MS, PROFILE_LIMIT
+        )
     );
 
     return rows

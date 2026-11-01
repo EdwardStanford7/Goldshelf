@@ -50,6 +50,7 @@ import {
 } from "@/components/dashboard/dashboardHelpers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ExploreContent } from "@/routes/explore";
 import {
     Dialog,
     DialogClose,
@@ -115,6 +116,7 @@ import {
     updateCategoryVisibility
 } from "@/server/categories";
 import { loadDashboard, loadDashboardFreshness } from "@/server/dashboard";
+import { loadExplore } from "@/server/explore";
 import {
     createEntryWithBinaryRanking,
     deleteEntry,
@@ -145,6 +147,7 @@ import type {
     CategoryWithEntries,
     DashboardData,
     Entry,
+    ExploreData,
     QueuedEntry,
     QueueSettings,
     RepairSessionView
@@ -152,11 +155,15 @@ import type {
 
 export function Dashboard({
     initialDashboard,
+    initialExploreData = null,
+    initialWorkspace = "rankings",
     userIsAdmin,
     userImage,
     userName
 }: {
     initialDashboard: DashboardData;
+    initialExploreData?: ExploreData | null;
+    initialWorkspace?: "rankings" | "queue" | "explore";
     userIsAdmin: boolean;
     userImage: string | null;
     userName: string;
@@ -186,7 +193,9 @@ export function Dashboard({
     const [statsCategoryId, setStatsCategoryId] = useState<string | null>(null);
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const [mobilePanel, setMobilePanel] = useState<MobilePanel | null>(null);
-    const [desktopWorkspace, setDesktopWorkspace] = useState<"rankings" | "queue">("rankings");
+    const [desktopWorkspace, setDesktopWorkspace] = useState<"rankings" | "queue" | "explore">(initialWorkspace);
+    const [exploreData, setExploreData] = useState<ExploreData | null>(initialExploreData);
+    const [exploreLoading, setExploreLoading] = useState(false);
     const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
     const activeSessionIdRef = useRef<string | null>(initialActiveSessionId);
     const closedBinarySessionIdsRef = useRef<Set<string>>(new Set());
@@ -213,9 +222,29 @@ export function Dashboard({
     const [busyLabel, setBusyLabel] = useState<string | null>(null);
     const [imagePickerTarget, setImagePickerTarget] = useState<ImagePickerTarget | null>(null);
     const [importToastOpen, setImportToastOpen] = useState(false);
+
+    useEffect(() => {
+        if (desktopWorkspace !== "explore" || exploreData || exploreLoading) {
+            return;
+        }
+
+        setExploreLoading(true);
+        loadExplore()
+            .then(setExploreData)
+            .catch((error) => {
+                if (!redirectIfUnauthorized(error)) {
+                    showToast(errorMessage(error), "danger");
+                }
+            })
+            .finally(() => setExploreLoading(false));
+    }, [desktopWorkspace, exploreData, exploreLoading]);
     const [dataTransferOpen, setDataTransferOpen] = useState(false);
     const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<CategoryWithEntries | null>(null);
     const [categoryQueueTargets, setCategoryQueueTargets] = useState<CategoryWithEntries[] | null>(null);
+
+    useEffect(() => {
+        setDesktopWorkspace(initialWorkspace);
+    }, [initialWorkspace]);
     const [categorySelectionMode, setCategorySelectionMode] = useState(false);
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(new Set());
     const [categorySelectionAnchorId, setCategorySelectionAnchorId] = useState<string | null>(null);
@@ -1512,6 +1541,8 @@ export function Dashboard({
         });
 
         setSelectedCategoryId(entry.categoryId);
+        await navigate({ to: "/", search: {} });
+        setDesktopWorkspace("rankings");
         if (result.kind === "session") {
             setActiveBinarySessionId(result.sessionId);
         } else {
@@ -1983,6 +2014,8 @@ export function Dashboard({
             closeCategorySelectionMode();
             setActiveRepairSessionId(result.sessionId);
             setSelectedCategoryId(result.categoryId);
+            await navigate({ to: "/", search: {} });
+            setDesktopWorkspace("rankings");
             if (closeDrawer) {
                 setMobileDrawerOpen(false);
                 scrollMainToTop();
@@ -2742,7 +2775,7 @@ export function Dashboard({
         return (
             <>
                 <div className="relative flex items-center justify-between gap-3 px-2">
-                    <BrandLink />
+                    <BrandLink className="relative -top-3" />
                 </div>
                 <nav className="grid gap-1" aria-label="Dashboard navigation">
                     <Button
@@ -2750,7 +2783,7 @@ export function Dashboard({
                         size="lg"
                         type="button"
                         variant={desktopWorkspace === "rankings" ? "secondary" : "ghost"}
-                        onClick={() => setDesktopWorkspace("rankings")}
+                        onClick={() => void navigate({ to: "/", search: {} })}
                     >
                         <Home data-icon="inline-start" />
                         My rankings
@@ -2760,7 +2793,7 @@ export function Dashboard({
                         size="lg"
                         type="button"
                         variant={desktopWorkspace === "queue" ? "secondary" : "ghost"}
-                        onClick={() => setDesktopWorkspace("queue")}
+                        onClick={() => void navigate({ to: "/", search: { workspace: "queue" } })}
                     >
                         <Clock3 data-icon="inline-start" />
                         Queue
@@ -2774,7 +2807,7 @@ export function Dashboard({
                         className="justify-start"
                         size="lg"
                         type="button"
-                        variant="ghost"
+                        variant={desktopWorkspace === "explore" ? "secondary" : "ghost"}
                         onClick={() => void navigate({ to: "/explore" })}
                     >
                         <Compass data-icon="inline-start" />
@@ -3023,9 +3056,9 @@ export function Dashboard({
                         <UserRound className="size-5" />
                     </Button>
                     <div className="grid min-w-0 gap-[0.05rem] text-center">
-                        <h1 className="m-0 truncate text-[1.08rem] font-bold">{desktopWorkspace === "queue" ? "Queue" : selectedCategory?.name ?? "Categories"}</h1>
+                        <h1 className="m-0 truncate text-[1.08rem] font-bold">{desktopWorkspace === "explore" ? "Explore" : desktopWorkspace === "queue" ? "Queue" : selectedCategory?.name ?? "Categories"}</h1>
                         <p className="m-0 truncate text-[0.82rem] text-muted-foreground">
-                            {desktopWorkspace === "queue" ? `${dashboard.queuedEntries.length} queued` : entryCountSummary}
+                            {desktopWorkspace === "explore" ? "Community activity" : desktopWorkspace === "queue" ? `${dashboard.queuedEntries.length} queued` : entryCountSummary}
                         </p>
                     </div>
                     <Sheet open={mobileDrawerOpen} onOpenChange={setMobileDrawerOpen}>
@@ -3079,7 +3112,7 @@ export function Dashboard({
                 className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-background max-[720px]:block max-[720px]:overflow-visible"
             >
                 <div
-                    className="z-40 flex min-h-0 flex-nowrap items-center gap-4 border-b border-border bg-background/95 px-[clamp(1.5rem,4vw,3.75rem)] py-5 backdrop-blur max-[720px]:hidden *:max-w-full *:min-w-0"
+                    className={`z-40 flex min-h-0 flex-nowrap items-center gap-4 border-b border-border bg-background/95 px-[clamp(1.5rem,4vw,3.75rem)] py-5 backdrop-blur max-[720px]:hidden *:max-w-full *:min-w-0 ${desktopWorkspace === "explore" ? "hidden" : ""}`}
                     data-testid="dashboard-topbar"
                 >
                     <div className="grid max-w-[min(34rem,42vw)] min-w-0 flex-[0_1_auto] gap-1">
@@ -3111,11 +3144,16 @@ export function Dashboard({
                 </div>
 
                 <div
-                    className="grid min-h-0 min-w-0 content-start gap-6 overflow-x-hidden overflow-y-auto px-[clamp(1.5rem,4vw,3.75rem)] py-8 min-[721px]:[container-type:size] max-[720px]:gap-3 max-[720px]:overflow-y-visible max-[720px]:px-3 max-[720px]:pt-3 max-[720px]:pb-22"
+                    className={`grid min-h-0 min-w-0 content-start gap-6 overflow-x-hidden overflow-y-auto px-[clamp(1.5rem,4vw,3.75rem)] py-8 max-[720px]:gap-3 max-[720px]:overflow-y-visible max-[720px]:px-3 max-[720px]:pt-3 max-[720px]:pb-22 ${activeSessionId || activeRepairSessionId ? "min-[721px]:[container-type:size]" : ""}`}
                     data-testid="dashboard-scroll-region"
                     ref={mainRef}
                 >
                     {desktopWorkspace === "queue" ? renderQueuePanel() : null}
+                    {desktopWorkspace === "explore" ? (
+                        exploreData ? <ExploreContent data={exploreData} /> : (
+                            <EmptyState compact icon={Compass} title="Loading Explore">Finding recent public activity and profiles.</EmptyState>
+                        )
+                    ) : null}
                     {desktopWorkspace === "rankings" && dashboard.categories.length === 0 ? (
                         <EmptyState
                             icon={Library}
@@ -3191,6 +3229,10 @@ export function Dashboard({
                                 category
                             })}
                             onRename={(entry, name) => handleRename(entry.id, name)}
+                            onCategoryChange={(categoryId) => {
+                                setSelectedCategoryId(categoryId);
+                                setDesktopWorkspace("rankings");
+                            }}
                         />
                     ) : null}
 
@@ -3267,7 +3309,7 @@ export function Dashboard({
                     size="sm"
                     type="button"
                     variant={desktopWorkspace === "rankings" ? "ghost" : "ghost"}
-                    onClick={() => setDesktopWorkspace("rankings")}
+                    onClick={() => void navigate({ to: "/", search: {} })}
                 >
                     <Home className={`size-4 ${desktopWorkspace === "rankings" ? "text-accent-strong" : ""}`} />
                     Rankings
@@ -3277,14 +3319,14 @@ export function Dashboard({
                     size="sm"
                     type="button"
                     variant="ghost"
-                    onClick={() => setDesktopWorkspace("queue")}
+                    onClick={() => void navigate({ to: "/", search: { workspace: "queue" } })}
                 >
                     <Clock3 className={`size-4 ${desktopWorkspace === "queue" ? "text-accent-strong" : ""}`} />
                     Queue
                     {dashboard.queuedEntries.length > 0 ? <span className="absolute left-[calc(50%+0.45rem)] top-1 grid size-4 place-items-center rounded-full bg-accent-strong text-[0.6rem] text-background">{dashboard.queuedEntries.length}</span> : null}
                 </Button>
                 <Button className="h-12 flex-col gap-0.5 text-[0.68rem]" size="sm" type="button" variant="ghost" onClick={() => void navigate({ to: "/explore" })}>
-                    <Compass className="size-4" />
+                    <Compass className={`size-4 ${desktopWorkspace === "explore" ? "text-accent-strong" : ""}`} />
                     Explore
                 </Button>
                 <Button className="h-12 flex-col gap-0.5 text-[0.68rem]" size="sm" type="button" variant="ghost" onClick={() => void navigate({ to: "/profile" })}>

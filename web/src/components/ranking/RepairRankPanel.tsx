@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Image as ImageIcon, MoreVertical, Pencil, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +40,7 @@ export function RepairRankPanel({
     onCancel,
     onComplete,
     onNeedImage,
+    onCategoryChange,
     onPickImage,
     onRename,
     onUnavailable
@@ -49,6 +50,7 @@ export function RepairRankPanel({
     onCancel: (session: RepairSessionView) => Promise<void>;
     onComplete: (sessionId: string) => Promise<void>;
     onNeedImage: (entry: Entry, category: Pick<CategoryWithEntries, "id" | "name">) => void;
+    onCategoryChange: (categoryId: string) => void;
     onPickImage: (entry: Entry, category: Pick<CategoryWithEntries, "id" | "name">) => void;
     onRename: (entry: Entry, name: string) => Promise<void>;
     onUnavailable: (sessionId: string) => Promise<void>;
@@ -358,6 +360,22 @@ export function RepairRankPanel({
         setRenamingEntryId(entry.id);
     }
 
+    const displayedEntries = useMemo<Entry[]>(() => {
+        if (!session) {
+            return [];
+        }
+
+        return Math.random() < 0.5
+            ? [session.subject, session.opponent]
+            : [session.opponent, session.subject];
+    }, [session?.comparisonCount, session?.id, session?.opponent.id, session?.subject.id]);
+
+    useEffect(() => {
+        if (session) {
+            onCategoryChange(session.categoryId);
+        }
+    }, [onCategoryChange, session?.categoryId]);
+
     if (error) {
         return <div className={STATUS_CLASS}>{error}</div>;
     }
@@ -376,7 +394,7 @@ export function RepairRankPanel({
                         {repairPhaseLabel(session.phase)} · {session.categoryName}
                     </strong>
                     <h2 className="m-0 font-[family-name:var(--app-font-display)] text-[clamp(1.5rem,3vw,2.1rem)] leading-none text-[#f5f0e7]">
-                        Is this pair in the right order?
+                        Which one is better?
                     </h2>
                     <p className="m-0 text-sm text-[#f5f0e7]/65">
                         {repairSubtitle(session)}
@@ -421,7 +439,7 @@ export function RepairRankPanel({
                 <div className={STATUS_CLASS}>Reconnecting...</div>
             ) : null}
             <div className="grid min-w-0 grid-cols-2 gap-5 mx-auto w-full max-w-[min(72rem,calc((100dvh-23rem)*1.6+1.25rem))] min-[721px]:max-w-[min(72rem,calc((100cqh-16rem)*1.6+1.25rem))] max-[720px]:max-w-[min(100%,calc((100dvh-19rem)*2+0.5rem))] max-[720px]:gap-2" data-testid="repair-choice-grid">
-                {[session.subject, session.opponent].map((entry) => (
+                {displayedEntries.map((entry) => (
                     <RepairMatchCard
                         disabled={controlsDisabled}
                         entry={entry}

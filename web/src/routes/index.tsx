@@ -10,6 +10,9 @@ export const Route = createFileRoute("/")({
             { rel: "canonical", href: "https://goldshelf.net/" }
         ]
     }),
+    validateSearch: (search: Record<string, unknown>): { workspace?: "queue" } => (
+        search.workspace === "queue" ? { workspace: "queue" } : {}
+    ),
     loader: async () => {
         const [home, trendingProfiles] = await Promise.all([loadHome(), loadPublicExplore()]);
         return { ...home, trendingProfiles };
@@ -19,6 +22,7 @@ export const Route = createFileRoute("/")({
 
 function Home() {
     const { dashboard, user, trendingProfiles } = Route.useLoaderData();
+    const { workspace } = Route.useSearch();
 
     if (!dashboard || !user) {
         return <MarketingLanding trendingProfiles={trendingProfiles} />;
@@ -27,6 +31,7 @@ function Home() {
     return (
         <Dashboard
             initialDashboard={dashboard}
+            initialWorkspace={workspace ?? "rankings"}
             userIsAdmin={user.isAdmin}
             userImage={user.image}
             userName={user.name}

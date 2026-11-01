@@ -116,6 +116,25 @@ test.describe("Profiles", () => {
         await viewerContext.close();
     });
 
+    test("dashboard navigation exits Explore for rankings and queue", async ({ page, context }) => {
+        await seedUsers([{
+            email: "explore-navigation@e2e.test",
+            name: "Explore Navigation",
+            categories: [{ name: "Movies", entries: ["Arrival"] }]
+        }]);
+        await signInViaApi(context, "explore-navigation@e2e.test");
+
+        await gotoApp(page, "/explore");
+        await page.getByRole("button", { name: "My rankings", exact: true }).click();
+        await expect(page).toHaveURL(/\/$/);
+        await expect(page.getByRole("heading", { name: "Movies" })).toBeVisible();
+
+        await gotoApp(page, "/explore");
+        await page.getByRole("button", { name: /^Queue(?:\s+\d+)?$/ }).click();
+        await expect(page).toHaveURL(/\/?workspace=queue$/);
+        await expect(page.getByTestId("queue-panel")).toBeVisible();
+    });
+
     test("user can permanently delete their account", async ({ page, context }) => {
         await seedUsers([{
             email: "delete-account@e2e.test",

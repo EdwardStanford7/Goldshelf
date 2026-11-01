@@ -1,23 +1,20 @@
 import { Link } from "@tanstack/react-router";
-import { Compass, Library, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import type { ComponentType } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BrandLink } from "@/components/ui/BrandLink";
 import { Button } from "@/components/ui/button";
 import { hasStoredImage } from "@/lib/images";
 
-type NavTo = "/" | "/explore" | "/profile";
+type NavTo = "/profile";
 
 const NAV_ITEMS: { to: NavTo; label: string; icon: ComponentType<{ className?: string }> }[] = [
-    { to: "/", label: "Rankings", icon: Library },
-    { to: "/explore", label: "Explore", icon: Compass },
     { to: "/profile", label: "Settings", icon: Settings2 }
 ];
 
 /**
- * Shared top bar for every signed-in page outside the dashboard (Explore,
- * Settings, public profiles). The dashboard keeps its own sidebar; everything
- * else should look like the same product, with the same nav in the same place.
+ * Shared top bar for pages outside the dashboard. Workspace navigation stays
+ * in the dashboard sidebar; this header only offers account destinations.
  */
 export function AppHeader({
     viewer
@@ -36,14 +33,14 @@ export function AppHeader({
     return (
         <header className="sticky top-0 z-40 -mx-[clamp(1rem,4vw,3.75rem)] border-b border-border bg-background/90 px-[clamp(1rem,4vw,3.75rem)] backdrop-blur">
             <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4">
-                <BrandLink />
+                <BrandLink className="relative left-[calc(50%-50vw+1.5rem)]" />
                 {viewer.signedIn ? (
                     <nav className="flex items-center gap-1" aria-label="Primary">
                         {NAV_ITEMS.map((item) => (
                             <Link
                                 key={item.to}
                                 to={item.to}
-                                activeOptions={{ exact: item.to === "/" }}
+                                activeOptions={{ exact: true }}
                                 className="inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-medium text-muted-foreground no-underline transition-colors hover:bg-secondary hover:text-foreground"
                                 activeProps={{ className: "bg-secondary text-foreground" }}
                             >

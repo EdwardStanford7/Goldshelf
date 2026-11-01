@@ -162,6 +162,8 @@ export function QueuePanel({
                     ) : null}
                 </div>
             </div>
+            <div className="grid min-h-0 min-w-0 gap-4 min-[721px]:grid-cols-[minmax(14rem,35fr)_minmax(0,65fr)]">
+            <div className="grid content-start gap-3">
             {queuedEntries.length > 0 ? (
                 <div className="grid gap-2">
                     <label className="relative block">
@@ -265,6 +267,7 @@ export function QueuePanel({
                     </Button>
                 </div>
             )}
+            </div>
 
             {queuedEntries.length > 0 && displayedEntries.length > 0 ? (
                 <div className="grid min-h-0 min-w-0 gap-[0.55rem] pr-1 max-[720px]:pr-0">
@@ -295,6 +298,7 @@ export function QueuePanel({
                         : "Queued entries will appear here after you add them."}
                 </EmptyState>
             )}
+            </div>
         </section>
     );
 }
