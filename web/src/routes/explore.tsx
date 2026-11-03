@@ -1,11 +1,20 @@
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Compass, Search, Sparkles, UserPlus, Users } from "lucide-react";
+import { Compass, ListPlus, Search, Sparkles, UserPlus, Users } from "lucide-react";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSub,
+    ContextMenuSubContent,
+    ContextMenuSubTrigger,
+    ContextMenuTrigger
+} from "@/components/ui/context-menu";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import { formatDate } from "@/lib/format";
 import { redirectIfUnauthorized } from "@/lib/errors";
@@ -13,7 +22,7 @@ import { showToast } from "@/lib/toast";
 import type { ExploreData, ExploreProfile, FollowRelationState, FollowSearchResult, RecentActivityItem } from "@/lib/types";
 import { getSession } from "@/server/session";
 import { loadExplore } from "@/server/explore";
-import { followProfile, searchPublicProfiles } from "@/server/profiles";
+import { copyPublicCategoryToQueue, followProfile, searchPublicProfiles } from "@/server/profiles";
 import { loadHome } from "@/server/dashboard";
 
 const SEARCH_DELAY_MS = 250;
@@ -54,12 +63,19 @@ function ExploreRoute() {
     );
 }
 
-export function ExploreContent({ data }: { data: ExploreData }) {
+export function ExploreContent({
+    data,
+    targetCategories
+}: {
+    data: ExploreData;
+    targetCategories: Array<{ id: string; name: string }>;
+}) {
     const { followingEntries, recentPublicEntries, publicProfiles } = data;
     const [feed, setFeed] = useState<Feed>(followingEntries.length > 0 ? "following" : "everyone");
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<FollowSearchResult[]>([]);
     const [searching, setSearching] = useState(false);
+    const [copyingEntryId, setCopyingEntryId] = useState<string | null>(null);
 
     useEffect(() => {
         const cleanQuery = query.trim();
@@ -98,6 +114,32 @@ export function ExploreContent({ data }: { data: ExploreData }) {
 
     const activeItems = feed === "following" ? followingEntries : recentPublicEntries;
     const searchActive = query.trim().length >= 2;
+
+    async function addActivityEntryToCategory(item: RecentActivityItem, targetCategoryId: string) {
+        setCopyingEntryId(item.entryId);
+        try {
+            const result = await copyPublicCategoryToQueue({
+                data: {
+                    sourceCategoryId: item.categoryId,
+                    mode: "merge",
+                    sourceEntryIds: [item.entryId],
+                    targetCategoryId
+                }
+            });
+            showToast(
+                result.copiedCount === 1
+                    ? `Added ${item.entryName} to ${result.categoryName}.`
+                    : `${item.entryName} is already in ${result.categoryName}.`,
+                result.copiedCount === 1 ? "success" : "default"
+            );
+        } catch (error) {
+            if (!redirectIfUnauthorized(error)) {
+                showToast(error instanceof Error ? error.message : String(error), "danger");
+            }
+        } finally {
+            setCopyingEntryId(null);
+        }
+    }
 
     return (
         <>
@@ -153,7 +195,15 @@ export function ExploreContent({ data }: { data: ExploreData }) {
                         </div>
                         {activeItems.length > 0 ? (
                             <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-3">
-                                {activeItems.map((item) => <ActivityCard item={item} key={`${feed}-${item.entryId}`} />)}
+                                {activeItems.map((item) => (
+                                    <ActivityCard
+                                        copying={copyingEntryId === item.entryId}
+                                        item={item}
+                                        key={`${feed}-${item.entryId}`}
+                                        targetCategories={targetCategories}
+                                        onAddToCategory={addActivityEntryToCategory}
+                                    />
+                                ))}
                             </div>
                         ) : feed === "following" ? (
                             <EmptyState icon={UserPlus} title="Your feed is quiet">
@@ -206,13 +256,25 @@ function FeedTab({ active, count, label, onSelect }: { active: boolean; count: n
     );
 }
 
-function ActivityCard({ item }: { item: RecentActivityItem }) {
+function ActivityCard({
+    copying,
+    item,
+    targetCategories,
+    onAddToCategory
+}: {
+    copying: boolean;
+    item: RecentActivityItem;
+    targetCategories: Array<{ id: string; name: string }>;
+    onAddToCategory: (item: RecentActivityItem, targetCategoryId: string) => void;
+}) {
     const imageSrc = hasStoredImage(item.entryImageKey)
         ? `/api/public-images/${encodeURIComponent(item.entryId)}?v=${encodeURIComponent(item.entryImageKey)}`
         : null;
 
     return (
-        <article className="grid min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] gap-3 rounded-xl border border-border bg-card p-3 shadow-panel transition-[border-color,box-shadow] hover:border-primary/35 hover:shadow-floating">
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <article className="grid min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] gap-3 rounded-xl border border-border bg-card p-3 shadow-panel transition-[border-color,box-shadow] hover:border-primary/35 hover:shadow-floating">
             <div className="aspect-4/5 overflow-hidden rounded-lg bg-[image:linear-gradient(135deg,var(--poster-start),var(--poster-end))]">
                 {imageSrc ? (
                     <img alt="" className="block size-full object-cover" decoding="async" loading="lazy" src={imageSrc} />
@@ -238,7 +300,32 @@ function ActivityCard({ item }: { item: RecentActivityItem }) {
                     <time className="shrink-0" dateTime={new Date(item.createdAt).toISOString()}>{formatDate(item.createdAt)}</time>
                 </Link>
             </div>
-        </article>
+                </article>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+                {targetCategories.length > 0 ? (
+                    <ContextMenuSub>
+                        <ContextMenuSubTrigger disabled={copying}>
+                            <ListPlus />
+                            {copying ? "Adding..." : "Add to my list"}
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent>
+                            {targetCategories.map((category) => (
+                                <ContextMenuItem
+                                    disabled={copying}
+                                    key={category.id}
+                                    onSelect={() => onAddToCategory(item, category.id)}
+                                >
+                                    {category.name}
+                                </ContextMenuItem>
+                            ))}
+                        </ContextMenuSubContent>
+                    </ContextMenuSub>
+                ) : (
+                    <ContextMenuItem disabled>Create a list first</ContextMenuItem>
+                )}
+            </ContextMenuContent>
+        </ContextMenu>
     );
 }
 

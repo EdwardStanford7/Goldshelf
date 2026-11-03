@@ -435,14 +435,14 @@ export function ImagePickerModal({
 
     return (
         <div
-            className="fixed inset-0 z-60 grid place-items-center bg-modal-backdrop p-4 max-[720px]:p-2"
+            className="fixed inset-0 z-60 grid place-items-center bg-modal-backdrop p-4 max-[720px]:block max-[720px]:p-0"
             onPointerDown={(event) => {
                 if (event.target === event.currentTarget) {
                     closePicker();
                 }
             }}
         >
-            <section className="grid h-[min(47.5rem,calc(100dvh-2rem))] w-[min(60rem,100%)] max-w-[calc(100vw-2rem)] grid-rows-[auto_auto_auto_auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-xl border border-border bg-card p-5 shadow-panel max-[720px]:max-w-[calc(100vw-1rem)] max-[720px]:p-3 [&_h2]:m-0 [&_p]:m-0">
+            <section className="grid h-[min(47.5rem,calc(100dvh-2rem))] w-[min(60rem,100%)] max-w-[calc(100vw-2rem)] grid-rows-[auto_auto_auto_auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-xl border border-border bg-card p-5 shadow-panel max-[720px]:block max-[720px]:h-dvh max-[720px]:max-h-dvh max-[720px]:w-full max-[720px]:max-w-none max-[720px]:overflow-y-auto max-[720px]:rounded-none max-[720px]:border-0 max-[720px]:p-3 [&_h2]:m-0 [&_p]:m-0">
                 <div className="flex flex-wrap items-center justify-between gap-[0.7rem] *:max-w-full *:min-w-0">
                     <div className="min-w-0">
                         <h2 className="truncate font-[family-name:var(--app-font-display)] text-2xl font-normal tracking-tight">Pick Image</h2>
@@ -538,10 +538,10 @@ export function ImagePickerModal({
                     {loading ? <div className={STATUS_CLASS}>Searching for images...</div> : null}
                 </div>
 
-                <div className="grid min-h-0 grid-cols-6 grid-rows-[repeat(3,minmax(0,1fr))] gap-2 overflow-hidden">
+                <div className="grid min-h-0 grid-cols-6 grid-rows-[repeat(3,minmax(0,1fr))] gap-2 overflow-hidden max-[720px]:grid-cols-2 max-[720px]:grid-rows-none max-[720px]:overflow-visible">
                     {candidates.map((candidate) => (
                         <button
-                            className="relative block min-h-0 cursor-pointer overflow-hidden rounded-lg border border-border bg-secondary shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55"
+                            className="relative block min-h-0 cursor-pointer overflow-hidden rounded-lg border border-border bg-secondary shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-55 max-[720px]:aspect-4/5"
                             disabled={Boolean(savingCandidateId)}
                             key={candidate.id}
                             type="button"

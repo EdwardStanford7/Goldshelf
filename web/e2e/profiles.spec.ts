@@ -86,7 +86,11 @@ test.describe("Profiles", () => {
                 name: "Explore Owner",
                 categories: [{ name: "Films", entries: ["Arrival"] }]
             },
-            { email: "explore-viewer@e2e.test", name: "Explore Viewer" }
+            {
+                email: "explore-viewer@e2e.test",
+                name: "Explore Viewer",
+                categories: [{ name: "Watchlist" }]
+            }
         ]);
         await signInViaApi(ownerContext, "explore-owner@e2e.test");
         await gotoApp(ownerPage, "/profile");
@@ -105,6 +109,10 @@ test.describe("Profiles", () => {
         await gotoApp(viewerPage, "/explore");
         await expect(viewerPage.getByRole("heading", { name: "Explore" })).toBeVisible();
         await expect(viewerPage.getByText("Arrival").first()).toBeVisible();
+        await viewerPage.getByText("Arrival", { exact: true }).first().click({ button: "right" });
+        await viewerPage.getByRole("menuitem", { name: "Add to my list" }).hover();
+        await viewerPage.getByRole("menuitem", { name: "Watchlist" }).click();
+        await expect(viewerPage.getByText("Added Arrival to Watchlist.")).toBeVisible();
         await viewerPage.getByRole("searchbox", { name: "Search profiles" }).fill("Explore");
         await expect(viewerPage.getByText("Explore Owner", { exact: true })).toBeVisible();
 

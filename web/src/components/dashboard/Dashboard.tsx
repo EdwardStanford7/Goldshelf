@@ -3197,7 +3197,15 @@ export function Dashboard({
                 >
                     {desktopWorkspace === "queue" ? renderQueuePanel() : null}
                     {desktopWorkspace === "explore" ? (
-                        exploreData ? <ExploreContent data={exploreData} /> : (
+                        exploreData ? (
+                            <ExploreContent
+                                data={exploreData}
+                                targetCategories={dashboard.categories.map((category) => ({
+                                    id: category.id,
+                                    name: category.name
+                                }))}
+                            />
+                        ) : (
                             <EmptyState compact icon={Compass} title="Loading Explore">Finding recent public activity and profiles.</EmptyState>
                         )
                     ) : null}

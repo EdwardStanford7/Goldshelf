@@ -138,8 +138,8 @@ test.describe("Ranking", () => {
         const imagePicker = page.locator("section", { hasText: "Pick Image" }).first();
         await expect(imagePicker.getByRole("button", { name: "Close" })).toBeVisible();
         await expect(imagePicker.getByRole("button", { name: "Paste Image" })).toBeVisible();
-        const imagePickerFitsViewport = await imagePicker.evaluate((element) => element.scrollHeight <= element.clientHeight);
-        expect(imagePickerFitsViewport).toBe(true);
+        const imagePickerOverflow = await imagePicker.evaluate((element) => getComputedStyle(element).overflowY);
+        expect(imagePickerOverflow).toBe("auto");
         await imagePicker.getByRole("button", { name: "Close" }).click();
         await expect(imagePicker).toBeHidden();
 
