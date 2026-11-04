@@ -969,10 +969,11 @@ function PublicEntryCard({
 
     return (
         <article
-            className={`group relative grid min-w-0 overflow-hidden rounded-xl border bg-card shadow-panel transition-[border-color,box-shadow,transform] duration-150 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-floating ${isPodium ? "border-gold/50" : "border-border"
+            className={`group relative grid min-w-0 overflow-hidden rounded-xl border bg-card shadow-panel transition-transform duration-100 ease-out motion-safe:hover:-translate-y-px ${isPodium ? "border-gold/50" : "border-border"
                 }`}
             title={`#${position} of ${listSize} · ${percentileLabel} percentile`}
         >
+            <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 bg-primary/[0.035] opacity-0 transition-opacity duration-100 motion-safe:group-hover:opacity-100" />
             <PublicEntryPoster entry={entry} usePrivateImages={usePrivateImages} />
             <span
                 aria-hidden="true"

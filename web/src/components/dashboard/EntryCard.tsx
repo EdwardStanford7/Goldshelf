@@ -142,16 +142,17 @@ export function EntryCard({
             <ContextMenuTrigger asChild>
                 <article
                     ref={setNodeRef}
-                    className={`group relative max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-panel transition-[border-color,box-shadow,opacity,background-color,transform] duration-150 ease-[ease] ${canDragReorder ? "cursor-grab" : ""
+                    className={`group relative max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-panel transition-transform duration-100 ease-out motion-safe:hover:-translate-y-px ${canDragReorder ? "cursor-grab" : ""
                         } ${highlighted ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
                         } ${isDragging
                             ? ENTRY_CARD_DRAGGING_CLASS
-                            : "motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] motion-safe:hover:shadow-floating"
+                            : ""
                         }`.trim()}
                     data-entry-id={entry.id}
                     style={{ transform: CSS.Transform.toString(transform), transition }}
                     {...listeners}
                 >
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 bg-primary/[0.035] opacity-0 transition-opacity duration-100 motion-safe:group-hover:opacity-100" />
                     {showDragHandle ? (
                         <span
                             aria-hidden="true"
