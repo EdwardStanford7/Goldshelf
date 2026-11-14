@@ -30,6 +30,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
 import { showToast } from "@/lib/toast";
 import { signOut } from "@/lib/auth-client";
+import { clearDashboardSnapshot } from "@/lib/dashboardCache";
 import { redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile, followRelationLabel } from "@/lib/follows";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
@@ -221,6 +222,9 @@ function ProfileRoute() {
 
         try {
             await deleteCurrentUserAccount({ data: { confirmation: deleteConfirmation } });
+            if (settings) {
+                await clearDashboardSnapshot(settings.user.id);
+            }
             window.location.assign("/signin");
         } catch (accountError) {
             setActionError(accountError);
@@ -247,6 +251,9 @@ function ProfileRoute() {
     }
 
     async function handleSignOut() {
+        if (settings) {
+            await clearDashboardSnapshot(settings.user.id);
+        }
         await signOut();
         window.location.assign("/");
     }

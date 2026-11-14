@@ -106,6 +106,7 @@ import { nextMultiSelection } from "@/lib/multiSelect";
 import { BULK_OPERATION_CHUNK_SIZE, SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
 import { orderEntries } from "@/lib/ranking";
+import { readDashboardSnapshot, saveDashboardSnapshot } from "@/lib/dashboardCache";
 import {
     createCategory,
     deleteCategory,
@@ -157,6 +158,28 @@ interface PendingNewEntry {
     shouldRemainQueued: boolean;
 }
 
+function mergeCachedCategoryEntries(current: DashboardData, cached: DashboardData): DashboardData {
+    if (
+        current.profile.userId !== cached.profile.userId ||
+        current.revision !== cached.revision
+    ) {
+        return current;
+    }
+
+    const cachedCategories = new Map(cached.categories.map((category) => [category.id, category]));
+    return {
+        ...current,
+        categories: current.categories.map((category) => {
+            const cachedCategory = cachedCategories.get(category.id);
+            return cachedCategory &&
+                cachedCategory.entryCount === category.entryCount &&
+                cachedCategory.entries.length === cachedCategory.entryCount
+                ? { ...category, entries: cachedCategory.entries }
+                : category;
+        })
+    };
+}
+
 export function Dashboard({
     initialDashboard,
     initialExploreData = null,
@@ -177,6 +200,8 @@ export function Dashboard({
     const initialActiveRepairSessionId = initialDashboard.activeRepairSession?.id ?? null;
     const [dashboard, setDashboard] = useState(initialDashboard);
     const dashboardRevisionRef = useRef(initialDashboard.revision);
+    const dashboardSnapshotWriteTimerRef = useRef<number | null>(null);
+    const [dashboardSnapshotReady, setDashboardSnapshotReady] = useState(false);
     const [selectedCategoryId, setSelectedCategoryId] = useState(
         initialDashboard.activeBinarySession?.categoryId ??
         initialDashboard.activeRepairSession?.categoryId ??
@@ -285,6 +310,50 @@ export function Dashboard({
     const onboardingSampleAttemptedRef = useRef(false);
     const undoStackRef = useRef<ReversibleAction[]>([]);
     const redoStackRef = useRef<ReversibleAction[]>([]);
+
+    // Keep fully loaded categories across reloads without trusting them over a
+    // server response. A matching revision makes this a local read-through
+    // cache for category switches; mutations and stale snapshots never win.
+    useEffect(() => {
+        let disposed = false;
+        void readDashboardSnapshot(initialDashboard.profile.userId, initialDashboard.revision)
+            .then((cachedDashboard) => {
+                if (!disposed && cachedDashboard) {
+                    setDashboard((currentDashboard) => mergeCachedCategoryEntries(currentDashboard, cachedDashboard));
+                }
+            })
+            .finally(() => {
+                if (!disposed) {
+                    setDashboardSnapshotReady(true);
+                }
+            });
+
+        return () => {
+            disposed = true;
+        };
+    }, [initialDashboard.profile.userId, initialDashboard.revision]);
+
+    // Debouncing avoids an IndexedDB write for every small optimistic state
+    // update while still making the current tab's loaded lists durable.
+    useEffect(() => {
+        if (!dashboardSnapshotReady) {
+            return;
+        }
+        if (dashboardSnapshotWriteTimerRef.current !== null) {
+            window.clearTimeout(dashboardSnapshotWriteTimerRef.current);
+        }
+        dashboardSnapshotWriteTimerRef.current = window.setTimeout(() => {
+            dashboardSnapshotWriteTimerRef.current = null;
+            void saveDashboardSnapshot(dashboard);
+        }, 300);
+
+        return () => {
+            if (dashboardSnapshotWriteTimerRef.current !== null) {
+                window.clearTimeout(dashboardSnapshotWriteTimerRef.current);
+                dashboardSnapshotWriteTimerRef.current = null;
+            }
+        };
+    }, [dashboard, dashboardSnapshotReady]);
 
     const selectedCategory = useMemo(
         () =>
