@@ -57,9 +57,9 @@ export async function openQueueWorkspace(page: Page): Promise<Locator> {
     return panel;
 }
 
-/** Targets the queue workspace count rather than incidental responsive chrome. */
+/** The Queue workspace summary in the top bar is the one canonical queue count. */
 export function queueCount(page: Page, count: number) {
-    return page.getByTestId("queue-panel").getByText(`${count} queued`, { exact: true });
+    return page.getByTestId("dashboard-topbar").getByText(new RegExp(`^${count} queued entries`));
 }
 
 /** Opens the account menu and waits for its content to be usable. */

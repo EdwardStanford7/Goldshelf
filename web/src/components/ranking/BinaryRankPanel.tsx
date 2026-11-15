@@ -427,9 +427,9 @@ export function BinaryRankPanel({
                     </strong>
                     <h2 className="m-0 font-[family-name:var(--app-font-display)] text-[clamp(1.5rem,3vw,2.1rem)] leading-none text-[#f5f0e7]">
                         {session.phase === "binary"
-                            ? "Which do you prefer?"
+                            ? "Which one is better?"
                             : session.phase === "placement_check"
-                                ? "Does this placement look right?"
+                                ? "Which one is better?"
                                 : "One more check nearby"}
                     </h2>
                     <p className="m-0 text-sm text-[#f5f0e7]/65">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { ListChecks, Search, Square, Swords, Trash2, X } from "lucide-react";
+import { ArrowRight, ListChecks, Search, Square, Swords, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { nextMultiSelection } from "@/lib/multiSelect";
 import type { QueuedEntry } from "@/lib/types";
 
 const METRIC_CLASS =
-    "max-w-full min-w-0 whitespace-nowrap rounded-full border border-border px-[0.45rem] py-[0.15rem] text-[0.78rem] text-muted-foreground";
+    "max-w-full min-w-0 whitespace-nowrap rounded-full border border-border bg-background/60 px-[0.55rem] py-[0.2rem] text-[0.76rem] text-muted-foreground";
 
 export function QueuePanel({
     activeSessionId,
@@ -149,89 +149,24 @@ export function QueuePanel({
     }
 
     return (
-        <section
-            className="grid h-full min-h-0 min-w-0 max-w-full content-start gap-4 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-card/80 p-4 shadow-panel [scrollbar-gutter:stable] max-[720px]:h-fit max-[720px]:min-h-max max-[720px]:overflow-visible max-[720px]:[scrollbar-gutter:auto]"
-            data-testid="queue-panel"
-        >
-            <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-[0.7rem] bg-card max-[720px]:static">
-                <strong className="min-w-0 max-w-full">Queue</strong>
-                <div className="flex min-w-0 max-w-full flex-wrap justify-end gap-[0.4rem]">
-                    <span className={METRIC_CLASS}>{queuedEntries.length} queued</span>
-                    {displayedEntries.length !== queuedEntries.length ? (
-                        <span className={METRIC_CLASS}>{displayedEntries.length} shown</span>
-                    ) : null}
-                </div>
-            </div>
-            <div className="grid min-h-0 min-w-0 gap-4 min-[721px]:grid-cols-[minmax(14rem,35fr)_minmax(0,65fr)]">
-            <div className="grid content-start gap-3">
-            {queuedEntries.length > 0 ? (
-                <div className="grid gap-2">
-                    <label className="relative block">
-                        <span className="sr-only">Search queue</span>
-                        <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            className="pl-8"
-                            placeholder="Search queue"
-                            value={searchQuery}
-                            onChange={(event) => setSearchQuery(event.target.value)}
-                        />
-                    </label>
-                    {categoryOptions.length > 1 ? (
-                        <Select value={categoryFilterId} onValueChange={setCategoryFilterId}>
-                            <SelectTrigger aria-label="Queue category filter">
-                                <SelectValue placeholder="All categories" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectItem value="all">All categories</SelectItem>
-                                    {categoryOptions.map((category) => (
-                                        <SelectItem key={category.id} value={category.id}>
-                                            {category.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    ) : null}
-                </div>
-            ) : null}
-            {selectionMode ? (
-                <div className="grid gap-2 rounded-sm border border-border bg-muted p-2">
-                    <div className="text-sm text-muted-foreground">
-                        {selectedEntries.length} selected
+        <section className="grid min-w-0 max-w-[88rem] content-start" data-testid="queue-panel">
+            <div className="grid min-w-0 items-start gap-5 min-[721px]:grid-cols-[minmax(15rem,0.35fr)_minmax(0,0.65fr)]">
+                <aside className="grid content-start gap-4 rounded-2xl border border-border bg-card/70 p-4 shadow-panel">
+                    <div className="grid gap-1">
+                        <span className="text-xs font-semibold tracking-[0.13em] text-muted-foreground uppercase">Ranking</span>
+                        <strong className="font-[family-name:var(--app-font-display)] text-[1.3rem] font-normal">
+                            {queueRankMode ? "Ranking in progress" : selectedCategoryName ?? "All categories"}
+                        </strong>
+                        <p className="m-0 text-sm leading-relaxed text-muted-foreground">
+                            {queueRankMode
+                                ? "Finish the current comparison on the rankings workspace, or stop this run."
+                                : selectedCategoryName
+                                    ? `${scopedQueuedEntries.length} queued ${scopedQueuedEntries.length === 1 ? "entry" : "entries"} from this shelf.`
+                                    : `${scopedQueuedEntries.length} queued ${scopedQueuedEntries.length === 1 ? "entry" : "entries"} from all shelves.`}
+                        </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            disabled={busy || selectedEntries.length === 0}
-                            size="sm"
-                            type="button"
-                            variant="destructive"
-                            onClick={() => void removeSelected()}
-                        >
-                            <Trash2 data-icon="inline-start" />
-                            <span>Remove selected</span>
-                        </Button>
-                        <Button
-                            disabled={busy || selectedEntries.length === 0}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                                setSelectedEntryIds(new Set());
-                                setSelectionAnchorId(null);
-                            }}
-                        >
-                            Clear
-                        </Button>
-                        <Button disabled={busy} size="sm" type="button" variant="outline" onClick={closeSelectionMode}>
-                            <X data-icon="inline-start" />
-                            <span>Done</span>
-                        </Button>
-                    </div>
-                </div>
-            ) : (
-                <div className="grid gap-2">
                     <Button
+                        className="justify-between"
                         size="lg"
                         variant={queueRankMode ? "outline" : "default"}
                         disabled={queueRankMode ? false : busy || Boolean(activeSessionId) || scopedQueuedEntries.length === 0}
@@ -244,8 +179,8 @@ export function QueuePanel({
                             }
                         }}
                     >
-                        {queueRankMode ? <Square data-icon="inline-start" /> : <Swords data-icon="inline-start" />}
-                        <span>
+                        <span className="flex items-center gap-2">
+                            {queueRankMode ? <Square /> : <Swords />}
                             {queueRankMode
                                 ? activeQueueRankCategoryName
                                     ? `Stop Ranking ${activeQueueRankCategoryName}`
@@ -254,50 +189,115 @@ export function QueuePanel({
                                     ? `Rank ${selectedCategoryName}`
                                     : "Rank Queue"}
                         </span>
+                        <ArrowRight className="size-4" />
                     </Button>
-                    <Button
-                        disabled={busy || queuedEntries.length === 0}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                        onClick={() => setSelectionMode(true)}
-                    >
-                        <ListChecks data-icon="inline-start" />
-                        <span>Select</span>
-                    </Button>
-                </div>
-            )}
-            </div>
+                    {!selectionMode ? (
+                        <Button
+                            aria-label="Select"
+                            className="justify-start"
+                            disabled={busy || queuedEntries.length === 0}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setSelectionMode(true)}
+                        >
+                            <ListChecks data-icon="inline-start" />
+                            <span>Select entries</span>
+                        </Button>
+                    ) : null}
+                </aside>
 
-            {queuedEntries.length > 0 && displayedEntries.length > 0 ? (
-                <div className="grid min-h-0 min-w-0 gap-[0.55rem] pr-1 max-[720px]:pr-0">
-                    {visibleQueuedEntries.map((entry) => (
-                        <QueuedEntryRow
-                            metadataDisabled={busy}
-                            entry={entry}
-                            key={entry.id}
-                            onDelete={onDelete}
-                            onPickImage={onPickImage}
-                            onRename={onRename}
-                            rankLocked={busy || Boolean(activeSessionId)}
-                            selected={selectedEntryIds.has(entry.id)}
-                            selectionMode={selectionMode}
-                            onSelect={(event, options) => handleSelection(entry, event, options)}
-                            onStart={onStart}
-                        />
-                    ))}
-                </div>
-            ) : queuedEntries.length > 0 ? (
-                <EmptyState compact icon={Search} title="No Queue Matches">
-                    Try another search or category.
-                </EmptyState>
-            ) : (
-                <EmptyState compact icon={Swords} title="Queue Empty">
-                    {activeSessionId
-                        ? "Queue controls will return after the active ranking finishes."
-                        : "Queued entries will appear here after you add them."}
-                </EmptyState>
-            )}
+                <section className="grid min-w-0 gap-0 overflow-hidden rounded-2xl border border-border bg-card shadow-panel" aria-label="Queued entries">
+                    <div className="grid gap-3 border-b border-border bg-muted/25 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="grid gap-0.5">
+                                <strong className="font-[family-name:var(--app-font-display)] text-[1.25rem] font-normal">Queued entries</strong>
+                                <span className="text-sm text-muted-foreground">Rank an entry now, or start ranking the queue.</span>
+                            </div>
+                            {selectionMode ? (
+                                <span className={METRIC_CLASS}>{selectedEntries.length} selected</span>
+                            ) : null}
+                        </div>
+                        {queuedEntries.length > 0 ? (
+                            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,0.45fr)]">
+                                <label className="relative block">
+                                    <span className="sr-only">Search queue</span>
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        className="bg-background pl-9"
+                                        placeholder="Search queue"
+                                        value={searchQuery}
+                                        onChange={(event) => setSearchQuery(event.target.value)}
+                                    />
+                                </label>
+                                {categoryOptions.length > 1 ? (
+                                    <Select value={categoryFilterId} onValueChange={setCategoryFilterId}>
+                                        <SelectTrigger aria-label="Queue category filter" className="bg-background">
+                                            <SelectValue placeholder="All categories" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
+                                                <SelectItem value="all">All categories</SelectItem>
+                                                {categoryOptions.map((category) => (
+                                                    <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                                                ))}
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                ) : null}
+                            </div>
+                        ) : null}
+                    </div>
+
+                    {selectionMode ? (
+                        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-accent/45 px-4 py-3">
+                            <Button disabled={busy || selectedEntries.length === 0} size="sm" type="button" variant="destructive" onClick={() => void removeSelected()}>
+                                <Trash2 data-icon="inline-start" />
+                                <span>Remove selected</span>
+                            </Button>
+                            <Button
+                                disabled={busy || selectedEntries.length === 0}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                    setSelectedEntryIds(new Set());
+                                    setSelectionAnchorId(null);
+                                }}
+                            >Clear</Button>
+                            <Button disabled={busy} size="sm" type="button" variant="ghost" onClick={closeSelectionMode}>
+                                <X data-icon="inline-start" />
+                                <span>Done</span>
+                            </Button>
+                        </div>
+                    ) : null}
+
+                    <div className="grid min-w-0 gap-2 p-3 sm:p-4">
+                        {queuedEntries.length > 0 && displayedEntries.length > 0 ? visibleQueuedEntries.map((entry) => (
+                            <QueuedEntryRow
+                                metadataDisabled={busy}
+                                entry={entry}
+                                key={entry.id}
+                                onDelete={onDelete}
+                                onPickImage={onPickImage}
+                                onRename={onRename}
+                                rankLocked={busy || Boolean(activeSessionId)}
+                                selected={selectedEntryIds.has(entry.id)}
+                                selectionMode={selectionMode}
+                                onSelect={(event, options) => handleSelection(entry, event, options)}
+                                onStart={onStart}
+                            />
+                        )) : queuedEntries.length > 0 ? (
+                            <EmptyState compact icon={Search} title="No Queue Matches">Try another search or category.</EmptyState>
+                        ) : (
+                            <EmptyState compact icon={Swords} title="Queue Empty">
+                                {activeSessionId
+                                    ? "Queue controls will return after the active ranking finishes."
+                                    : "Queued entries will appear here after you add them."}
+                            </EmptyState>
+                        )}
+                    </div>
+                </section>
             </div>
         </section>
     );

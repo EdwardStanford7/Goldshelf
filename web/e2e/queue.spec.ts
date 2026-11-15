@@ -479,7 +479,7 @@ test.describe("Queue", () => {
         await signInViaApi(context, "queue-batch@e2e.test");
         await gotoApp(page);
         const queuePanel = await openQueueWorkspace(page);
-        await expect(queuePanel.getByText("4 queued", { exact: true })).toBeVisible();
+        await expect(queueCount(page, 4)).toBeVisible();
 
         await queuePanel.getByRole("button", { name: "Select", exact: true }).click();
         await expect(queuePanel.getByText("0 selected")).toBeVisible();
@@ -525,7 +525,7 @@ test.describe("Queue", () => {
         await gotoApp(page);
 
         const queuePanel = await openQueueWorkspace(page);
-        await expect(queuePanel.getByText("201 queued", { exact: true })).toBeVisible();
+        await expect(queueCount(page, 201)).toBeVisible();
         await queuePanel.getByRole("button", { name: "Select", exact: true }).click();
         await queuePanel.getByRole("checkbox", { name: "Select queued Queue 000" }).click();
         await queuePanel.getByRole("checkbox", { name: "Select queued Queue 200" }).click({ modifiers: ["Shift"] });
@@ -533,7 +533,7 @@ test.describe("Queue", () => {
 
         await queuePanel.getByRole("button", { name: "Remove selected" }).click();
         await expect(page.getByText("Removed 201 queued entries.")).toBeVisible({ timeout: 20_000 });
-        await expect(queuePanel.getByText("0 queued", { exact: true })).toBeVisible();
+        await expect(queueCount(page, 0)).toBeVisible();
     });
 
     test("active add ranking actions can queue new adds or remove queued adds", async ({
@@ -568,7 +568,7 @@ test.describe("Queue", () => {
         await finalizeNewEntryWithoutImage(page);
         await expect(page.getByText("Queued Blade Runner for ranking.")).toBeVisible();
         const queuePanel = await openQueueWorkspace(page);
-        await expect(queuePanel.getByText("2 queued", { exact: true })).toBeVisible();
+        await expect(queueCount(page, 2)).toBeVisible();
         await expect(page.getByText(ACTIVE_RANKING_LABEL)).toBeVisible();
 
         await queueItem(page, "Blade Runner").click({ button: "right" });
