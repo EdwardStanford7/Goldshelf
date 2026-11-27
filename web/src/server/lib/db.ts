@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
+import { versionedDb } from "./versionedDb";
 
 export function getDb() {
-    return env.DB;
+    return versionedDb(env.DB);
 }
 
 export function getImagesBucket() {

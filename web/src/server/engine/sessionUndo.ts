@@ -1,9 +1,9 @@
 import { parseRankingOperationState } from "./rankingState";
-import { all, first, runBatches } from "@/server/lib/db";
+import { all, first } from "@/server/lib/db";
+import { stageMutation, mutationRevision } from "@/server/lib/versionedDb";
 import { claimActiveOperationStatement } from "@/server/lib/activeOperation";
 
 const MAX_EXISTENCE_CHECK_IDS = 90;
-const UNDO_RESTORE_BATCH_SIZE = 10;
 
 interface EntryStateSnapshot {
     id: string;
@@ -60,6 +60,7 @@ interface RepairSessionSnapshot {
 }
 
 interface RankingUndoSnapshot {
+    expectedRevision?: number;
     kind: "ranking_match_undo";
     version: 1;
     session: RankingSessionSnapshot;
@@ -68,6 +69,7 @@ interface RankingUndoSnapshot {
 }
 
 interface RepairUndoSnapshot {
+    expectedRevision?: number;
     kind: "repair_match_undo";
     version: 1;
     session: RepairSessionSnapshot;
@@ -137,6 +139,7 @@ export async function saveRankingMatchUndoState(
     const includeDataSnapshot = options.includeDataSnapshot ?? true;
     const operationState = parseRankingOperationState(session.operation_state);
     const undoState: RankingUndoSnapshot = {
+        expectedRevision: mutationRevision() + 1,
         kind: "ranking_match_undo",
         version: 1,
         session: {
@@ -166,14 +169,13 @@ export async function saveRankingMatchUndoState(
             : null
     };
 
-    await db
+    stageMutation(db
         .prepare(
             `UPDATE ranking_sessions
              SET undo_state = ?
              WHERE id = ? AND user_id = ? AND status = 'active'`
         )
-        .bind(JSON.stringify(undoState), session.id, userId)
-        .run();
+        .bind(JSON.stringify(undoState), session.id, userId));
 }
 
 export async function saveRepairMatchUndoState(
@@ -184,6 +186,7 @@ export async function saveRepairMatchUndoState(
 ) {
     const includeDataSnapshot = options.includeDataSnapshot ?? true;
     const undoState: RepairUndoSnapshot = {
+        expectedRevision: mutationRevision() + 1,
         kind: "repair_match_undo",
         version: 1,
         session: {
@@ -205,14 +208,13 @@ export async function saveRepairMatchUndoState(
             : []
     };
 
-    await db
+    stageMutation(db
         .prepare(
             `UPDATE repair_sessions
              SET undo_state = ?
              WHERE id = ? AND user_id = ? AND status = 'active'`
         )
-        .bind(JSON.stringify(undoState), session.id, userId)
-        .run();
+        .bind(JSON.stringify(undoState), session.id, userId));
 }
 
 export async function restoreRankingMatchUndoState(
@@ -222,6 +224,7 @@ export async function restoreRankingMatchUndoState(
     options: { claimActiveOperation?: boolean } = {}
 ) {
     const undoState = parseRankingUndoState(undoStateValue);
+    assertUndoRevision(undoState.expectedRevision);
     await assertSnapshotEntriesStillExist(db, userId, undoState.entries);
     const statements: D1PreparedStatement[] = [];
     if (options.claimActiveOperation) {
@@ -294,6 +297,7 @@ export async function restoreRepairMatchUndoState(
     options: { claimActiveOperation?: boolean } = {}
 ) {
     const undoState = parseRepairUndoState(undoStateValue);
+    assertUndoRevision(undoState.expectedRevision);
     await assertSnapshotEntriesStillExist(db, userId, undoState.entries);
     const statements: D1PreparedStatement[] = [];
     if (options.claimActiveOperation) {
@@ -439,22 +443,19 @@ function restoreEntryStatements(
     userId: string,
     entries: EntryStateSnapshot[]
 ) {
-    return entries.map((entry) =>
-        db
-            .prepare(
-                `UPDATE entries
-                 SET status = ?, rank_position = ?, updated_at = ?
-                 WHERE user_id = ? AND id = ? AND category_id = ?`
-            )
-            .bind(
-                entry.status,
-                entry.rankPosition,
-                entry.updatedAt,
-                userId,
-                entry.id,
-                entry.categoryId
-            )
-    );
+    if (entries.length === 0) return [];
+    return [db.prepare(`WITH snapshot AS (SELECT
+        json_extract(value, '$.id') AS id,
+        json_extract(value, '$.categoryId') AS category_id,
+        json_extract(value, '$.status') AS status,
+        json_extract(value, '$.rankPosition') AS rank_position FROM json_each(?))
+        UPDATE entries SET
+          status = (SELECT status FROM snapshot WHERE snapshot.id = entries.id),
+          rank_position = (SELECT rank_position FROM snapshot WHERE snapshot.id = entries.id),
+          updated_at = ?
+        WHERE user_id = ? AND EXISTS (SELECT 1 FROM snapshot
+          WHERE snapshot.id = entries.id AND snapshot.category_id = entries.category_id)`)
+        .bind(JSON.stringify(entries), Date.now(), userId)];
 }
 
 function upsertQueueSnapshotStatement(db: D1Database, queuedEntry: QueueRowSnapshot) {
@@ -479,8 +480,12 @@ function upsertQueueSnapshotStatement(db: D1Database, queuedEntry: QueueRowSnaps
 }
 
 async function runUndoRestoreBatches(db: D1Database, statements: D1PreparedStatement[]) {
-    for (const chunk of chunks(statements, UNDO_RESTORE_BATCH_SIZE)) {
-        await runBatches(db, chunk);
+    await db.batch(statements);
+}
+
+function assertUndoRevision(expected: number | undefined) {
+    if (expected === undefined || expected !== mutationRevision()) {
+        throw new Error("That match can no longer be undone because your data has changed.");
     }
 }
 

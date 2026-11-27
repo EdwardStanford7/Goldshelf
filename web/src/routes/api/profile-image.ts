@@ -1,3 +1,4 @@
+import { versionedImageHandlers } from "@/server/lib/imageMutationScope";
 import { hasStoredImage } from "@/lib/images";
 import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
@@ -11,7 +12,7 @@ const MAX_PROFILE_IMAGE_BYTES = 2 * 1024 * 1024;
 
 export const Route = createFileRoute("/api/profile-image")({
     server: {
-        handlers: {
+        handlers: versionedImageHandlers({
             GET: async ({ request }: { request: Request }) => {
                 const session = await auth.api.getSession({ headers: request.headers });
                 if (!session?.user) {
@@ -119,6 +120,6 @@ export const Route = createFileRoute("/api/profile-image")({
 
                 return Response.json({ ok: true });
             }
-        }
+        })
     }
 });

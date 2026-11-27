@@ -42,11 +42,8 @@ import {
     type EntryDateFilterPreset,
     type ImportResult,
     type MobilePanel,
-    type ReversibleAction,
     SIDEBAR_PANEL_CLASS,
-    shuffledIds,
     TRANSIENT_REFRESH_RETRY_DELAYS_MS,
-    UNDO_STACK_LIMIT
 } from "@/components/dashboard/dashboardHelpers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -61,6 +58,7 @@ import {
     DialogTitle
 } from "@/components/ui/dialog";
 import { EntryCard, EntryDragOverlay } from "@/components/dashboard/EntryCard";
+import { useReversibleActions, pushDashboardToast as pushToast } from "./useReversibleActions";
 import { ImagePickerModal } from "@/components/ranking/ImagePickerModal";
 import { ImportSpreadsheetToast } from "@/components/queue/ImportSpreadsheetToast";
 import { Input } from "@/components/ui/input";
@@ -83,7 +81,7 @@ import {
     SheetTitle,
     SheetTrigger
 } from "@/components/ui/sheet";
-import { showActionToast, showToast, type ToastVariant } from "@/lib/toast";
+import { showToast, type ToastVariant } from "@/lib/toast";
 import { isEditableShortcutTarget, nextPaint } from "@/lib/dom";
 import {
     isReorderNoop,
@@ -106,7 +104,9 @@ import { nextMultiSelection } from "@/lib/multiSelect";
 import { BULK_OPERATION_CHUNK_SIZE, SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import { readInitialShowEntryPercentile, saveShowEntryPercentile } from "@/lib/preferences";
 import { orderEntries } from "@/lib/ranking";
-import { readDashboardSnapshot, saveDashboardSnapshot } from "@/lib/dashboardCache";
+import { useDashboardSnapshot } from "./useDashboardSnapshot";
+import { useQueueRanking } from "./useQueueRanking";
+import { useRankingFlow } from "./useRankingFlow";
 import {
     createCategory,
     deleteCategory,
@@ -116,7 +116,7 @@ import {
     updateCategoriesVisibility,
     updateCategoryVisibility
 } from "@/server/categories";
-import { loadDashboard, loadDashboardFreshness } from "@/server/dashboard";
+import { loadCategoryEntries, loadDashboard, loadDashboardFreshness } from "@/server/dashboard";
 import { loadExplore } from "@/server/explore";
 import {
     deleteEntry,
@@ -158,27 +158,6 @@ interface PendingNewEntry {
     shouldRemainQueued: boolean;
 }
 
-function mergeCachedCategoryEntries(current: DashboardData, cached: DashboardData): DashboardData {
-    if (
-        current.profile.userId !== cached.profile.userId ||
-        current.revision !== cached.revision
-    ) {
-        return current;
-    }
-
-    const cachedCategories = new Map(cached.categories.map((category) => [category.id, category]));
-    return {
-        ...current,
-        categories: current.categories.map((category) => {
-            const cachedCategory = cachedCategories.get(category.id);
-            return cachedCategory &&
-                cachedCategory.entryCount === category.entryCount &&
-                cachedCategory.entries.length === cachedCategory.entryCount
-                ? { ...category, entries: cachedCategory.entries }
-                : category;
-        })
-    };
-}
 
 export function Dashboard({
     initialDashboard,
@@ -200,8 +179,6 @@ export function Dashboard({
     const initialActiveRepairSessionId = initialDashboard.activeRepairSession?.id ?? null;
     const [dashboard, setDashboard] = useState(initialDashboard);
     const dashboardRevisionRef = useRef(initialDashboard.revision);
-    const dashboardSnapshotWriteTimerRef = useRef<number | null>(null);
-    const [dashboardSnapshotReady, setDashboardSnapshotReady] = useState(false);
     const [selectedCategoryId, setSelectedCategoryId] = useState(
         initialDashboard.activeBinarySession?.categoryId ??
         initialDashboard.activeRepairSession?.categoryId ??
@@ -226,18 +203,15 @@ export function Dashboard({
     const [desktopWorkspace, setDesktopWorkspace] = useState<"rankings" | "queue" | "explore">(initialWorkspace);
     const [exploreData, setExploreData] = useState<ExploreData | null>(initialExploreData);
     const [exploreLoading, setExploreLoading] = useState(false);
-    const [activeSessionId, setActiveSessionIdState] = useState<string | null>(initialActiveSessionId);
-    const activeSessionIdRef = useRef<string | null>(initialActiveSessionId);
-    const closedBinarySessionIdsRef = useRef<Set<string>>(new Set());
-    const [activeRepairSessionId, setActiveRepairSessionIdState] = useState<string | null>(initialActiveRepairSessionId);
-    const activeRepairSessionIdRef = useRef<string | null>(initialActiveRepairSessionId);
-    const closedRepairSessionIdsRef = useRef<Set<string>>(new Set());
-    const [queueRankMode, setQueueRankMode] = useState(false);
-    const queueRankModeRef = useRef(false);
-    const [queueRankCategoryId, setQueueRankCategoryId] = useState<string | null>(null);
-    const queueRankCategoryIdRef = useRef<string | null>(null);
-    const skippedQueueRankIdsRef = useRef<Set<string>>(new Set());
-    const queueRankOrderRef = useRef<string[] | null>(null);
+    const { activeSessionId, activeSessionIdRef, activeRepairSessionId, activeRepairSessionIdRef,
+        closedBinarySessionIdsRef, closedRepairSessionIdsRef, setActiveBinarySessionId, setActiveRepairSessionId,
+        markBinarySessionClosed, markRepairSessionClosed } = useRankingFlow(initialActiveSessionId, initialActiveRepairSessionId,
+            resetEntryFilters, () => setQueueRankingActive(false));
+    const { queueRankMode, queueRankModeRef, queueRankCategoryId, skippedQueueRankIdsRef,
+        setQueueRankingActive, startNextQueuedRank, handleStartQueueRank, handleStopQueueRank } = useQueueRanking({
+            queuedEntries: dashboard.queuedEntries, queueSettingsRef, activeFlowLocked: Boolean(activeSessionId || activeRepairSessionId),
+            beginQueuedEntryRanking, startBusy, finishBusy, setMessage, setErrorMessage
+        });
     const [categoryDraftName, setCategoryDraftName] = useState("");
     const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
     const [entryDraftName, setEntryDraftName] = useState("");
@@ -306,54 +280,10 @@ export function Dashboard({
     const locateEntryInFullListRef = useRef<{ categoryId: string; entryId: string } | null>(null);
     const locateEntryHighlightTimerRef = useRef<number | null>(null);
     const [locatedEntryId, setLocatedEntryId] = useState<string | null>(null);
-    const reversibleActionIdRef = useRef(0);
     const onboardingSampleAttemptedRef = useRef(false);
-    const undoStackRef = useRef<ReversibleAction[]>([]);
-    const redoStackRef = useRef<ReversibleAction[]>([]);
+    const { registerReversibleAction } = useReversibleActions({ busyRef, startBusy, finishBusy, onError: setErrorMessage });
 
-    // Keep fully loaded categories across reloads without trusting them over a
-    // server response. A matching revision makes this a local read-through
-    // cache for category switches; mutations and stale snapshots never win.
-    useEffect(() => {
-        let disposed = false;
-        void readDashboardSnapshot(initialDashboard.profile.userId, initialDashboard.revision)
-            .then((cachedDashboard) => {
-                if (!disposed && cachedDashboard) {
-                    setDashboard((currentDashboard) => mergeCachedCategoryEntries(currentDashboard, cachedDashboard));
-                }
-            })
-            .finally(() => {
-                if (!disposed) {
-                    setDashboardSnapshotReady(true);
-                }
-            });
-
-        return () => {
-            disposed = true;
-        };
-    }, [initialDashboard.profile.userId, initialDashboard.revision]);
-
-    // Debouncing avoids an IndexedDB write for every small optimistic state
-    // update while still making the current tab's loaded lists durable.
-    useEffect(() => {
-        if (!dashboardSnapshotReady) {
-            return;
-        }
-        if (dashboardSnapshotWriteTimerRef.current !== null) {
-            window.clearTimeout(dashboardSnapshotWriteTimerRef.current);
-        }
-        dashboardSnapshotWriteTimerRef.current = window.setTimeout(() => {
-            dashboardSnapshotWriteTimerRef.current = null;
-            void saveDashboardSnapshot(dashboard);
-        }, 300);
-
-        return () => {
-            if (dashboardSnapshotWriteTimerRef.current !== null) {
-                window.clearTimeout(dashboardSnapshotWriteTimerRef.current);
-                dashboardSnapshotWriteTimerRef.current = null;
-            }
-        };
-    }, [dashboard, dashboardSnapshotReady]);
+    const dashboardSnapshotReady = useDashboardSnapshot(initialDashboard, dashboard, setDashboard);
 
     const selectedCategory = useMemo(
         () =>
@@ -445,9 +375,10 @@ export function Dashboard({
 
     useEffect(() => {
         const currentCategoryIds = new Set(dashboard.categories.map((category) => category.id));
-        setSelectedCategoryIds((currentSelectedIds) => new Set(
-            [...currentSelectedIds].filter((categoryId) => currentCategoryIds.has(categoryId))
-        ));
+        setSelectedCategoryIds((currentSelectedIds) => {
+            const retainedIds = [...currentSelectedIds].filter((categoryId) => currentCategoryIds.has(categoryId));
+            return retainedIds.length === currentSelectedIds.size ? currentSelectedIds : new Set(retainedIds);
+        });
         if (categorySelectionAnchorId && !currentCategoryIds.has(categorySelectionAnchorId)) {
             setCategorySelectionAnchorId(null);
         }
@@ -557,36 +488,6 @@ export function Dashboard({
         setCustomDateTo("");
     }
 
-    function setActiveBinarySessionId(sessionId: string | null) {
-        activeSessionIdRef.current = sessionId;
-        if (sessionId) {
-            resetEntryFilters();
-            setActiveRepairSessionId(null);
-        }
-        setActiveSessionIdState(sessionId);
-    }
-
-    function setActiveRepairSessionId(sessionId: string | null) {
-        activeRepairSessionIdRef.current = sessionId;
-        if (sessionId) {
-            resetEntryFilters();
-            setActiveBinarySessionId(null);
-            setQueueRankingActive(false);
-        }
-        setActiveRepairSessionIdState(sessionId);
-    }
-
-    function markBinarySessionClosed(sessionId: string | null) {
-        if (sessionId) {
-            closedBinarySessionIdsRef.current.add(sessionId);
-        }
-    }
-
-    function markRepairSessionClosed(sessionId: string | null) {
-        if (sessionId) {
-            closedRepairSessionIdsRef.current.add(sessionId);
-        }
-    }
 
     useEffect(() => {
         saveThemeMode(themeMode);
@@ -662,19 +563,19 @@ export function Dashboard({
         dashboardRevisionRef.current = nextDashboard.revision;
         queueSettingsRef.current = nextDashboard.queueSettings;
         setDashboard((currentDashboard) => {
-            const revisionChanged = currentDashboard.revision !== nextDashboard.revision;
             const cachedCategories = new Map(
                 currentDashboard.categories.map((category) => [category.id, category])
             );
             return {
                 ...nextDashboard,
                 categories: nextDashboard.categories.map((category) => {
-                    if (category.entries.length === category.entryCount || revisionChanged) {
+                    if (category.entries.length === category.entryCount) {
                         return category;
                     }
 
                     const cachedCategory = cachedCategories.get(category.id);
                     return cachedCategory &&
+                        cachedCategory.revision === category.revision &&
                         cachedCategory.entryCount === category.entryCount &&
                         cachedCategory.entries.length === cachedCategory.entryCount
                         ? { ...category, entries: cachedCategory.entries }
@@ -693,16 +594,18 @@ export function Dashboard({
     }
 
     useEffect(() => {
-        if (!selectedCategory || !selectedCategoryLoading) {
+        if (!selectedCategory || !selectedCategoryLoading || desktopWorkspace !== "rankings") {
             return;
         }
 
         const requestId = categoryLoadRequestIdRef.current + 1;
         categoryLoadRequestIdRef.current = requestId;
-        void loadDashboard({ data: { categoryId: selectedCategory.id } })
-            .then((nextDashboard) => {
+        if (!dashboardSnapshotReady) return;
+        void loadCategoryEntries({ data: { categoryId: selectedCategory.id } })
+            .then((loaded) => {
                 if (categoryLoadRequestIdRef.current === requestId) {
-                    applyDashboard(nextDashboard);
+                    setDashboard((current) => ({ ...current, categories: current.categories.map((category) =>
+                        category.id === loaded.categoryId ? { ...category, ...loaded } : category) }));
                 }
             })
             .catch((error) => {
@@ -710,7 +613,7 @@ export function Dashboard({
                     setErrorMessage(error);
                 }
             });
-    }, [selectedCategory, selectedCategoryLoading]);
+    }, [selectedCategory, selectedCategoryLoading, dashboardSnapshotReady, desktopWorkspace]);
 
     function clearResumeRetryTimer() {
         if (resumeRetryTimerRef.current !== null) {
@@ -902,19 +805,6 @@ export function Dashboard({
         };
     }, []);
 
-    function setQueueRankingActive(isActive: boolean, categoryId: string | null = queueRankCategoryIdRef.current) {
-        queueRankModeRef.current = isActive;
-        if (isActive) {
-            queueRankCategoryIdRef.current = categoryId;
-            setQueueRankCategoryId(categoryId);
-        } else {
-            skippedQueueRankIdsRef.current = new Set();
-            queueRankOrderRef.current = null;
-            queueRankCategoryIdRef.current = null;
-            setQueueRankCategoryId(null);
-        }
-        setQueueRankMode(isActive);
-    }
 
     function startBusy(label: string) {
         busyRef.current = true;
@@ -985,22 +875,6 @@ export function Dashboard({
         resetEntryFilters();
     }
 
-    function pushToast(toast: {
-        message: string;
-        variant?: ToastVariant;
-        actionLabel?: string;
-        onAction?: () => Promise<void> | void;
-    }) {
-        if (toast.actionLabel && toast.onAction) {
-            showActionToast(toast.message, {
-                variant: toast.variant,
-                actionLabel: toast.actionLabel,
-                onAction: toast.onAction
-            });
-        } else {
-            showToast(toast.message, toast.variant);
-        }
-    }
 
     function setMessage(message: string | null, variant: ToastVariant = "default") {
         showToast(message, variant);
@@ -1014,133 +888,6 @@ export function Dashboard({
         setMessage(errorMessage(error), "danger");
     }
 
-    function takeReversibleAction(stack: ReversibleAction[], actionId?: number) {
-        const actionIndex = actionId === undefined
-            ? stack.length - 1
-            : stack.findIndex((action) => action.id === actionId);
-        if (actionIndex < 0) {
-            return { action: null, nextStack: stack };
-        }
-
-        return {
-            action: stack[actionIndex],
-            nextStack: [
-                ...stack.slice(0, actionIndex),
-                ...stack.slice(actionIndex + 1)
-            ]
-        };
-    }
-
-    function addReversibleAction(stack: ReversibleAction[], action: ReversibleAction) {
-        return [...stack, action].slice(-UNDO_STACK_LIMIT);
-    }
-
-    function registerReversibleAction(actionOptions: Omit<ReversibleAction, "id">) {
-        const action = {
-            ...actionOptions,
-            id: reversibleActionIdRef.current + 1
-        };
-        reversibleActionIdRef.current = action.id;
-        undoStackRef.current = addReversibleAction(undoStackRef.current, action);
-        redoStackRef.current = [];
-
-        pushToast({
-            actionLabel: "Undo",
-            message: action.redoToastMessage,
-            onAction: () => performUndo(action.id),
-            variant: action.variant
-        });
-    }
-
-    async function performUndo(actionId?: number) {
-        if (busyRef.current) {
-            return;
-        }
-
-        const { action, nextStack } = takeReversibleAction(undoStackRef.current, actionId);
-        if (!action) {
-            return;
-        }
-
-        startBusy("Undoing...");
-        setMessage(null);
-
-        try {
-            const message = await action.undo();
-            undoStackRef.current = nextStack;
-            redoStackRef.current = addReversibleAction(redoStackRef.current, action);
-            pushToast({
-                actionLabel: "Redo",
-                message: message ?? action.undoToastMessage,
-                onAction: () => performRedo(action.id),
-                variant: "success"
-            });
-        } catch (error) {
-            setErrorMessage(error);
-        } finally {
-            finishBusy();
-        }
-    }
-
-    async function performRedo(actionId?: number) {
-        if (busyRef.current) {
-            return;
-        }
-
-        const { action, nextStack } = takeReversibleAction(redoStackRef.current, actionId);
-        if (!action) {
-            return;
-        }
-
-        startBusy("Redoing...");
-        setMessage(null);
-
-        try {
-            const message = await action.redo();
-            redoStackRef.current = nextStack;
-            undoStackRef.current = addReversibleAction(undoStackRef.current, action);
-            pushToast({
-                actionLabel: "Undo",
-                message: message ?? action.redoToastMessage,
-                onAction: () => performUndo(action.id),
-                variant: action.variant
-            });
-        } catch (error) {
-            setErrorMessage(error);
-        } finally {
-            finishBusy();
-        }
-    }
-
-    useEffect(() => {
-        function handleUndoRedoShortcut(event: KeyboardEvent) {
-            if (
-                event.defaultPrevented ||
-                event.altKey ||
-                !(event.metaKey || event.ctrlKey) ||
-                isEditableShortcutTarget(event.target)
-            ) {
-                return;
-            }
-
-            const key = event.key.toLowerCase();
-            const isUndo = key === "z" && !event.shiftKey;
-            const isRedo = (key === "z" && event.shiftKey) || key === "y";
-            if (!isUndo && !isRedo) {
-                return;
-            }
-
-            event.preventDefault();
-            if (isRedo) {
-                void performRedo();
-            } else {
-                void performUndo();
-            }
-        }
-
-        document.addEventListener("keydown", handleUndoRedoShortcut);
-        return () => document.removeEventListener("keydown", handleUndoRedoShortcut);
-    }, []);
 
     useEffect(() => {
         function handleSearchShortcut(event: KeyboardEvent) {
@@ -1589,52 +1336,6 @@ export function Dashboard({
         }
     }
 
-    function getRankableQueuedEntries(queuedEntries: QueuedEntry[], excludedQueuedEntryIds: Set<string> = new Set()) {
-        const categoryScopeId = queueRankCategoryIdRef.current;
-        return queuedEntries.filter((entry) =>
-            !excludedQueuedEntryIds.has(entry.id) &&
-            (!categoryScopeId || entry.categoryId === categoryScopeId)
-        );
-    }
-
-    function buildQueueRankOrder(queuedEntries: QueuedEntry[], categoryId: string | null) {
-        const rankableEntries = queuedEntries.filter((entry) =>
-            !categoryId || entry.categoryId === categoryId
-        );
-
-        return queueSettingsRef.current.randomizeReadyEntries
-            ? shuffledIds(rankableEntries)
-            : rankableEntries.map((entry) => entry.id);
-    }
-
-    function getNextQueuedEntry(queuedEntries: QueuedEntry[]) {
-        const rankableEntries = getRankableQueuedEntries(queuedEntries, skippedQueueRankIdsRef.current);
-        if (rankableEntries.length === 0) {
-            return null;
-        }
-
-        const rankableById = new Map(rankableEntries.map((entry) => [entry.id, entry]));
-        const queueRankOrder = queueRankOrderRef.current;
-        if (!queueRankOrder) {
-            return rankableEntries[0] ?? null;
-        }
-
-        for (const queuedEntryId of queueRankOrder) {
-            const queuedEntry = rankableById.get(queuedEntryId);
-            if (queuedEntry) {
-                return queuedEntry;
-            }
-        }
-
-        const orderedIds = new Set(queueRankOrder);
-        const newlyQueuedEntries = rankableEntries.filter((entry) => !orderedIds.has(entry.id));
-        if (newlyQueuedEntries.length > 0) {
-            queueRankOrder.push(...newlyQueuedEntries.map((entry) => entry.id));
-            return newlyQueuedEntries[0] ?? null;
-        }
-
-        return null;
-    }
 
     async function beginQueuedEntryRanking(entry: QueuedEntry) {
         const result = await startQueuedEntryRanking({
@@ -1656,46 +1357,6 @@ export function Dashboard({
         return { result, nextDashboard };
     }
 
-    async function startNextQueuedRank(queuedEntries: QueuedEntry[]) {
-        if (!queueRankModeRef.current) {
-            return;
-        }
-
-        const nextEntry = getNextQueuedEntry(queuedEntries);
-        if (!nextEntry) {
-            const skippedCount = skippedQueueRankIdsRef.current.size;
-            const categoryScopeId = queueRankCategoryIdRef.current;
-            setQueueRankingActive(false);
-            setMessage(categoryScopeId
-                ? skippedCount > 0
-                    ? "No unskipped queued entries remain in that category."
-                    : "No queued entries remain in that category."
-                : skippedCount > 0
-                    ? "No unskipped queued entries remain."
-                    : "No queued entries remain.");
-            return;
-        }
-
-        startBusy("Starting queued rank...");
-        setMessage(null);
-
-        try {
-            const { result, nextDashboard } = await beginQueuedEntryRanking(nextEntry);
-            if (!nextDashboard) {
-                setQueueRankingActive(false);
-                return;
-            }
-
-            if (result.kind !== "session" && queueRankModeRef.current) {
-                await startNextQueuedRank(nextDashboard.queuedEntries);
-            }
-        } catch (error) {
-            setQueueRankingActive(false);
-            setErrorMessage(error);
-        } finally {
-            finishBusy();
-        }
-    }
 
     async function handleStartQueuedEntry(entry: QueuedEntry) {
         setQueueRankingActive(false);
@@ -1711,18 +1372,6 @@ export function Dashboard({
         }
     }
 
-    async function handleStartQueueRank(categoryId?: string) {
-        const categoryScopeId = categoryId ?? null;
-        skippedQueueRankIdsRef.current = new Set();
-        queueRankOrderRef.current = buildQueueRankOrder(dashboard.queuedEntries, categoryScopeId);
-        setQueueRankingActive(true, categoryScopeId);
-        await startNextQueuedRank(dashboard.queuedEntries);
-    }
-
-    function handleStopQueueRank() {
-        setQueueRankingActive(false);
-        setMessage(activeFlowLocked ? "Queue ranking will stop after the current item." : "Queue ranking stopped.");
-    }
 
     async function removeQueuedEntryForHistory(entry: QueuedEntry) {
         await deleteQueuedEntry({ data: { queuedEntryId: entry.id } });
@@ -1748,15 +1397,27 @@ export function Dashboard({
     }
 
     async function removeQueuedEntriesForHistory(entries: QueuedEntry[]) {
-        let deletedCount = 0;
+        const deletedIds = new Set<string>();
+        let failure: unknown = null;
         for (const chunk of chunkItems(entries, BULK_OPERATION_CHUNK_SIZE)) {
-            const result = await deleteQueuedEntries({
-                data: { queuedEntryIds: chunk.map((entry) => entry.id) }
-            });
-            deletedCount += result.deletedCount;
+            try {
+                const result = await deleteQueuedEntries({
+                    data: { queuedEntryIds: chunk.map((entry) => entry.id) }
+                });
+                result.deletedIds.forEach((id) => deletedIds.add(id));
+            } catch (error) {
+                failure = error;
+                break;
+            }
         }
-        await refreshAfterMutation();
-        return { deletedCount };
+        // Preserve the successful chunks even if the final refresh fails.
+        try { await refreshAfterMutation(); } catch (error) { failure ??= error; }
+        if (failure && deletedIds.size === 0) throw failure;
+        return {
+            deletedCount: deletedIds.size,
+            deletedEntries: entries.filter((entry) => deletedIds.has(entry.id)),
+            failure
+        };
     }
 
     async function restoreQueuedEntriesForHistory(entries: QueuedEntry[]) {
@@ -1803,17 +1464,21 @@ export function Dashboard({
 
         try {
             const result = await removeQueuedEntriesForHistory(entries);
+            if (result.deletedCount === 0) {
+                setMessage("No queued entries were removed. They may have already started ranking or been removed.");
+                return;
+            }
             registerReversibleAction({
                 redo: async () => {
-                    const redoResult = await removeQueuedEntriesForHistory(entries);
+                    const redoResult = await removeQueuedEntriesForHistory(result.deletedEntries);
                     return `Removed ${queuedEntriesLabel(redoResult.deletedCount)}.`;
                 },
-                redoToastMessage: `Removed ${queuedEntriesLabel(result.deletedCount)}.`,
+                redoToastMessage: `Removed ${queuedEntriesLabel(result.deletedCount)}.${result.failure ? ` The operation stopped before all entries were removed. You can undo these removals. ${errorMessage(result.failure)}` : ""}`,
                 undo: async () => {
-                    const undoResult = await restoreQueuedEntriesForHistory(entries);
+                    const undoResult = await restoreQueuedEntriesForHistory(result.deletedEntries);
                     return restoredQueuedEntriesMessage(undoResult.restoredCount, undoResult.skippedCount);
                 },
-                undoToastMessage: `Restored ${queuedEntriesLabel(entries.length)}.`,
+                undoToastMessage: `Restored ${queuedEntriesLabel(result.deletedCount)}.`,
                 variant: "danger"
             });
         } catch (error) {
@@ -2236,6 +1901,7 @@ export function Dashboard({
         const formElement = event.currentTarget;
         startBusy("Reading spreadsheet...");
         setMessage(null);
+        let completed = emptyImportResult();
         const form = new FormData(formElement);
         const file = form.get("workbook");
 
@@ -2270,6 +1936,7 @@ export function Dashboard({
                     : `Importing ${chunkCount} entries...`);
                 await nextPaint();
                 result = addImportResult(result, await importLegacyEntries({ data: chunk }));
+                completed = result;
             }
             setBusyLabel("Refreshing dashboard...");
             pushToast({
@@ -2281,9 +1948,12 @@ export function Dashboard({
             return true;
         } catch (error) {
             pushToast({
-                message: errorMessage(error),
+                message: `${completed.importedCount > 0 ? `${importResultMessage(completed)} The remaining entries were not imported. You can retry this file; existing entries will be skipped. ` : ""}${errorMessage(error)}`,
                 variant: "danger"
             });
+            if (completed.importedCount > 0) {
+                try { await refreshAfterMutation(); } catch { /* Preserve the import result message. */ }
+            }
             return false;
         } finally {
             finishBusy();
@@ -3060,9 +2730,9 @@ export function Dashboard({
     return (
         <main
             className="grid h-dvh min-h-screen w-full max-w-full min-w-0 grid-cols-[17rem_minmax(0,1fr)] overflow-hidden max-[720px]:h-auto max-[720px]:min-h-dvh max-[720px]:grid-cols-1 max-[720px]:grid-rows-[auto_minmax(0,1fr)] max-[720px]:overflow-visible"
-            aria-busy={busy || selectedCategoryLoading}
+            aria-busy={busy || (desktopWorkspace === "rankings" && selectedCategoryLoading)}
         >
-            {busy || selectedCategoryLoading ? (
+            {busy || (desktopWorkspace === "rankings" && selectedCategoryLoading) ? (
                 <BusyOverlay label={busyLabel ?? "Loading category..."} />
             ) : null}
             <Dialog open={dataTransferOpen} onOpenChange={setDataTransferOpen}>
@@ -3262,6 +2932,7 @@ export function Dashboard({
                 <div
                     className={`grid min-h-0 min-w-0 content-start gap-6 overflow-x-hidden overflow-y-auto px-[clamp(1.5rem,4vw,3.75rem)] py-8 max-[720px]:gap-3 max-[720px]:overflow-y-visible max-[720px]:px-3 max-[720px]:pt-3 max-[720px]:pb-22 ${activeSessionId || activeRepairSessionId ? "min-[721px]:[container-type:size]" : ""}`}
                     data-testid="dashboard-scroll-region"
+                    aria-busy={desktopWorkspace === "rankings" && selectedCategoryLoading}
                     ref={mainRef}
                 >
                     {desktopWorkspace === "queue" ? renderQueuePanel() : null}

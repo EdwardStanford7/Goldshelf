@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { followRequestStatement } from "./stores/followStore";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { canViewProfile, deriveFollowRelationState } from "@/lib/follows";
 import { BULK_OPERATION_CHUNK_SIZE } from "@/lib/operationLimits";
@@ -16,7 +17,7 @@ import type {
     ProfileCopyTargetCategory,
     PublicProfileData
 } from "@/lib/types";
-import { all, assertOwned, first, getDb, newId, now, runBatches } from "@/server/lib/db";
+import { all, assertOwned, first, getDb, newId, now } from "@/server/lib/db";
 import {
     MAX_CATEGORY_NAME_LENGTH,
     MAX_PROFILE_SEARCH_LENGTH,
@@ -330,7 +331,11 @@ async function followProfileForUser(userId: string, profileUserId: string) {
                 .prepare(
                     `UPDATE user_follows
              SET status = 'accepted', accepted_at = ?
-             WHERE follower_user_id = ? AND followed_user_id = ? AND status = 'pending'`
+             WHERE follower_user_id = ? AND followed_user_id = ? AND status = 'pending'
+               AND EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = user_follows.followed_user_id AND p.is_public = 1)
+               AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+                 (b.blocker_user_id = user_follows.follower_user_id AND b.blocked_user_id = user_follows.followed_user_id) OR
+                 (b.blocker_user_id = user_follows.followed_user_id AND b.blocked_user_id = user_follows.follower_user_id))`
                 )
                 .bind(acceptedAt, userId, profileUserId)
                 .run();
@@ -345,21 +350,7 @@ async function followProfileForUser(userId: string, profileUserId: string) {
     }
 
     const createdAt = now();
-    const status: FollowStatus = profile.is_public ? "accepted" : "pending";
-    await getDb()
-        .prepare(
-            `INSERT INTO user_follows (
-             follower_user_id, followed_user_id, status, created_at, accepted_at
-           )
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(follower_user_id, followed_user_id)
-           DO UPDATE SET
-             status = excluded.status,
-             created_at = excluded.created_at,
-             accepted_at = excluded.accepted_at`
-        )
-        .bind(userId, profileUserId, status, createdAt, status === "accepted" ? createdAt : null)
-        .run();
+    await followRequestStatement(getDb(), userId, profileUserId, createdAt).run();
 
     const nextRelation = await getFollowRelationState(userId, profileUserId);
     return { profileUserId, relationState: nextRelation };
@@ -398,7 +389,10 @@ export const approveFollowRequest = createServerFn({ method: "POST" })
             .prepare(
                 `UPDATE user_follows
            SET status = 'accepted', accepted_at = ?
-           WHERE follower_user_id = ? AND followed_user_id = ? AND status = 'pending'`
+           WHERE follower_user_id = ? AND followed_user_id = ? AND status = 'pending'
+             AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+               (b.blocker_user_id = user_follows.follower_user_id AND b.blocked_user_id = user_follows.followed_user_id) OR
+               (b.blocker_user_id = user_follows.followed_user_id AND b.blocked_user_id = user_follows.follower_user_id))`
             )
             .bind(acceptedAt, followerUserId, userId)
             .run();
@@ -716,29 +710,14 @@ export const copyPublicCategoryToQueue = createServerFn({ method: "POST" })
 
         const statements: D1PreparedStatement[] = [
             ...(categoryInsertStatement ? [categoryInsertStatement] : []),
-            ...queuedEntries.map((entry) =>
-                db
-                    .prepare(
-                        `INSERT INTO entry_queue (
-                       id, user_id, category_id, name, image_key,
-                       status, created_at, updated_at
-                     )
-                     VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
-                    )
-                    .bind(
-                        entry.id,
-                        userId,
-                        targetCategoryId,
-                        entry.name,
-                        entry.imageKey,
-                        entry.createdAt,
-                        entry.createdAt
-                    )
-            )
+            db.prepare(`INSERT INTO entry_queue (id, user_id, category_id, name, image_key, status, created_at, updated_at)
+              SELECT json_extract(value, '$.id'), ?, ?, json_extract(value, '$.name'),
+                json_extract(value, '$.imageKey'), 'queued', json_extract(value, '$.createdAt'), json_extract(value, '$.createdAt')
+              FROM json_each(?)`).bind(userId, targetCategoryId, JSON.stringify(queuedEntries))
         ];
 
         try {
-            await runBatches(db, statements);
+            await db.batch(statements);
         } catch (error) {
             await releaseImageReferences(queuedEntries.map((entry) => entry.imageKey));
             throw error;

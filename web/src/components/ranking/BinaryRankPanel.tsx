@@ -17,7 +17,7 @@ import {
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { redirectIfUnauthorized } from "@/lib/errors";
+import { isStaleDataError, redirectIfUnauthorized } from "@/lib/errors";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage, isNoImageKey, shouldPromptForImage } from "@/lib/images";
 import { getBinarySession, submitBinaryWinner, undoBinaryMatch } from "@/server/rankingSessions";
@@ -55,6 +55,7 @@ export function BinaryRankPanel({
     const [session, setSession] = useState<BinarySessionView | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const choiceInFlightRef = useRef(false);
     const [renamingEntryId, setRenamingEntryId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
     const [recovering, setRecovering] = useState(false);
@@ -207,10 +208,12 @@ export function BinaryRankPanel({
     }, [renamingEntryId, session]);
 
     async function chooseWinner(winnerId: string) {
+        if (!session || choiceInFlightRef.current) return;
+        choiceInFlightRef.current = true;
         setError(null);
         setSubmitting(true);
         try {
-            const result = await submitBinaryWinner({ data: { sessionId, winnerId } });
+            const result = await submitBinaryWinner({ data: { sessionId, winnerId, version: session.version } });
             if (result.kind === "completed") {
                 await onComplete(sessionId);
                 return;
@@ -223,6 +226,11 @@ export function BinaryRankPanel({
 
             setSession(nextSession);
         } catch (submitError) {
+            if (isStaleDataError(submitError)) {
+                await reloadCurrentSession({ retryTransient: true }).catch((error) => setError(errorMessage(error)));
+                setError("This comparison changed in another tab. The current comparison has been loaded.");
+                return;
+            }
             if (!redirectIfUnauthorized(submitError)) {
                 if (isUnavailableSessionError(submitError)) {
                     await onUnavailable(sessionId);
@@ -238,6 +246,7 @@ export function BinaryRankPanel({
                 setError(errorMessage(submitError));
             }
         } finally {
+            choiceInFlightRef.current = false;
             setSubmitting(false);
         }
     }
@@ -400,7 +409,7 @@ export function BinaryRankPanel({
         return () => window.removeEventListener("keydown", handleKeyDown);
     });
 
-    if (error) {
+    if (error && !session) {
         return <div className={STATUS_CLASS}>{error}</div>;
     }
 
@@ -420,6 +429,7 @@ export function BinaryRankPanel({
 
     return (
         <section className={`${RANK_PANEL_CLASS} grid content-start gap-5 max-[720px]:gap-3`} data-testid="binary-rank-panel">
+            {error ? <div role="alert" className={STATUS_CLASS}>{error}</div> : null}
             <div className="flex flex-wrap items-start justify-between gap-[0.7rem] max-[720px]:gap-2 *:max-w-full *:min-w-0">
                 <div className="grid min-w-0 gap-1.5">
                     <strong className="text-[0.7rem] font-semibold tracking-[0.14em] text-[#d8ae5e] uppercase">

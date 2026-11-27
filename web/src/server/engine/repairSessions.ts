@@ -31,6 +31,7 @@ import {
 } from "./sessionUndo";
 
 interface RepairSessionRow {
+    matchup_version: string;
     id: string;
     user_id: string;
     scope: RepairScope;
@@ -139,6 +140,7 @@ export async function getRepairSessionView(
         subject,
         opponent,
         comparisonCount: row.comparison_count,
+        version: row.matchup_version,
         repairCount: row.repair_count,
         canUndoLastMatch: Boolean(row.undo_state)
     };
@@ -218,12 +220,13 @@ export async function startRepairSession(
 
 export async function submitRepairWinner(
     userId: string,
-    input: { sessionId: string; winnerId: string }
+    input: { sessionId: string; winnerId: string; version: string }
 ) {
     const db = getDb();
     const row = await getActiveRepairRow(userId, input.sessionId);
     assertOwned(row, "Repair session");
     const state = parseRepairOperationState(row.operation_state);
+    if (input.version !== row.matchup_version) throw new Error("This matchup changed. Refresh before choosing a winner.");
     const currentComparison = currentRepairComparison(row, state);
     if (!currentComparison) {
         throw new Error("Repair session has no active matchup");
@@ -257,11 +260,12 @@ export async function submitRepairWinner(
 
 export async function skipRepairMatchup(
     userId: string,
-    input: { sessionId: string }
+    input: { sessionId: string; version: string }
 ) {
     const db = getDb();
     const row = await getActiveRepairRow(userId, input.sessionId);
     assertOwned(row, "Repair session");
+    if (input.version !== row.matchup_version) throw new Error("This matchup changed. Refresh before choosing a winner.");
     if (row.phase !== "checking") {
         throw new Error("Finish the active repair before skipping.");
     }
@@ -751,7 +755,7 @@ async function getActiveRepairRow(userId: string, sessionId: string) {
                 `SELECT id, user_id, scope, scope_category_id, active_category_id,
                         entry_a_id, entry_b_id, status, phase, strategy,
                         comparison_count, repair_count, operation_state,
-                        undo_state, created_at, updated_at, completed_at
+                        undo_state, created_at, updated_at, completed_at, matchup_version
                  FROM repair_sessions
                  WHERE id = ? AND user_id = ? AND status = 'active'`
             )

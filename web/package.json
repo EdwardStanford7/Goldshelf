@@ -71,6 +71,10 @@
       "nanoid": "^3.3.18",
       "postcss": "^8.5.18",
       "source-map-js": "^1.2.2"
+    },
+    "patchedDependencies": {
+      "@radix-ui/react-slot@1.2.3": "patches/@radix-ui__react-slot@1.2.3.patch",
+      "@radix-ui/react-select@2.2.6": "patches/@radix-ui__react-select@2.2.6.patch"
     }
   }
 }

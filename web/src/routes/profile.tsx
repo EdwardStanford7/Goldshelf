@@ -251,10 +251,10 @@ function ProfileRoute() {
     }
 
     async function handleSignOut() {
+        await signOut();
         if (settings) {
             await clearDashboardSnapshot(settings.user.id);
         }
-        await signOut();
         window.location.assign("/");
     }
 

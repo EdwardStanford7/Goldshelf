@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { runIdleMutation } from "@/server/lib/activeOperation";
 import { orderEntries } from "@/lib/ranking";
 import { NO_IMAGE_KEY } from "@/lib/images";
 import { assertOwned, first, getDb, now } from "@/server/lib/db";
@@ -165,7 +166,7 @@ export const moveEntryRelativeToEntry = createServerFn({ method: "POST" })
         const insertionIndex = input.placement === "after" ? targetIndex + 1 : targetIndex;
         orderedEntryIds.splice(insertionIndex, 0, entry.id);
         const db = getDb();
-        await db.batch(rewriteCategoryOrderStatements(db, userId, entry.categoryId, orderedEntryIds, now()));
+        await runIdleMutation(db, userId, rewriteCategoryOrderStatements(db, userId, entry.categoryId, orderedEntryIds, now()));
 
         return { moved: true };
     });
@@ -203,22 +204,22 @@ export const deleteEntry = createServerFn({ method: "POST" })
         assertOwned(entry, "Entry");
 
         const updatedAt = now();
-        await getDb()
+        const db = getDb();
+        await runIdleMutation(db, userId, [db
             .prepare(
                 `UPDATE entries
            SET status = 'deleted', updated_at = ?
            WHERE user_id = ? AND id = ?`
             )
-            .bind(updatedAt, userId, entryId)
-            .run();
-        await getDb()
+            .bind(updatedAt, userId, entryId),
+        db
             .prepare(
                 `UPDATE entries
            SET rank_position = rank_position - 1, updated_at = ?
            WHERE user_id = ? AND category_id = ? AND status = 'active' AND rank_position > ?`
             )
             .bind(updatedAt, userId, entry.categoryId, entry.rankPosition)
-            .run();
+        ]);
     });
 
 export const restoreEntry = createServerFn({ method: "POST" })
@@ -248,7 +249,7 @@ export const restoreEntry = createServerFn({ method: "POST" })
         const updatedAt = now();
         const db = getDb();
 
-        await db.batch([
+        await runIdleMutation(db, userId, [
             db
                 .prepare(
                     `UPDATE entries
@@ -322,7 +323,7 @@ export const switchEntryCategory = createServerFn({ method: "POST" })
         ];
 
         if (targetCount === 0) {
-            await db.batch(statements);
+            await runIdleMutation(db, userId, statements);
             return { kind: "completed" as const, entryId: entry.id, sessionId: null };
         }
 

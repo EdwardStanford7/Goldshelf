@@ -5,6 +5,7 @@ import { assertSafeImageUrl } from "@/server/lib/imageSearch";
 import { fetchWithTimeout } from "@/server/lib/network";
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
+import { BodyTooLargeError, readBoundedBody } from "@/server/lib/boundedBody";
 
 const MAX_PROXY_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_PROXY_TIMEOUT_MS = 8_000;
@@ -77,9 +78,13 @@ export const Route = createFileRoute("/api/image-proxy")({
                     return new Response("Image is too large", { status: 413 });
                 }
 
-                const image = await response.arrayBuffer();
-                if (image.byteLength > MAX_PROXY_IMAGE_BYTES) {
-                    return new Response("Image is too large", { status: 413 });
+                let image: ArrayBuffer;
+                try {
+                    image = await readBoundedBody(response, MAX_PROXY_IMAGE_BYTES, IMAGE_PROXY_TIMEOUT_MS);
+                } catch (error) {
+                    return new Response(error instanceof Error ? error.message : "Image request failed", {
+                        status: error instanceof BodyTooLargeError ? 413 : 504
+                    });
                 }
 
                 const cacheableResponse = cacheableImageResponse(image, contentType);

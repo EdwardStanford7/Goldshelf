@@ -3,6 +3,8 @@ import { getRequestHeaders, setResponseStatus } from "@tanstack/react-start/serv
 import { hasAdminRole } from "@/lib/admin";
 import { auth } from "@/server/lib/auth";
 import { ForbiddenError, UnauthorizedError } from "@/lib/errors";
+import { withVersionedDb } from "@/server/lib/versionedDb";
+import { env } from "cloudflare:workers";
 
 export type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 export type AuthUser = AuthSession["user"];
@@ -21,7 +23,7 @@ export const authMiddleware = createMiddleware().server(async ({ next }) => {
         throw new UnauthorizedError();
     }
 
-    return next({ context: { user: session.user, session } });
+    return withVersionedDb(env.DB, session.user.id, () => next({ context: { user: session.user, session } }));
 });
 
 /**

@@ -1,0 +1,110 @@
+diff --git a/dist/index.js b/dist/index.js
+index dc37ac4a018a086c4244a09a67215dbaa9b4de65..590c4f239bdd459f3e7e8e06c5a62d3044c4da48 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -366,7 +366,7 @@ var SelectContentImpl = React.forwardRef(
+     const context = useSelectContext(CONTENT_NAME, __scopeSelect);
+     const [content, setContent] = React.useState(null);
+     const [viewport, setViewport] = React.useState(null);
+-    const composedRefs = (0, import_react_compose_refs.useComposedRefs)(forwardedRef, (node) => setContent(node));
++    const composedRefs = (0, import_react_compose_refs.useComposedRefs)(forwardedRef, setContent);
+     const [selectedItem, setSelectedItem] = React.useState(null);
+     const [selectedItemText, setSelectedItemText] = React.useState(
+       null
+@@ -580,7 +580,7 @@ var SelectItemAlignedPosition = React.forwardRef((props, forwardedRef) => {
+   const contentContext = useSelectContentContext(CONTENT_NAME, __scopeSelect);
+   const [contentWrapper, setContentWrapper] = React.useState(null);
+   const [content, setContent] = React.useState(null);
+-  const composedRefs = (0, import_react_compose_refs.useComposedRefs)(forwardedRef, (node) => setContent(node));
++  const composedRefs = (0, import_react_compose_refs.useComposedRefs)(forwardedRef, setContent);
+   const getItems = useCollection(__scopeSelect);
+   const shouldExpandOnScrollRef = React.useRef(false);
+   const shouldRepositionRef = React.useRef(true);
+@@ -875,10 +875,11 @@ var SelectItem = React.forwardRef(
+     const isSelected = context.value === value;
+     const [textValue, setTextValue] = React.useState(textValueProp ?? "");
+     const [isFocused, setIsFocused] = React.useState(false);
+-    const composedRefs = (0, import_react_compose_refs.useComposedRefs)(
+-      forwardedRef,
+-      (node) => contentContext.itemRefCallback?.(node, value, disabled)
++    const itemRef = React.useCallback(
++      (node) => contentContext.itemRefCallback?.(node, value, disabled),
++      [contentContext.itemRefCallback, value, disabled]
+     );
++    const composedRefs = (0, import_react_compose_refs.useComposedRefs)(forwardedRef, itemRef);
+     const textId = (0, import_react_id.useId)();
+     const pointerTypeRef = React.useRef("touch");
+     const handleSelect = () => {
+@@ -971,11 +972,15 @@ var SelectItemText = React.forwardRef(
+     const itemContext = useSelectItemContext(ITEM_TEXT_NAME, __scopeSelect);
+     const nativeOptionsContext = useSelectNativeOptionsContext(ITEM_TEXT_NAME, __scopeSelect);
+     const [itemTextNode, setItemTextNode] = React.useState(null);
++    const itemTextRef = React.useCallback(
++      (node) => contentContext.itemTextRefCallback?.(node, itemContext.value, itemContext.disabled),
++      [contentContext.itemTextRefCallback, itemContext.value, itemContext.disabled]
++    );
+     const composedRefs = (0, import_react_compose_refs.useComposedRefs)(
+       forwardedRef,
+-      (node) => setItemTextNode(node),
++      setItemTextNode,
+       itemContext.onItemTextChange,
+-      (node) => contentContext.itemTextRefCallback?.(node, itemContext.value, itemContext.disabled)
++      itemTextRef
+     );
+     const textContent = itemTextNode?.textContent;
+     const nativeOption = React.useMemo(
+diff --git a/dist/index.mjs b/dist/index.mjs
+index f9b94f39dfddef678ef3086354f8d7413ae27e52..cdb371bafe522acd132338904ce6213ee0662cd3 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -299,7 +299,7 @@ var SelectContentImpl = React.forwardRef(
+     const context = useSelectContext(CONTENT_NAME, __scopeSelect);
+     const [content, setContent] = React.useState(null);
+     const [viewport, setViewport] = React.useState(null);
+-    const composedRefs = useComposedRefs(forwardedRef, (node) => setContent(node));
++    const composedRefs = useComposedRefs(forwardedRef, setContent);
+     const [selectedItem, setSelectedItem] = React.useState(null);
+     const [selectedItemText, setSelectedItemText] = React.useState(
+       null
+@@ -513,7 +513,7 @@ var SelectItemAlignedPosition = React.forwardRef((props, forwardedRef) => {
+   const contentContext = useSelectContentContext(CONTENT_NAME, __scopeSelect);
+   const [contentWrapper, setContentWrapper] = React.useState(null);
+   const [content, setContent] = React.useState(null);
+-  const composedRefs = useComposedRefs(forwardedRef, (node) => setContent(node));
++  const composedRefs = useComposedRefs(forwardedRef, setContent);
+   const getItems = useCollection(__scopeSelect);
+   const shouldExpandOnScrollRef = React.useRef(false);
+   const shouldRepositionRef = React.useRef(true);
+@@ -808,10 +808,11 @@ var SelectItem = React.forwardRef(
+     const isSelected = context.value === value;
+     const [textValue, setTextValue] = React.useState(textValueProp ?? "");
+     const [isFocused, setIsFocused] = React.useState(false);
+-    const composedRefs = useComposedRefs(
+-      forwardedRef,
+-      (node) => contentContext.itemRefCallback?.(node, value, disabled)
++    const itemRef = React.useCallback(
++      (node) => contentContext.itemRefCallback?.(node, value, disabled),
++      [contentContext.itemRefCallback, value, disabled]
+     );
++    const composedRefs = useComposedRefs(forwardedRef, itemRef);
+     const textId = useId();
+     const pointerTypeRef = React.useRef("touch");
+     const handleSelect = () => {
+@@ -904,11 +905,15 @@ var SelectItemText = React.forwardRef(
+     const itemContext = useSelectItemContext(ITEM_TEXT_NAME, __scopeSelect);
+     const nativeOptionsContext = useSelectNativeOptionsContext(ITEM_TEXT_NAME, __scopeSelect);
+     const [itemTextNode, setItemTextNode] = React.useState(null);
++    const itemTextRef = React.useCallback(
++      (node) => contentContext.itemTextRefCallback?.(node, itemContext.value, itemContext.disabled),
++      [contentContext.itemTextRefCallback, itemContext.value, itemContext.disabled]
++    );
+     const composedRefs = useComposedRefs(
+       forwardedRef,
+-      (node) => setItemTextNode(node),
++      setItemTextNode,
+       itemContext.onItemTextChange,
+-      (node) => contentContext.itemTextRefCallback?.(node, itemContext.value, itemContext.disabled)
++      itemTextRef
+     );
+     const textContent = itemTextNode?.textContent;
+     const nativeOption = React.useMemo(

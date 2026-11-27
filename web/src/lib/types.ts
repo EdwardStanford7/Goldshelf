@@ -29,6 +29,7 @@ export interface QueuedEntry {
 }
 
 export interface CategoryWithEntries {
+    revision?: string;
     id: string;
     name: string;
     sortOrder: number;
@@ -193,6 +194,7 @@ export interface ActiveRepairSession {
 export type RankingDisplayPhase = "binary" | "placement_check" | "local_repair";
 
 export interface BinarySessionView {
+    version: string;
     id: string;
     categoryId: string;
     categoryName: string;
@@ -209,6 +211,7 @@ export interface BinarySessionView {
 }
 
 export interface RepairSessionView {
+    version: string;
     id: string;
     scope: RepairScope;
     scopeCategoryId: string | null;

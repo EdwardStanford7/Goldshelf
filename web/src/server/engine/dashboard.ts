@@ -1,4 +1,5 @@
 import { orderEntries } from "@/lib/ranking";
+import { mutationRevision } from "@/server/lib/versionedDb";
 import type { DashboardData, Entry } from "@/lib/types";
 import { all, getDb } from "@/server/lib/db";
 import { type CategoryRow } from "@/server/stores/categoryStore";
@@ -31,6 +32,7 @@ interface DashboardRecoveryCheckRow {
 
 interface DashboardCategoryRow extends CategoryRow {
     entry_count: number;
+    data_revision: string;
 }
 
 export async function getDashboardRevision(userId: string) {
@@ -74,6 +76,7 @@ export async function getDashboardRevision(userId: string) {
         .first<DashboardFreshnessRow>();
 
     return JSON.stringify([
+        mutationRevision(),
         row?.category_updated_at ?? 0,
         row?.entry_updated_at ?? 0,
         row?.queue_updated_at ?? 0,
@@ -92,7 +95,8 @@ export async function getDashboardRevision(userId: string) {
 export async function buildDashboard(
     userId: string,
     preferredCategoryId?: string,
-    includeAllEntries = false
+    includeAllEntries = false,
+    metadataOnly = false
 ): Promise<DashboardData> {
     const startedAt = Date.now();
     const db = getDb();
@@ -116,7 +120,7 @@ export async function buildDashboard(
             db
                 .prepare(
                     `SELECT categories.id, categories.name, categories.sort_order,
-                            categories.created_at, categories.is_public, categories.visibility,
+                            categories.created_at, categories.is_public, categories.visibility, categories.data_revision,
                             COUNT(entries.id) AS entry_count
                      FROM categories
                      LEFT JOIN entries ON entries.category_id = categories.id
@@ -124,7 +128,7 @@ export async function buildDashboard(
                        AND entries.status = 'active'
                      WHERE categories.user_id = ?
                      GROUP BY categories.id, categories.name, categories.sort_order,
-                              categories.created_at, categories.is_public, categories.visibility
+                              categories.created_at, categories.is_public, categories.visibility, categories.data_revision
                      ORDER BY categories.sort_order ASC, categories.name ASC`
                 )
                 .bind(userId)
@@ -139,7 +143,7 @@ export async function buildDashboard(
     ].find((categoryId): categoryId is string => Boolean(
         categoryId && categories.some((category) => category.id === categoryId)
     ));
-    const entryRows = includeAllEntries
+    const entryRows = metadataOnly ? [] : includeAllEntries
         ? await all<EntryRow>(
             db
                 .prepare(
@@ -172,6 +176,7 @@ export async function buildDashboard(
     const dashboard = {
         revision,
         categories: categories.map((category) => ({
+            revision: category.data_revision,
             id: category.id,
             name: category.name,
             sortOrder: category.sort_order,

@@ -64,7 +64,7 @@ export const getBinarySession = createServerFn({ method: "GET" })
                     upper_bound, pivot_entry_id, pivot_rank_position, from_category_id,
                     final_rank_position, created_at, comparison_count, phase,
                     operation_kind, secondary_entry_id, secondary_original_rank_position,
-                    operation_state, undo_state
+                    operation_state, undo_state, matchup_version
              FROM ranking_sessions
              WHERE id = ? AND user_id = ? AND status = 'active'`
                 )
@@ -95,6 +95,7 @@ export const getBinarySession = createServerFn({ method: "GET" })
         }
 
         return {
+            version: session.matchup_version,
             id: session.id,
             categoryId: session.category_id,
             categoryName: category.name,
@@ -267,7 +268,7 @@ function normalizeCancelMode(mode: CancelBinarySessionMode | undefined): CancelB
 
 export const submitBinaryWinner = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .validator((data: { sessionId: string; winnerId: string }) => data)
+    .validator((data: { sessionId: string; winnerId: string; version: string }) => data)
     .handler(async ({ context, data: input }) => {
         const userId = context.user.id;
         const db = getDb();
@@ -278,7 +279,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
                     upper_bound, pivot_entry_id, pivot_rank_position, from_category_id,
                     final_rank_position, original_rank_position, created_at, phase,
                     operation_kind, secondary_entry_id, secondary_original_rank_position,
-                    operation_state, comparison_count, undo_state
+                    operation_state, comparison_count, undo_state, matchup_version
              FROM ranking_sessions
              WHERE id = ? AND user_id = ? AND status = 'active'`
                 )
@@ -289,6 +290,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
         if (!session.pivot_entry_id || session.pivot_rank_position === null) {
             throw new Error("Ranking session has no active matchup");
         }
+        if (input.version !== session.matchup_version) throw new Error("This matchup changed. Refresh before choosing a winner.");
 
         const createdAt = now();
         const operationState = parseRankingOperationState(session.operation_state);

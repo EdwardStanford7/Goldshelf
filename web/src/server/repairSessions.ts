@@ -21,12 +21,12 @@ export const getRepairSession = createServerFn({ method: "GET" })
 
 export const submitRepairWinner = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .validator((data: { sessionId: string; winnerId: string }) => data)
+    .validator((data: { sessionId: string; winnerId: string; version: string }) => data)
     .handler(({ context, data }) => submitRepairWinnerForUser(context.user.id, data));
 
 export const skipRepairMatchup = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
-    .validator((data: { sessionId: string }) => data)
+    .validator((data: { sessionId: string; version: string }) => data)
     .handler(({ context, data }) => skipRepairMatchupForUser(context.user.id, data));
 
 export const cancelRepairSession = createServerFn({ method: "POST" })

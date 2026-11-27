@@ -221,7 +221,20 @@ async function loadCachedPublicTrendingProfiles() {
         const cached = await cache.match(cacheRequest);
         const expiresAt = Number(cached?.headers.get("x-goldshelf-expires-at"));
         if (cached && Number.isFinite(expiresAt) && expiresAt > Date.now()) {
-            return await cached.json() as ExploreProfile[];
+            const profiles = await cached.json() as ExploreProfile[];
+            // Cache ranking order, but revalidate the current audience and
+            // public metadata before returning a directory entry.
+            const visible = await all<{ user_id: string; name: string; image: string | null; slug: string; public_category_count: number }>(getDb().prepare(`
+              SELECT p.user_id, u.name, u.image, p.slug,
+                (SELECT COUNT(*) FROM categories WHERE user_id = p.user_id AND visibility = 'public') AS public_category_count
+              FROM user_profiles p JOIN "user" u ON u.id = p.user_id
+              WHERE p.is_public = 1 AND p.user_id IN (SELECT value FROM json_each(?))`)
+                .bind(JSON.stringify(profiles.map((profile) => profile.userId))));
+            const byId = new Map(visible.map((row) => [row.user_id, row]));
+            return profiles.flatMap((profile) => {
+                const row = byId.get(profile.userId);
+                return row ? [{ userId: row.user_id, name: row.name, imageKey: row.image, slug: row.slug, publicCategoryCount: row.public_category_count }] : [];
+            });
         }
         if (cached) {
             await cache.delete(cacheRequest);

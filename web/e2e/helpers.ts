@@ -18,6 +18,8 @@ export async function gotoApp(page: Page, path = "/") {
         await page.goto(targetUrl);
     }
     await page.waitForSelector("html[data-hydrated]", { timeout: 15_000 });
+    // Hydration can finish before the local snapshot or focused list request.
+    await expect(page.locator('[data-testid="dashboard-scroll-region"][aria-busy="true"]')).toHaveCount(0);
 }
 
 export async function openNewCategoryDialog(page: Page): Promise<Locator> {

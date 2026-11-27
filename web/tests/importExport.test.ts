@@ -5,6 +5,13 @@ import { parseLegacyWorkbook, writeExportWorkbook } from "../src/lib/importExpor
 import type { CategoryWithEntries, Entry, QueuedEntry } from "../src/lib/types";
 
 describe("xlsx export", () => {
+    it("round trips ranked entry dates from the metadata sheet", async () => {
+        const original = entry("Dune", 0);
+        original.createdAt = 1234567890000;
+        const blob = await writeExportWorkbook([category("Books", [original])]);
+        const parsed = await parseLegacyWorkbook(await blob.arrayBuffer(), null);
+        expect(parsed.entries[0].createdAt).toBe(original.createdAt);
+    });
     it("does not write blank padding cells in shorter category columns", async () => {
         const blob = await writeExportWorkbook([
             category("Books", [entry("Dune", 0)]),

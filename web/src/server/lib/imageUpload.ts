@@ -1,3 +1,4 @@
+import { BodyTooLargeError, readBoundedBody } from "./boundedBody";
 export interface ValidatedImageUpload {
     bytes: ArrayBuffer;
     contentType: SupportedImageContentType;
@@ -34,7 +35,12 @@ export async function readValidatedImageUpload(request: Request, maxBytes: numbe
         throw new ImageUploadError("Image is too large", 413);
     }
 
-    const bytes = await request.arrayBuffer();
+    let bytes: ArrayBuffer;
+    try { bytes = await readBoundedBody(request, maxBytes); }
+    catch (error) {
+        if (error instanceof BodyTooLargeError) throw new ImageUploadError(error.message, 413);
+        throw new ImageUploadError("Image upload timed out or was interrupted", 408);
+    }
     if (bytes.byteLength > maxBytes) {
         throw new ImageUploadError("Image is too large", 413);
     }
@@ -48,7 +54,7 @@ export async function readValidatedImageUpload(request: Request, maxBytes: numbe
 }
 
 export class ImageUploadError extends Error {
-    constructor(message: string, readonly status: 413 | 415) {
+    constructor(message: string, readonly status: 408 | 413 | 415) {
         super(message);
     }
 }

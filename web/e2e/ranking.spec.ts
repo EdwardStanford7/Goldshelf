@@ -428,6 +428,12 @@ test.describe("Ranking", () => {
         page,
         context
     }) => {
+        const renderErrors: string[] = [];
+        page.on("console", (message) => {
+            if (message.type() === "error" && /Maximum update depth/.test(message.text())) {
+                renderErrors.push(message.text());
+            }
+        });
         await page.setViewportSize({ width: 1000, height: 520 });
         await seedUsers([{
             email: "short-sidebar@e2e.test",
@@ -475,6 +481,7 @@ test.describe("Ranking", () => {
         );
         await openQueueWorkspace(page);
         await expect(page.getByTestId("queue-panel")).toBeVisible();
+        expect(renderErrors).toEqual([]);
     });
 
     test("repair mode starts, skips, survives reload, and cancels", async ({

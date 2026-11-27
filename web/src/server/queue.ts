@@ -156,9 +156,6 @@ export const deleteQueuedEntry = createServerFn({ method: "POST" })
     .handler(async ({ context, data }) => {
         const userId = context.user.id;
         const { queuedEntryId } = data;
-        const queuedEntry = await getOwnedQueuedEntry(userId, queuedEntryId);
-        assertOwned(queuedEntry, "Queued entry");
-
         const updatedAt = now();
         await getDb()
             .prepare(
@@ -182,27 +179,13 @@ export const deleteQueuedEntries = createServerFn({ method: "POST" })
         const rows = await all<{ id: string }>(
             db
                 .prepare(
-                    `SELECT id
-             FROM entry_queue
-             WHERE user_id = ? AND status = 'queued' AND id IN (${idPlaceholders})`
+                    `UPDATE entry_queue SET status = 'deleted', updated_at = ?
+             WHERE user_id = ? AND status = 'queued' AND id IN (${idPlaceholders})
+             RETURNING id`
                 )
-                .bind(userId, ...queuedEntryIds)
+                .bind(now(), userId, ...queuedEntryIds)
         );
-        if (rows.length !== queuedEntryIds.length) {
-            throw new Error("One or more queued entries could not be removed");
-        }
-
-        const updatedAt = now();
-        await db
-            .prepare(
-                `UPDATE entry_queue
-           SET status = 'deleted', updated_at = ?
-           WHERE user_id = ? AND status = 'queued' AND id IN (${idPlaceholders})`
-            )
-            .bind(updatedAt, userId, ...queuedEntryIds)
-            .run();
-
-        return { deletedCount: rows.length };
+        return { deletedCount: rows.length, deletedIds: rows.map((row) => row.id), skippedCount: queuedEntryIds.length - rows.length };
     });
 
 export const restoreQueuedEntry = createServerFn({ method: "POST" })

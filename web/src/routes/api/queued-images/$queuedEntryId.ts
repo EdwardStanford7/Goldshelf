@@ -1,3 +1,4 @@
+import { versionedImageHandlers } from "@/server/lib/imageMutationScope";
 import { auth } from "@/server/lib/auth";
 import { first, getDb, now } from "@/server/lib/db";
 import { isNoImageKey, hasStoredImage } from "@/lib/images";
@@ -11,7 +12,7 @@ const MAX_UPLOAD_IMAGE_BYTES = 3 * 1024 * 1024;
 
 export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
     server: {
-        handlers: {
+        handlers: versionedImageHandlers({
             GET: async ({
                 request,
                 params
@@ -153,6 +154,6 @@ export const Route = createFileRoute("/api/queued-images/$queuedEntryId")({
 
                 return Response.json({ ok: true });
             }
-        }
+        })
     }
 });

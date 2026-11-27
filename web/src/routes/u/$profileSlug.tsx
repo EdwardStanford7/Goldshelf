@@ -256,13 +256,12 @@ function PublicProfileRoute() {
         }
 
         setCopyingCategoryId(copyDialogCategory.id);
-
+        let targetCategoryId = copyTargetCategoryId;
+        let targetCategoryName = copyMode === "new" ? cleanCategoryName : "";
+        let copiedCount = 0;
+        let skippedCount = 0;
         try {
             const sourceEntryIdChunks = chunks(sourceEntryIds, BULK_OPERATION_CHUNK_SIZE);
-            let targetCategoryId = copyTargetCategoryId;
-            let targetCategoryName = copyMode === "new" ? cleanCategoryName : "";
-            let copiedCount = 0;
-            let skippedCount = 0;
 
             for (let index = 0; index < sourceEntryIdChunks.length; index += 1) {
                 const chunk = sourceEntryIdChunks[index];
@@ -316,7 +315,18 @@ function PublicProfileRoute() {
                 return;
             }
 
-            showToast(copyError instanceof Error ? copyError.message : String(copyError), "danger");
+            const errorText = copyError instanceof Error ? copyError.message : String(copyError);
+            if (copiedCount > 0) {
+                // Keep the newly created destination available for a safe
+                // retry. Merge skips entries already copied by earlier chunks.
+                setProfileData((current) => current ? { ...current, viewer: { ...current.viewer,
+                    categories: current.viewer.categories.some((category) => category.id === targetCategoryId)
+                        ? current.viewer.categories : [...current.viewer.categories, { id: targetCategoryId, name: targetCategoryName }]
+                } } : current);
+                setCopyMode("merge");
+                setCopyTargetCategoryId(targetCategoryId);
+                showToast(`Copied ${copiedCount} entries to ${targetCategoryName} before copying stopped. Retry to copy the remaining entries; duplicates will be skipped. ${errorText}`, "danger");
+            } else showToast(errorText, "danger");
         } finally {
             setCopyingCategoryId(null);
         }

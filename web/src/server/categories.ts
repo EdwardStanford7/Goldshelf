@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { runIdleMutation } from "@/server/lib/activeOperation";
 import { hasStoredImage } from "@/lib/images";
 import type { CategoryVisibility } from "@/lib/types";
 import { all, assertOwned, first, getDb, newId, now } from "@/server/lib/db";
@@ -148,7 +149,7 @@ export const deleteCategory = createServerFn({ method: "POST" })
                 .filter((imageKey): imageKey is string => hasStoredImage(imageKey))
         ));
 
-        await db.batch([
+        await runIdleMutation(db, userId, [
             db
                 .prepare(`DELETE FROM ranking_sessions WHERE user_id = ? AND category_id = ?`)
                 .bind(userId, categoryId),
@@ -282,7 +283,7 @@ export const moveCategoriesToQueue = createServerFn({ method: "POST" })
 
         const updatedAt = now();
         const db = getDb();
-        await db.batch([
+        await runIdleMutation(db, userId, [
             db
                 .prepare(
                     `UPDATE entry_queue

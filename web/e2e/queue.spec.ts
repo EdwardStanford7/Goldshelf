@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { ACTIVE_RANKING_LABEL, finalizeNewEntryWithoutImage, gotoApp, openDesktopNewEntry, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
+import { ACTIVE_RANKING_LABEL, finalizeNewEntryWithoutImage, gotoApp, isServerFnRequest, openDesktopNewEntry, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, serverFnResponse, signInViaApi, TEST_PASSWORD, winMatchups } from "./helpers";
 
 const QUINN = {
     email: "quinn@e2e.test",
@@ -102,6 +102,38 @@ async function openImportToast(page: Page) {
 }
 
 test.describe("Queue", () => {
+    test("clearing a stale queue selection preserves an entry started in another tab", async ({ page, context }) => {
+        await seedUsers([{
+            email: "queue-race@e2e.test", name: "Queue Race",
+            queueSettings: { enabled: true, promptForMissingImages: false },
+            categories: [{ name: "Movies", entries: ["Arrival", "Dune"] }],
+            queuedEntries: [
+                { categoryName: "Movies", name: "Solaris" },
+                { categoryName: "Movies", name: "Memento" }
+            ]
+        }]);
+        await signInViaApi(context, "queue-race@e2e.test");
+        await gotoApp(page);
+        const panel = await openQueueWorkspace(page);
+        await panel.getByRole("button", { name: "Select", exact: true }).click();
+        await panel.getByRole("checkbox", { name: "Select queued Solaris" }).click();
+        await panel.getByRole("checkbox", { name: "Select queued Memento" }).click({ modifiers: ["Meta"] });
+
+        const otherTab = await context.newPage();
+        await gotoApp(otherTab);
+        await openQueueWorkspace(otherTab);
+        await queueItem(otherTab, "Solaris").click({ button: "right" });
+        await otherTab.getByRole("menuitem", { name: "Rank Now" }).click();
+        await expect(otherTab.getByText(ACTIVE_RANKING_LABEL)).toBeVisible();
+
+        await panel.getByRole("button", { name: "Remove selected" }).click();
+        await expect(page.getByText("Removed 1 queued entry.")).toBeVisible();
+        await expect(queueCount(page, 0)).toBeVisible();
+        await winMatchups(otherTab, "Solaris");
+        await expect(otherTab.getByText("#1 Solaris")).toBeVisible();
+        await otherTab.close();
+    });
+
     test("new accounts default to queue-on and settings apply before refresh @smoke", async ({
         page
     }) => {
@@ -534,6 +566,35 @@ test.describe("Queue", () => {
         await queuePanel.getByRole("button", { name: "Remove selected" }).click();
         await expect(page.getByText("Removed 201 queued entries.")).toBeVisible({ timeout: 20_000 });
         await expect(queueCount(page, 0)).toBeVisible();
+    });
+
+    test("a partially failed queue clear keeps completed removals undoable", async ({ context, page }) => {
+        await seedUsers([{
+            email: "partial-clear@e2e.test", name: "Partial Clear",
+            categories: [{ name: "Movies", entries: [] }],
+            queuedEntries: Array.from({ length: 201 }, (_, index) => ({
+                categoryName: "Movies", name: `Item ${String(index).padStart(3, "0")}`, createdAt: index + 1
+            }))
+        }]);
+        await signInViaApi(context, "partial-clear@e2e.test");
+        await gotoApp(page);
+        const panel = await openQueueWorkspace(page);
+        await panel.getByRole("button", { name: "Select", exact: true }).click();
+        await panel.getByRole("checkbox", { name: "Select queued Item 000" }).click();
+        await panel.getByRole("checkbox", { name: "Select queued Item 200" }).click({ modifiers: ["Shift"] });
+        let removalRequests = 0;
+        await page.route("**/*", async (route) => {
+            if (isServerFnRequest(route.request().url(), "deleteQueuedEntries") && ++removalRequests === 2) {
+                await route.abort("failed");
+            } else {
+                await route.continue();
+            }
+        });
+        await panel.getByRole("button", { name: "Remove selected" }).click();
+        await expect(queueCount(page, 103)).toBeVisible();
+        await expect(page.getByText(/The operation stopped before all entries were removed/)).toBeVisible();
+        await clickUndoToast(page, "Removed 98 queued entries.");
+        await expect(queueCount(page, 201)).toBeVisible();
     });
 
     test("active add ranking actions can queue new adds or remove queued adds", async ({

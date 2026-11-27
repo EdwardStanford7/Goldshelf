@@ -1,5 +1,7 @@
 import { assertOwned, first, getDb, newId, now } from "@/server/lib/db";
 import { MAX_ENTRY_NAME_LENGTH, normalizeRequiredText } from "@/server/lib/validation";
+import { runIdleMutation } from "@/server/lib/activeOperation";
+import { assertNoActiveRepairSession } from "./repairSessions";
 import { getOwnedCategory } from "../stores/categoryStore";
 import { getActiveEntryCount, getOwnedEntry } from "../stores/entryStore";
 import {
@@ -76,6 +78,7 @@ export async function createEntryWithBinaryRankingForUser(
         throw new Error("Finish or cancel the active ranking before starting another one");
     }
 
+    await assertNoActiveRepairSession(userId);
     await assertEntryNameAvailable(userId, input.categoryId, cleanName, input.ignoredQueuedEntryId);
 
     const activeCount = await getActiveEntryCount(userId, input.categoryId);
@@ -135,7 +138,32 @@ export async function createEntryWithBinaryRankingForUser(
         );
     }
 
-    await db.batch(statements);
+    if (input.queuedEntryId) {
+        // Validate the exact queue snapshot in the transaction that consumes
+        // it. Deletion, rename and image edits from another tab must not be
+        // overwritten by a start request based on an earlier read.
+        statements.unshift(db.prepare(`INSERT INTO queue_claim_guards (id, available)
+            SELECT ?, EXISTS(SELECT 1 FROM entry_queue
+              WHERE id = ? AND user_id = ? AND status = 'queued'
+                AND category_id = ? AND name = ? AND image_key IS ?)`)
+            .bind(entryId, input.queuedEntryId, userId, input.categoryId, cleanName, input.imageKey ?? null));
+        statements.push(db.prepare("DELETE FROM queue_claim_guards WHERE id = ?").bind(entryId));
+    }
+    try {
+        if (activeCount === 0) {
+            await runIdleMutation(db, userId, statements);
+        } else {
+            await db.batch(statements);
+        }
+    } catch (error) {
+        if (String(error).includes("queue_entry_changed")) {
+            throw new Error("That queued entry changed or is no longer available. Refresh the queue and try again.");
+        }
+        if (String(error).includes("active_user_operations.user_id")) {
+            throw new Error("Finish or cancel the active ranking or repair session before starting another ranking.");
+        }
+        throw error;
+    }
 
     if (activeCount === 0) {
         return { kind: "completed" as const, entryId, sessionId: null };

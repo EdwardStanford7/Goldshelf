@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { runIdleMutation } from "@/server/lib/activeOperation";
+import { jsonInsert } from "@/server/lib/jsonInsert";
 import { SPREADSHEET_IMPORT_ENTRY_CHUNK_SIZE } from "@/lib/operationLimits";
 import type { ParsedImport } from "@/lib/types";
-import { all, getDb, newId, now, runBatches } from "@/server/lib/db";
+import { all, getDb, newId, now } from "@/server/lib/db";
 import { MAX_CATEGORY_NAME_LENGTH, MAX_ENTRY_NAME_LENGTH, isWithinTextLimit } from "@/server/lib/validation";
 import { authMiddleware } from "@/server/middleware/auth";
 import { type CategoryRow } from "./stores/categoryStore";
@@ -74,24 +76,17 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
         }
 
         let sortOrder = Math.max(-1, ...existingCategories.map((category) => category.sort_order)) + 1;
-        const categoryInsertStatements: D1PreparedStatement[] = [];
+        const categoryRows: unknown[][] = [];
 
         for (const categoryName of new Set([...importedByCategory.keys(), ...queuedByCategory.keys()])) {
             if (!categoriesByName.has(categoryName)) {
                 const categoryId = newId("cat");
                 categoriesByName.set(categoryName, categoryId);
-                categoryInsertStatements.push(
-                    db.prepare(
-                        `INSERT INTO categories (id, user_id, name, sort_order, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?)`
-                    )
-                        .bind(categoryId, userId, categoryName, sortOrder, createdAt, createdAt)
-                );
+                categoryRows.push([categoryId, userId, categoryName, sortOrder, createdAt, createdAt]);
                 sortOrder += 1;
             }
         }
 
-        await runBatches(db, categoryInsertStatements);
 
         const existingEntries = await all<ExistingEntryRow>(
             db
@@ -132,8 +127,8 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
             namesByCategory.set(entry.category_id, names);
         }
 
-        const entryInsertStatements: D1PreparedStatement[] = [];
-        const queueInsertStatements: D1PreparedStatement[] = [];
+        const entryRows: unknown[][] = [];
+        const queueRows: unknown[][] = [];
         let rankedImportedCount = 0;
         let rankedSkippedCount = 0;
         let queuedImportedCount = 0;
@@ -162,25 +157,7 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
             for (const entry of insertableEntries) {
                 const entryId = newId("entry");
                 const entryCreatedAt = normalizeImportedTimestamp(entry.createdAt) ?? createdAt;
-                entryInsertStatements.push(
-                    db.prepare(
-                        `INSERT OR IGNORE INTO entries (
-                 id, user_id, category_id, name, rank_position, status, image_key,
-                 created_at, updated_at
-               )
-               VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`
-                    )
-                        .bind(
-                            entryId,
-                            userId,
-                            categoryId,
-                            entry.name,
-                            rankPosition,
-                            null,
-                            entryCreatedAt,
-                            createdAt
-                        )
-                );
+                entryRows.push([entryId, userId, categoryId, entry.name, rankPosition, 'active', null, entryCreatedAt, createdAt]);
                 rankedImportedCount += 1;
                 rankPosition += 1;
             }
@@ -206,29 +183,23 @@ export const importLegacyEntries = createServerFn({ method: "POST" })
                 knownNames.add(entry.name);
                 const queueId = newId("queue");
                 const rowCreatedAt = normalizeImportedTimestamp(entry.createdAt) ?? createdAt + queuedInsertIndex;
-                queueInsertStatements.push(
-                    db.prepare(
-                        `INSERT OR IGNORE INTO entry_queue (
-                 id, user_id, category_id, name, image_key,
-                 status, created_at, updated_at
-               )
-               VALUES (?, ?, ?, ?, NULL, 'queued', ?, ?)`
-                    )
-                        .bind(
-                            queueId,
-                            userId,
-                            categoryId,
-                            entry.name,
-                            rowCreatedAt,
-                            createdAt
-                        )
-                );
+                queueRows.push([queueId, userId, categoryId, entry.name, null, 'queued', rowCreatedAt, createdAt]);
                 queuedImportedCount += 1;
                 queuedInsertIndex += 1;
             }
         }
 
-        await runBatches(db, [...entryInsertStatements, ...queueInsertStatements]);
+        const results = await runIdleMutation(db, userId, [
+            jsonInsert(db, "categories", ["id", "user_id", "name", "sort_order", "created_at", "updated_at"], categoryRows),
+            jsonInsert(db, "entries", ["id", "user_id", "category_id", "name", "rank_position", "status", "image_key", "created_at", "updated_at"], entryRows),
+            jsonInsert(db, "entry_queue", ["id", "user_id", "category_id", "name", "image_key", "status", "created_at", "updated_at"], queueRows)
+        ]);
+        const actualRanked = results[1].results.length;
+        const actualQueued = results[2].results.length;
+        rankedSkippedCount += rankedImportedCount - actualRanked;
+        queuedSkippedCount += queuedImportedCount - actualQueued;
+        rankedImportedCount = actualRanked;
+        queuedImportedCount = actualQueued;
 
         return {
             importedCount: rankedImportedCount + queuedImportedCount,

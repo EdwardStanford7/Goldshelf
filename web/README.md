@@ -120,3 +120,17 @@ make password-reset-link EMAIL=user@example.com
 `make deploy-first` is only for one-time Cloudflare bootstrap on a new project or recreated resources. `wrangler.jsonc` is already pointed at `https://goldshelf.net`; after a Worker rename or intentional secret rotation, re-run `make cf-secret-auth` because Worker secrets are scoped to the Worker name. Use `make bootstrap-help` to see the rare setup targets. Both `make deploy` and `pnpm deploy` now run the smoke checks and remote migrations before deployment.
 
 For normal releases, `make deploy` is the only operational command you need. It runs the verification gate, applies remote D1 migrations, and deploys the Worker.
+
+## Concurrency and cached data
+
+Authenticated server functions use a request-scoped database revision through `authMiddleware` and `getDb()`. Writes check that revision inside their D1 batch before changing data, then advance it once. A request calculated from stale reads fails with a refresh message. Use `versionedImageHandlers` for authenticated image mutations; avoid raw `env.DB` writes in user-facing handlers because those bypass the revision check.
+
+Ranking and repair answers also carry a matchup token. Undo snapshots are staged with `stageMutation` and committed in the same batch as the answer. Restoring an obsolete snapshot is rejected; restoration of entries, session and operation lock is atomic. Keep those statements together when extending ranking flows.
+
+Shelf entry revisions are maintained by database triggers. The home loader supplies metadata; the browser restores matching entries from IndexedDB or uses the focused category loader. Local snapshots are per account, expire after seven days, and are invalidated across tabs on sign-out/session loss. They are a read cache; edits require the server.
+
+Image cleanup first marks an unreferenced asset for deletion. Database fences prevent attaching an image being deleted, and cleanup can resume after interruption. Uploads reserve the asset briefly before storing bytes. Do not delete an R2 object before claiming its deletion marker.
+
+Import requests commit their JSON inserts atomically. Larger UI operations report completed chunks and allow retries that skip duplicates. SQLite integration tests exercise the actual migrations, revision guards, image fences and undo behavior; Playwright covers multi-tab recovery and local-cache reuse.
+
+The patches for Radix Slot 1.2.3 and Select 2.2.6 memoize composed refs and their callbacks. Without them, ordinary parent renders detach and reattach unchanged controls, which can trigger React update loops. Keep these patches until an upstream upgrade passes `e2e/slot-refs.spec.ts`; those tests exercise the installed dependencies directly. After changing patches, run `pnpm install` to apply them to the local dependencies.

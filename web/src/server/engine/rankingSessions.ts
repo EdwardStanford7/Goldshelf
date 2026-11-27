@@ -38,6 +38,7 @@ import { repairInterruptedRepairState } from "./repairSessions";
 import { claimActiveOperationStatement } from "@/server/lib/activeOperation";
 
 export interface SessionRow {
+    matchup_version: string;
     id: string;
     user_id: string;
     category_id: string;

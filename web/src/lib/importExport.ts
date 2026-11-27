@@ -30,6 +30,23 @@ export async function parseLegacyWorkbook(
         sheets.find((sheet) => normalizeHeader(sheet.sheet) !== "queue");
     const rows = sortedSheet?.data ?? [];
     const entries = parseSortedRows(rows, defaultAddedAt);
+    const metadata = sheets.find((sheet) => sheet.sheet === "Entry Metadata")?.data;
+    if (metadata) {
+        const headers = metadata[0] ?? [];
+        const categoryColumn = findHeader(headers, ["category"]);
+        const entryColumn = findHeader(headers, ["entry"]);
+        const dateColumn = findHeader(headers, ["added_at"]);
+        if (categoryColumn >= 0 && entryColumn >= 0 && dateColumn >= 0) {
+            const dates = new Map(metadata.slice(1).map((row) => [
+                JSON.stringify([cellText(row[categoryColumn]), cellText(row[entryColumn])]),
+                timestampCell(row[dateColumn])
+            ]));
+            for (const entry of entries) {
+                const key = JSON.stringify([entry.categoryName, entry.name]);
+                if (dates.has(key)) entry.createdAt = dates.get(key) ?? null;
+            }
+        }
+    }
     const queueSheet = sheets.find((sheet) => normalizeHeader(sheet.sheet) === "queue");
     const queuedEntries = queueSheet ? parseQueueRows(queueSheet.data) : [];
 

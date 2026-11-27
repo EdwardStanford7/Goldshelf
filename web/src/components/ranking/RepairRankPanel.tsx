@@ -15,7 +15,7 @@ import {
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { redirectIfUnauthorized } from "@/lib/errors";
+import { isStaleDataError, redirectIfUnauthorized } from "@/lib/errors";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage, isNoImageKey, shouldPromptForImage } from "@/lib/images";
 import type { CategoryWithEntries, Entry, RepairSessionView } from "@/lib/types";
@@ -58,6 +58,7 @@ export function RepairRankPanel({
     const [session, setSession] = useState<RepairSessionView | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const choiceInFlightRef = useRef(false);
     const [renamingEntryId, setRenamingEntryId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
     const [recovering, setRecovering] = useState(false);
@@ -206,10 +207,12 @@ export function RepairRankPanel({
     }, [renamingEntryId, session]);
 
     async function chooseWinner(winnerId: string) {
+        if (!session || choiceInFlightRef.current) return;
+        choiceInFlightRef.current = true;
         setError(null);
         setSubmitting(true);
         try {
-            const result = await submitRepairWinner({ data: { sessionId, winnerId } });
+            const result = await submitRepairWinner({ data: { sessionId, winnerId, version: session.version } });
             if (result.kind === "completed") {
                 await onComplete(sessionId);
                 return;
@@ -217,6 +220,11 @@ export function RepairRankPanel({
 
             await reloadCurrentSession({ retryTransient: true });
         } catch (submitError) {
+            if (isStaleDataError(submitError)) {
+                await reloadCurrentSession({ retryTransient: true }).catch((error) => setError(errorMessage(error)));
+                setError("This comparison changed in another tab. The current comparison has been loaded.");
+                return;
+            }
             if (!redirectIfUnauthorized(submitError)) {
                 if (isUnavailableRepairError(submitError)) {
                     await onUnavailable(sessionId);
@@ -232,15 +240,17 @@ export function RepairRankPanel({
                 setError(errorMessage(submitError));
             }
         } finally {
+            choiceInFlightRef.current = false;
             setSubmitting(false);
         }
     }
 
     async function skipCheck() {
+        if (!session || choiceInFlightRef.current) return;
         setError(null);
         setSubmitting(true);
         try {
-            const result = await skipRepairMatchup({ data: { sessionId } });
+            const result = await skipRepairMatchup({ data: { sessionId, version: session.version } });
             if (result.kind === "completed") {
                 await onComplete(sessionId);
                 return;
@@ -376,7 +386,7 @@ export function RepairRankPanel({
         }
     }, [onCategoryChange, session?.categoryId]);
 
-    if (error) {
+    if (error && !session) {
         return <div className={STATUS_CLASS}>{error}</div>;
     }
 
@@ -388,6 +398,7 @@ export function RepairRankPanel({
 
     return (
         <section className={`${REPAIR_PANEL_CLASS} grid content-start gap-5 max-[720px]:gap-3`}>
+            {error ? <div role="alert" className={STATUS_CLASS}>{error}</div> : null}
             <div className="flex flex-wrap items-start justify-between gap-[0.7rem] max-[720px]:gap-2 *:max-w-full *:min-w-0">
                 <div className="grid min-w-0 gap-1.5">
                     <strong className="text-[0.7rem] font-semibold tracking-[0.14em] text-[#d8ae5e] uppercase">

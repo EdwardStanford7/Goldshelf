@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { categoryButton, gotoApp, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, signInViaApi } from "./helpers";
+import { categoryButton, gotoApp, isServerFnRequest, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, signInViaApi } from "./helpers";
 
 const ALICE = {
     email: "alice@e2e.test",
@@ -316,7 +316,7 @@ test.describe("Profiles", () => {
         await bobContext.close();
     });
 
-    test("signed-in viewers can copy a shared list with more than 200 entries", async ({
+    for (const failSecondChunk of [false, true]) test(`signed-in viewers can copy a shared list with more than 200 entries${failSecondChunk ? " and resume after a partial failure" : ""}`, async ({
         page: sourcePage,
         context: sourceContext,
         browser
@@ -345,8 +345,17 @@ test.describe("Profiles", () => {
         const dialog = viewerPage.getByRole("alertdialog", { name: "Copy Movies" });
         await dialog.getByLabel("Category name").fill("Large Movie Copy");
         await expect(dialog.getByText("201 of 201 selected")).toBeVisible();
+        let requests = 0;
+        if (failSecondChunk) await viewerPage.route("**/*", async (route) => {
+            if (isServerFnRequest(route.request().url(), "copyPublicCategoryToQueue") && ++requests === 2) await route.abort("failed");
+            else await route.continue();
+        });
         await dialog.getByRole("button", { name: "Copy List" }).click();
-        await expect(viewerPage.getByText("Copied 201 entries to Large Movie Copy.")).toBeVisible({ timeout: 30_000 });
+        if (failSecondChunk) {
+            await expect(viewerPage.getByText(/Copied 98 entries to Large Movie Copy before copying stopped/)).toBeVisible();
+            await dialog.getByRole("button", { name: "Copy List" }).click();
+            await expect(viewerPage.getByText("Copied 103 entries to Large Movie Copy. Skipped 98 duplicates.")).toBeVisible({ timeout: 30_000 });
+        } else await expect(viewerPage.getByText("Copied 201 entries to Large Movie Copy.")).toBeVisible({ timeout: 30_000 });
 
         await gotoApp(viewerPage);
         await openQueueWorkspace(viewerPage);
