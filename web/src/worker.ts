@@ -3,24 +3,7 @@ import { canonicalUrl } from "@/lib/canonicalHost";
 import { purgeExpiredDeletedItems, purgeExpiredTemporaryData } from "@/server/engine/maintenance";
 import { purgeUnreferencedImageAssets } from "@/server/lib/imageAssets";
 
-function securityPolicy() {
-    // TanStack Start emits page-specific inline hydration scripts.  A static
-    // hash cannot allow them, so blocking inline scripts breaks every page
-    // after the initial SSR paint. Keep the remaining CSP boundaries while
-    // allowing the framework's required scripts.
-    return [
-        "default-src 'self'",
-        "script-src 'self' 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' blob: data:",
-        "connect-src 'self'",
-        "font-src 'self'",
-        "base-uri 'self'",
-        "form-action 'self'",
-        "frame-ancestors 'none'",
-        "object-src 'none'"
-    ].join("; ");
-}
+import { securityPolicy } from "@/lib/securityPolicy";
 
 async function withSecurityHeaders(response: Response) {
     const headers = new Headers(response.headers);

@@ -83,6 +83,7 @@ import {
 } from "@/components/ui/sheet";
 import { showToast, type ToastVariant } from "@/lib/toast";
 import { isEditableShortcutTarget, nextPaint } from "@/lib/dom";
+import { withExportTimeout } from "@/lib/exportTimeout";
 import {
     isReorderNoop,
     placementForSortableMove,
@@ -1965,7 +1966,8 @@ export function Dashboard({
         setMessage(null);
         try {
             await nextPaint();
-            const exportDashboard = await loadDashboard({ data: { includeAllEntries: true } });
+            setBusyLabel("Loading export data...");
+            const exportDashboard = await withExportTimeout(loadDashboard({ data: { includeAllEntries: true } }));
             const entryCount = exportDashboard.categories.reduce(
                 (count, category) => count + category.entries.length,
                 0
@@ -1977,8 +1979,9 @@ export function Dashboard({
                 });
                 return;
             }
-            const { writeExportWorkbook } = await import("@/lib/importExport");
-            const blob = await writeExportWorkbook(exportDashboard.categories, exportDashboard.queuedEntries);
+            setBusyLabel("Generating spreadsheet...");
+            const blob = await withExportTimeout(import("@/lib/importExport")
+                .then(({ writeExportWorkbook }) => writeExportWorkbook(exportDashboard.categories, exportDashboard.queuedEntries)));
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement("a");
             anchor.href = url;
