@@ -1,6 +1,7 @@
 import { hasStoredImage } from "@/lib/images";
 import { all, getDb, now } from "@/server/lib/db";
 import { releaseImageReferences } from "@/server/lib/imageAssets";
+import { pruneSessionPayloadsStatement } from "@/server/lib/sessionRetention";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DELETED_ITEM_RETENTION_MS = 30 * DAY_MS;
@@ -33,7 +34,9 @@ export async function purgeExpiredTemporaryData(timestamp = now()) {
     await db.batch([
         db.prepare(`DELETE FROM verification WHERE expiresAt < ?`).bind(timestamp),
         db.prepare(`DELETE FROM rateLimit WHERE lastRequest < ?`).bind(cutoff),
-        db.prepare(`DELETE FROM api_rate_limits WHERE window_start < ?`).bind(cutoff)
+        db.prepare(`DELETE FROM api_rate_limits WHERE window_start < ?`).bind(cutoff),
+        pruneSessionPayloadsStatement(db, "ranking_sessions"),
+        pruneSessionPayloadsStatement(db, "repair_sessions")
     ]);
 }
 

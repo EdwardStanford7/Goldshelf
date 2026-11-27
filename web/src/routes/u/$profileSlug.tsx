@@ -14,6 +14,7 @@ import {
     X
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { errorMessage } from "@/lib/format";
 import {
     AlertDialog,
     AlertDialogContent,
@@ -55,10 +56,10 @@ import {
     copyPublicCategoryToQueue,
     declineFollowRequest,
     followProfile,
-    loadPublicProfile,
+    loadPublicProfilePage,
+    loadPublicCategoryEntries,
     removeFollow
 } from "@/server/profiles";
-import { loadViewer } from "@/server/viewer";
 import type { CategoryWithEntries, Entry, FollowRelationState, PublicProfileData } from "@/lib/types";
 
 const POSTER_CLASS =
@@ -75,10 +76,7 @@ function chunks<T>(items: T[], size: number) {
 
 export const Route = createFileRoute("/u/$profileSlug")({
     loader: async ({ params }) => {
-        const [data, viewer] = await Promise.all([
-            loadPublicProfile({ data: { profileSlug: params.profileSlug } }),
-            loadViewer()
-        ]);
+        const { data, viewer } = await loadPublicProfilePage({ data: { profileSlug: params.profileSlug } });
         if (!data) {
             throw notFound();
         }
@@ -118,6 +116,23 @@ function PublicProfileRoute() {
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
         loaderData?.categories[0]?.id ?? null
     );
+    const [categoryLoadError, setCategoryLoadError] = useState<string | null>(null);
+    const [categoryLoadAttempt, setCategoryLoadAttempt] = useState(0);
+    const selectedCategory = profileData?.categories.find((category) => category.id === selectedCategoryId) ?? null;
+    const categoryLoading = Boolean(selectedCategory && selectedCategory.entries.length !== selectedCategory.entryCount);
+
+    useEffect(() => {
+        if (!profileData || !selectedCategory || !categoryLoading) return;
+        let disposed = false;
+        setCategoryLoadError(null);
+        void loadPublicCategoryEntries({ data: { profileSlug: profileData.profile.slug, categoryId: selectedCategory.id } })
+            .then((loaded) => {
+                if (!disposed) setProfileData((current) => current ? ({ ...current,
+                    categories: current.categories.map((category) => category.id === loaded.id ? loaded : category) }) : current);
+            })
+            .catch((error) => { if (!disposed) setCategoryLoadError(errorMessage(error)); });
+        return () => { disposed = true; };
+    }, [profileData?.profile.userId, selectedCategoryId, categoryLoading, categoryLoadAttempt]);
 
     useEffect(() => {
         setProfileData(loaderData);
@@ -225,6 +240,7 @@ function PublicProfileRoute() {
     }
 
     function selectCategory(categoryId: string) {
+        setCategoryLoadError(null);
         setSelectedCategoryId(categoryId);
         entryScrollRef.current?.scrollTo({ top: 0 });
     }
@@ -339,8 +355,7 @@ function PublicProfileRoute() {
     const { profile, viewer } = profileData;
     const canCopySharedCategories = canViewProfile(profile.isPublic, false, viewer.relationState);
     const showCategoryVisibility = profileData.categories.length > 0;
-    const totalEntries = profileData.categories.reduce((count, category) => count + category.entries.length, 0);
-    const selectedCategory = profileData.categories.find((category) => category.id === selectedCategoryId) ?? null;
+    const totalEntries = profileData.categories.reduce((count, category) => count + category.entryCount, 0);
 
     return (
         <main className="mx-auto grid min-h-screen w-full max-w-[96rem] content-start gap-8 bg-background px-[clamp(1rem,4vw,3.75rem)] pb-16 text-foreground">
@@ -420,14 +435,19 @@ function PublicProfileRoute() {
                                         {showCategoryVisibility ? (
                                             <CategoryVisibilityBadge isPublic={category.isPublic} visibility={category.visibility} profileIsPublic={profile.isPublic} />
                                         ) : null}
-                                        <span className="text-xs tabular-nums text-muted-foreground">{category.entries.length}</span>
+                                        <span className="text-xs tabular-nums text-muted-foreground">{category.entryCount}</span>
                                     </span>
                                 </button>
                             );
                         })}
                     </nav>
                     <div ref={entryScrollRef} className="min-w-0">
-                        {selectedCategory ? (
+                        {categoryLoadError ? (
+                            <EmptyState icon={ListOrdered} title="Unable to load shelf">
+                                {categoryLoadError}{" "}
+                                <Button onClick={() => setCategoryLoadAttempt((attempt) => attempt + 1)}>Try again</Button>
+                            </EmptyState>
+                        ) : categoryLoading ? <p role="status" className="text-muted-foreground">Loading entries...</p> : selectedCategory ? (
                             <PublicCategory
                                 category={selectedCategory}
                                 copyDisabled={copyingCategoryId === selectedCategory.id}

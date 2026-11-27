@@ -31,7 +31,10 @@ export function versionedDb(db: D1Database): D1Database {
     if (!scope) return db;
     async function batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
         if (scope!.deleted) return db.batch<T>(statements.map((statement) => originals.get(statement) ?? statement));
-        if (scope!.pending.length === 0 && statements.every((statement) => /^\s*SELECT\b/i.test(queries.get(statement) ?? ""))) {
+        if (scope!.pending.length === 0 && statements.every((statement) => {
+            const sql = queries.get(statement) ?? "";
+            return /^\s*(?:SELECT|WITH)\b/i.test(sql) && !/\b(?:INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql);
+        })) {
             return db.batch<T>(statements.map((statement) => originals.get(statement) ?? statement));
         }
         // Some handlers issue independent writes with Promise.all. Serialize

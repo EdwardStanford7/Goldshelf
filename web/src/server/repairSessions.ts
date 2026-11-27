@@ -9,6 +9,10 @@ import {
     undoRepairMatch as undoRepairMatchForUser
 } from "@/server/engine/repairSessions";
 
+async function repairResultWithView<T extends { kind: string; sessionId: string }>(userId: string, result: T) {
+    return { ...result, session: result.kind === "session" ? await getRepairSessionView(userId, result.sessionId) : null };
+}
+
 export const startRepairSession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
     .validator((data: { categoryId?: string | null; categoryIds?: string[] }) => data)
@@ -22,12 +26,12 @@ export const getRepairSession = createServerFn({ method: "GET" })
 export const submitRepairWinner = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
     .validator((data: { sessionId: string; winnerId: string; version: string }) => data)
-    .handler(({ context, data }) => submitRepairWinnerForUser(context.user.id, data));
+    .handler(async ({ context, data }) => repairResultWithView(context.user.id, await submitRepairWinnerForUser(context.user.id, data)));
 
 export const skipRepairMatchup = createServerFn({ method: "POST" })
     .middleware([authMiddleware])
     .validator((data: { sessionId: string; version: string }) => data)
-    .handler(({ context, data }) => skipRepairMatchupForUser(context.user.id, data));
+    .handler(async ({ context, data }) => repairResultWithView(context.user.id, await skipRepairMatchupForUser(context.user.id, data)));
 
 export const cancelRepairSession = createServerFn({ method: "POST" })
     .middleware([authMiddleware])

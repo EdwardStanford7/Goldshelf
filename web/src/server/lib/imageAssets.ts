@@ -28,18 +28,21 @@ export async function storeContentAddressedImage(bytes: ArrayBuffer, contentType
 }
 
 export async function releaseImageReference(imageKey: string | null, timestamp = now()) {
-    if (!hasStoredImage(imageKey)) return;
-    await getDb().prepare(`UPDATE image_assets SET unreferenced_at = CASE
-      WHEN EXISTS (SELECT 1 FROM entries WHERE image_key = ?)
-        OR EXISTS (SELECT 1 FROM entry_queue WHERE image_key = ?)
-        OR EXISTS (SELECT 1 FROM "user" WHERE image = image_assets.object_key)
-      THEN NULL ELSE COALESCE(unreferenced_at, ?) END WHERE object_key = ?`)
-        .bind(imageKey, imageKey, timestamp, imageKey).run();
+    await releaseImageReferences([imageKey], timestamp);
 }
 
 export async function releaseImageReferences(imageKeys: Array<string | null>, timestamp = now()) {
-    // Keep writes ordered inside a versioned request.
-    for (const imageKey of new Set(imageKeys)) await releaseImageReference(imageKey, timestamp);
+    const keys = [...new Set(imageKeys.filter((key): key is string => hasStoredImage(key)))];
+    // One set-based statement and one revision guard per bounded chunk.
+    for (let offset = 0; offset < keys.length; offset += 500) {
+        await getDb().prepare(`UPDATE image_assets SET unreferenced_at = CASE
+      WHEN EXISTS (SELECT 1 FROM entries WHERE image_key = image_assets.object_key)
+        OR EXISTS (SELECT 1 FROM entry_queue WHERE image_key = image_assets.object_key)
+        OR EXISTS (SELECT 1 FROM "user" WHERE image = image_assets.object_key)
+      THEN NULL ELSE COALESCE(unreferenced_at, ?) END
+      WHERE object_key IN (SELECT value FROM json_each(?))`)
+            .bind(timestamp, JSON.stringify(keys.slice(offset, offset + 500))).run();
+    }
 }
 
 async function deleteAsset(objectKey: string, timestamp: number, cutoff: number) {

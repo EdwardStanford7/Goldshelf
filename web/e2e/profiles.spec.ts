@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { BASE_URL } from "./constants";
-import { categoryButton, gotoApp, isServerFnRequest, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, signInViaApi } from "./helpers";
+import { categoryButton, gotoApp, isServerFnRequest, openNewCategoryDialog, openQueueWorkspace, queueCount, seedUsers, serverFnResponse, signInViaApi } from "./helpers";
 
 const ALICE = {
     email: "alice@e2e.test",
@@ -44,6 +44,51 @@ async function openSettingsSection(page: Page, section: "Profile" | "Shelves" | 
 }
 
 test.describe("Profiles", () => {
+    test("shared shelves load on selection and recheck access after revocation", async ({ page, context, browser }) => {
+        await seedUsers([{ email: "lazy-profile@e2e.test", name: "Lazy Reader", categories: [
+            { name: "Books", entries: ["Book One"] },
+            { name: "Films", entries: ["Film One", "Film Two"] },
+            { name: "Music", entries: ["Unloaded Album"] }
+        ] }]);
+        await signInViaApi(context, "lazy-profile@e2e.test");
+        await gotoApp(page, "/profile");
+        const slug = await readOwnSlug(page);
+        await page.getByLabel("Public profile").check();
+        await page.getByRole("button", { name: "Save Profile" }).click();
+        await expect(page.getByText("Profile saved.")).toBeVisible();
+        await openSettingsSection(page, "Shelves");
+        for (const name of ["Books", "Films", "Music"]) {
+            const saved = serverFnResponse(page, "updateCategoryVisibility");
+            await page.getByLabel(`${name} visibility`).selectOption("public");
+            await saved;
+            await expect(page.getByText("Profile sharing saved.").first()).toBeVisible();
+        }
+        const publicContext = await browser.newContext();
+        const publicPage = await publicContext.newPage();
+        let loads = 0;
+        publicPage.on("request", (request) => { if (isServerFnRequest(request.url(), "loadPublicCategoryEntries")) loads++; });
+        await gotoApp(publicPage, `/u/${slug}`);
+        await expect(publicPage.getByText("#1 Book One", { exact: true })).toBeVisible();
+        expect(loads).toBe(0);
+        const shelves = publicPage.getByRole("navigation", { name: "Shared shelves" });
+        await shelves.getByRole("button", { name: /^Films/ }).click();
+        await expect(publicPage.getByText("#2 Film Two", { exact: true })).toBeVisible();
+        expect(loads).toBe(1);
+        await shelves.getByRole("button", { name: /^Books/ }).click();
+        await expect(publicPage.getByText("#1 Book One", { exact: true })).toBeVisible();
+        await shelves.getByRole("button", { name: /^Films/ }).click();
+        await expect(publicPage.getByText("#2 Film Two", { exact: true })).toBeVisible();
+        expect(loads).toBe(1);
+        const revoked = serverFnResponse(page, "updateCategoryVisibility");
+        await page.getByLabel("Music visibility").selectOption("private");
+        await revoked;
+        await expect(page.getByText("Profile sharing saved.").first()).toBeVisible();
+        await shelves.getByRole("button", { name: /^Music/ }).click();
+        await expect(publicPage.getByText("This shelf is no longer available.")).toBeVisible();
+        await expect(publicPage.getByText(/Unloaded Album/)).toHaveCount(0);
+        await publicContext.close();
+    });
+
     test("profile photo upload opens an editor before saving", async ({
         page,
         context
@@ -123,6 +168,16 @@ test.describe("Profiles", () => {
         await gotoApp(viewerPage, "/explore");
         await expect(viewerPage.getByText("Arrival")).toBeHidden();
 
+        // A cached ranking must not keep a newly private profile visible.
+        await ownerPage.getByLabel("Public profile").uncheck();
+        const profileHidden = serverFnResponse(ownerPage, "updateUserProfile");
+        ownerPage.once("dialog", (dialog) => dialog.accept());
+        await ownerPage.getByRole("button", { name: "Save Profile" }).click();
+        await profileHidden;
+        await expect(ownerPage.getByText("Profile saved.").first()).toBeVisible();
+        await gotoApp(viewerPage, "/explore");
+        await expect(viewerPage.getByText("Explore Owner", { exact: true })).toHaveCount(0);
+
         await viewerContext.close();
     });
 
@@ -139,7 +194,16 @@ test.describe("Profiles", () => {
         await expect(page).toHaveURL(/\/$/);
         await expect(page.getByRole("heading", { name: "Movies" })).toBeVisible();
 
-        await gotoApp(page, "/explore");
+        let bootstraps = 0;
+        let duplicateLoads = 0;
+        page.on("request", (request) => {
+            if (isServerFnRequest(request.url(), "loadExplorePage")) bootstraps++;
+            else if (["getSession", "loadHome", "loadExplore"].some((name) => isServerFnRequest(request.url(), name))) duplicateLoads++;
+        });
+        await page.getByRole("button", { name: "Explore", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Explore" })).toBeVisible();
+        expect(bootstraps).toBe(1);
+        expect(duplicateLoads).toBe(0);
         await page.getByRole("button", { name: /^Queue(?:\s+\d+)?$/ }).click();
         await expect(page).toHaveURL(/\/?workspace=queue$/);
         await expect(page.getByTestId("queue-panel")).toBeVisible();

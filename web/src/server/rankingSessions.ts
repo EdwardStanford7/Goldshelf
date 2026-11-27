@@ -20,6 +20,7 @@ import { authMiddleware } from "@/server/middleware/auth";
 import { getOwnedCategory } from "./stores/categoryStore";
 import {
     getNextActiveRankPosition,
+    getActiveEntryAtRank,
     getOwnedEntry,
     listActiveEntries,
     placeRankedEntryStatements,
@@ -49,67 +50,73 @@ import {
     submitLocalRepairWinner
 } from "./engine/rankingSessions";
 
+async function readBinarySessionView(userId: string, sessionId: string): Promise<BinarySessionView | null> {
+    const db = getDb();
+    const session = await first<SessionRow & { has_undo: number }>(
+        db
+            .prepare(
+                `SELECT id, user_id, category_id, subject_entry_id, source, lower_bound,
+                upper_bound, pivot_entry_id, pivot_rank_position, from_category_id,
+                final_rank_position, created_at, comparison_count, phase,
+                operation_kind, secondary_entry_id, secondary_original_rank_position,
+                operation_state, undo_state IS NOT NULL AS has_undo, matchup_version
+         FROM ranking_sessions
+         WHERE id = ? AND user_id = ? AND status = 'active'`
+            )
+            .bind(sessionId, userId)
+    );
+
+    if (!session?.pivot_entry_id) {
+        return null;
+    }
+
+    const operationState = parseRankingOperationState(session.operation_state);
+    const repairComparison = session.phase === "bubble_repair"
+        ? operationState.bubbleRepair?.currentComparison ?? null
+        : null;
+    const activeComparison = repairComparison;
+    const category = await getOwnedCategory(userId, session.category_id);
+    const subject = await getOwnedEntry(
+        userId,
+        activeComparison?.entryAId ?? session.subject_entry_id
+    );
+    const opponent = await getOwnedEntry(
+        userId,
+        activeComparison?.entryBId ?? session.pivot_entry_id
+    );
+
+    if (!category || !subject || !opponent) {
+        return null;
+    }
+
+    return {
+        version: session.matchup_version,
+        id: session.id,
+        categoryId: session.category_id,
+        categoryName: category.name,
+        source: session.source,
+        operationKind: normalizeOperationKind(session.operation_kind),
+        phase: rankingDisplayPhase(session.phase, operationState.bubbleRepair?.stage ?? null),
+        subject,
+        opponent,
+        lowerBound: session.lower_bound,
+        upperBound: session.upper_bound,
+        comparisonCount: session.comparison_count ?? 0,
+        queuedEntryId: operationState.queuedEntryId,
+        canUndoLastMatch: Boolean(session.has_undo)
+    };
+}
+
+async function binaryResultWithView<T extends { kind: string; sessionId: string }>(userId: string, result: T) {
+    return { ...result, session: result.kind === "session" ? await readBinarySessionView(userId, result.sessionId) : null };
+}
+
 export const getBinarySession = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
     .validator((data: { sessionId: string }) => data)
     .handler(async ({ context, data }) => {
-        const userId = context.user.id;
-        const { sessionId } = data;
-        const db = getDb();
-        await repairInterruptedRankingState(userId);
-        const session = await first<SessionRow>(
-            db
-                .prepare(
-                    `SELECT id, user_id, category_id, subject_entry_id, source, lower_bound,
-                    upper_bound, pivot_entry_id, pivot_rank_position, from_category_id,
-                    final_rank_position, created_at, comparison_count, phase,
-                    operation_kind, secondary_entry_id, secondary_original_rank_position,
-                    operation_state, undo_state, matchup_version
-             FROM ranking_sessions
-             WHERE id = ? AND user_id = ? AND status = 'active'`
-                )
-                .bind(sessionId, userId)
-        );
-
-        if (!session?.pivot_entry_id) {
-            return null;
-        }
-
-        const operationState = parseRankingOperationState(session.operation_state);
-        const repairComparison = session.phase === "bubble_repair"
-            ? operationState.bubbleRepair?.currentComparison ?? null
-            : null;
-        const activeComparison = repairComparison;
-        const category = await getOwnedCategory(userId, session.category_id);
-        const subject = await getOwnedEntry(
-            userId,
-            activeComparison?.entryAId ?? session.subject_entry_id
-        );
-        const opponent = await getOwnedEntry(
-            userId,
-            activeComparison?.entryBId ?? session.pivot_entry_id
-        );
-
-        if (!category || !subject || !opponent) {
-            return null;
-        }
-
-        return {
-            version: session.matchup_version,
-            id: session.id,
-            categoryId: session.category_id,
-            categoryName: category.name,
-            source: session.source,
-            operationKind: normalizeOperationKind(session.operation_kind),
-            phase: rankingDisplayPhase(session.phase, operationState.bubbleRepair?.stage ?? null),
-            subject,
-            opponent,
-            lowerBound: session.lower_bound,
-            upperBound: session.upper_bound,
-            comparisonCount: session.comparison_count ?? 0,
-            queuedEntryId: operationState.queuedEntryId,
-            canUndoLastMatch: Boolean(session.undo_state)
-        };
+        await repairInterruptedRankingState(context.user.id);
+        return readBinarySessionView(context.user.id, data.sessionId);
     });
 
 export const cancelBinarySession = createServerFn({ method: "POST" })
@@ -279,7 +286,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
                     upper_bound, pivot_entry_id, pivot_rank_position, from_category_id,
                     final_rank_position, original_rank_position, created_at, phase,
                     operation_kind, secondary_entry_id, secondary_original_rank_position,
-                    operation_state, comparison_count, undo_state, matchup_version
+                    operation_state, comparison_count, matchup_version
              FROM ranking_sessions
              WHERE id = ? AND user_id = ? AND status = 'active'`
                 )
@@ -308,7 +315,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
             }
 
             await saveRankingMatchUndoState(db, userId, session);
-            return submitBubbleRepairWinner(db, userId, session, input.winnerId, createdAt);
+            return binaryResultWithView(userId, await submitBubbleRepairWinner(db, userId, session, input.winnerId, createdAt));
         }
 
         if (
@@ -320,7 +327,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
 
         if (session.phase === "repair_up" || session.phase === "repair_down") {
             await saveRankingMatchUndoState(db, userId, session);
-            return submitLocalRepairWinner(db, userId, session, input.winnerId, createdAt);
+            return binaryResultWithView(userId, await submitLocalRepairWinner(db, userId, session, input.winnerId, createdAt));
         }
 
         const subjectWon = input.winnerId === session.subject_entry_id;
@@ -338,9 +345,11 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
         });
 
         if (lowerBound < upperBound) {
-            const opponents = await listActiveEntries(userId, session.category_id);
             const pivotIndex = chooseBinaryPivot(lowerBound, upperBound);
-            const pivot = opponents[pivotIndex];
+            // Normal dense ranks need one indexed lookup. Keep recovery
+            // compatibility for legacy lists with gaps instead of misplacing.
+            const pivot = await getActiveEntryAtRank(userId, session.category_id, pivotIndex)
+                ?? (await listActiveEntries(userId, session.category_id))[pivotIndex];
             assertOwned(pivot, "Pivot entry");
 
             await db.batch([
@@ -363,10 +372,10 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
                     )
             ]);
 
-            return { kind: "session" as const, sessionId: session.id };
+            return binaryResultWithView(userId, { kind: "session" as const, sessionId: session.id });
         }
 
-        return startBubbleRepairOrCommit(
+        return binaryResultWithView(userId, await startBubbleRepairOrCommit(
             db,
             userId,
             session,
@@ -374,7 +383,7 @@ export const submitBinaryWinner = createServerFn({ method: "POST" })
             createdAt,
             nextOperationState,
             true
-        );
+        ));
     });
 
 export const undoBinaryMatch = createServerFn({ method: "POST" })

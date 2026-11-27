@@ -39,6 +39,8 @@ import {
 } from "./stores/profileStore";
 import { type EntryRow, mapEntry } from "./stores/entryStore";
 import { getQueueSettings } from "./stores/queueStore";
+import { readSharedShelf } from "./stores/sharedShelfStore";
+import type { ViewerSummary } from "./viewer";
 
 const MAX_USER_NAME_LENGTH = 80;
 
@@ -154,58 +156,60 @@ export const updateUserProfile = createServerFn({ method: "POST" })
 
 export const loadProfileSettings = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
-    .handler(async ({ context }) => {
-        const userId = context.user.id;
-        const profile = await ensureUserProfile(userId);
-        const [categories, queueSettings, following, followers, incomingFollowRequests, outgoingFollowRequests, blockedProfiles] = await Promise.all([
-            all<ProfileSettingsCategoryRow>(
-                getDb()
-                    .prepare(
-                    `SELECT categories.id, categories.name, categories.sort_order,
-                    categories.is_public, categories.visibility, COUNT(entries.id) AS entry_count
-             FROM categories
-             LEFT JOIN entries ON entries.category_id = categories.id
-               AND entries.user_id = categories.user_id
-               AND entries.status = 'active'
-             WHERE categories.user_id = ?
-             GROUP BY categories.id, categories.name, categories.sort_order, categories.is_public, categories.visibility
-             ORDER BY categories.sort_order ASC, categories.name ASC`
-                    )
-                    .bind(userId)
-            ),
-            getQueueSettings(userId),
-            listFollowProfiles(userId, "following"),
-            listFollowProfiles(userId, "followers"),
-            listFollowProfiles(userId, "incoming_requests"),
-            listFollowProfiles(userId, "outgoing_requests"),
-            listBlockedProfiles(userId)
-        ]);
+    .handler(({ context }) => loadProfileSettingsForUser(context.user.id));
 
-        return {
-            user: {
-                id: profile.user_id,
-                name: profile.name,
-                imageKey: profile.image,
-                slug: profile.slug,
-                isPublic: Boolean(profile.is_public),
-                activityVisibility: profile.activity_visibility
-            },
-            categories: categories.map((category) => ({
-                id: category.id,
-                name: category.name,
-                sortOrder: category.sort_order,
-                entryCount: category.entry_count,
-                isPublic: category.visibility !== "private"
-                , visibility: category.visibility
-            })),
-            queueSettings,
-            following,
-            followers,
-            incomingFollowRequests,
-            outgoingFollowRequests,
-            blockedProfiles
-        };
-    });
+export const loadProfilePage = createServerFn({ method: "GET" })
+    .middleware([authMiddleware])
+    .handler(async ({ context }) => ({ session: context.session,
+        settings: await loadProfileSettingsForUser(context.user.id) }));
+
+async function loadProfileSettingsForUser(userId: string): Promise<ProfileSettingsData> {
+    const profile = await ensureUserProfile(userId);
+    const [categories, queueSettings, following, followers, incomingFollowRequests, outgoingFollowRequests, blockedProfiles] = await Promise.all([
+        all<ProfileSettingsCategoryRow>(
+            getDb()
+                .prepare(
+                `SELECT categories.id, categories.name, categories.sort_order,
+                categories.is_public, categories.visibility, categories.active_entry_count AS entry_count
+         FROM categories
+         WHERE categories.user_id = ?
+         ORDER BY categories.sort_order ASC, categories.name ASC`
+                )
+                .bind(userId)
+        ),
+        getQueueSettings(userId),
+        listFollowProfiles(userId, "following"),
+        listFollowProfiles(userId, "followers"),
+        listFollowProfiles(userId, "incoming_requests"),
+        listFollowProfiles(userId, "outgoing_requests"),
+        listBlockedProfiles(userId)
+    ]);
+
+    return {
+        user: {
+            id: profile.user_id,
+            name: profile.name,
+            imageKey: profile.image,
+            slug: profile.slug,
+            isPublic: Boolean(profile.is_public),
+            activityVisibility: profile.activity_visibility
+        },
+        categories: categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            sortOrder: category.sort_order,
+            entryCount: category.entry_count,
+            isPublic: category.visibility !== "private"
+            , visibility: category.visibility
+        })),
+        queueSettings,
+        following,
+        followers,
+        incomingFollowRequests,
+        outgoingFollowRequests,
+        blockedProfiles
+    };
+}
 
 export const searchPublicProfiles = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
@@ -518,6 +522,31 @@ export const loadPublicProfile = createServerFn({ method: "GET" })
     .validator((data: { profileSlug: string }) => data)
     .handler(({ data }) => loadPublicProfileFromCurrentRequest(data.profileSlug));
 
+export const loadPublicProfilePage = createServerFn({ method: "GET" })
+    .validator((data: { profileSlug: string }) => data)
+    .handler(async ({ data }) => {
+        const headers = getRequestHeaders();
+        const session = requestHasSessionCookie(headers) ? await auth.api.getSession({ headers }) : null;
+        const profileData = await loadPublicProfileForViewer(data.profileSlug, session?.user ?? null);
+        let viewer: ViewerSummary = { signedIn: false };
+        if (session?.user) {
+            const slug = profileData?.profile.isSelf ? profileData.profile.slug
+                : (await ensureUserProfile(session.user.id)).slug;
+            viewer = { signedIn: true, name: session.user.name, slug, imageKey: session.user.image ?? null };
+        }
+        return { data: profileData, viewer };
+    });
+
+export const loadPublicCategoryEntries = createServerFn({ method: "GET" })
+    .validator((data: { profileSlug: string; categoryId: string }) => data)
+    .handler(async ({ data }) => {
+        const headers = getRequestHeaders();
+        const session = requestHasSessionCookie(headers) ? await auth.api.getSession({ headers }) : null;
+        const category = await readSharedShelf(getDb(), parseProfileSlugInput(data.profileSlug), data.categoryId, session?.user.id);
+        if (!category) throw new Error("This shelf is no longer available.");
+        return category;
+    });
+
 async function loadPublicProfileFromCurrentRequest(
     profileSlug: string,
     _options: Record<string, never> = {}
@@ -556,7 +585,8 @@ async function loadPublicProfileForViewer(
     }
 
     const [categories, viewerCategories, followCounts] = await Promise.all([
-        loadPublicCategories(profile.user_id, { isSelf, isFollower: relationState === "following" || relationState === "mutual" }),
+        loadPublicCategories(profile.user_id, { isSelf, isFollower: relationState === "following" || relationState === "mutual",
+            profileSlug: profile.slug, viewerId: viewerUserId ?? "" }),
         viewerUserId ? listCopyTargetCategories(viewerUserId) : Promise.resolve([]),
         getFollowCounts(profile.user_id)
     ]);
@@ -825,61 +855,23 @@ async function listCopyTargetCategories(userId: string): Promise<ProfileCopyTarg
 
 async function loadPublicCategories(
     userId: string,
-    options: { isSelf: boolean; isFollower: boolean }
+    options: { isSelf: boolean; isFollower: boolean; profileSlug: string; viewerId: string }
 ): Promise<CategoryWithEntries[]> {
-    // A profile page never exposes private shelves, including to its owner.
-    // Owners manage those from the dashboard; followers additionally see the
-    // shelves explicitly shared with followers.
     const allowedVisibility = options.isSelf || options.isFollower ? ["followers", "public"] : ["public"];
-    const categories = await all<CategoryRow>(
-        getDb()
-            .prepare(
-                `SELECT id, name, sort_order, created_at, is_public, visibility
-         FROM categories
-         WHERE user_id = ? AND visibility IN (${allowedVisibility.map(() => "?").join(", ")})
-         ORDER BY sort_order ASC, name ASC`
-            )
-            .bind(userId, ...allowedVisibility)
+    const categories = await all<CategoryRow & { active_entry_count: number; data_revision: string }>(
+        getDb().prepare(`SELECT id, name, sort_order, created_at, is_public, visibility, active_entry_count, data_revision
+          FROM categories WHERE user_id = ? AND visibility IN (${allowedVisibility.map(() => "?").join(", ")})
+          ORDER BY sort_order, name`).bind(userId, ...allowedVisibility)
     );
-
-    if (categories.length === 0) {
-        return [];
-    }
-
-    const entryRows = await all<EntryRow>(
-        getDb()
-            .prepare(
-                `SELECT entries.id, entries.category_id, entries.name, entries.rank_position,
-                entries.image_key, entries.created_at
-         FROM entries
-         INNER JOIN categories ON categories.id = entries.category_id
-         WHERE entries.user_id = ? AND entries.status = 'active'
-           AND categories.user_id = entries.user_id
-           AND categories.visibility IN (${allowedVisibility.map(() => "?").join(", ")})
-         ORDER BY entries.category_id ASC, entries.rank_position ASC`
-            )
-            .bind(userId, ...allowedVisibility)
+    if (!categories.length) return [];
+    const first = await readSharedShelf(getDb(), options.profileSlug, categories[0].id, options.viewerId);
+    return categories.filter((category) => category.id !== categories[0].id || first).map((category) =>
+        category.id === first?.id ? first : ({
+            id: category.id, name: category.name, sortOrder: category.sort_order, createdAt: category.created_at,
+            isPublic: category.visibility !== "private", visibility: category.visibility,
+            entryCount: category.active_entry_count, revision: category.data_revision, entries: []
+        })
     );
-    const entriesByCategory = new Map<string, Entry[]>();
-    for (const row of entryRows) {
-        const entries = entriesByCategory.get(row.category_id) ?? [];
-        entries.push(mapEntry(row));
-        entriesByCategory.set(row.category_id, entries);
-    }
-
-    return categories.map((category) => {
-        const entries = orderEntries(entriesByCategory.get(category.id) ?? []);
-        return {
-            id: category.id,
-            name: category.name,
-            sortOrder: category.sort_order,
-            createdAt: category.created_at,
-            isPublic: category.visibility !== "private",
-            visibility: category.visibility,
-            entryCount: entries.length,
-            entries
-        };
-    });
 }
 
 type FollowProfileListKind =

@@ -45,7 +45,7 @@ interface RepairSessionRow {
     comparison_count: number;
     repair_count: number;
     operation_state: string | null;
-    undo_state: string | null;
+    has_undo: number;
     created_at: number;
     updated_at: number;
     completed_at: number | null;
@@ -142,7 +142,7 @@ export async function getRepairSessionView(
         comparisonCount: row.comparison_count,
         version: row.matchup_version,
         repairCount: row.repair_count,
-        canUndoLastMatch: Boolean(row.undo_state)
+        canUndoLastMatch: Boolean(row.has_undo)
     };
 }
 
@@ -645,15 +645,9 @@ async function chooseNextRepairMatchup(
     let candidates = await all<RepairCategoryCandidate>(
         getDb()
             .prepare(
-                `SELECT categories.id, categories.name, COUNT(entries.id) AS entryCount
+                `SELECT categories.id, categories.name, categories.active_entry_count AS entryCount
                  FROM categories
-                 INNER JOIN entries
-                   ON entries.category_id = categories.id
-                  AND entries.user_id = categories.user_id
-                  AND entries.status = 'active'
-                 WHERE categories.user_id = ?
-                 GROUP BY categories.id, categories.name
-                 HAVING entryCount >= 2
+                 WHERE categories.user_id = ? AND categories.active_entry_count >= 2
                  ORDER BY categories.sort_order ASC, categories.name ASC`
             )
             .bind(userId)
@@ -755,7 +749,7 @@ async function getActiveRepairRow(userId: string, sessionId: string) {
                 `SELECT id, user_id, scope, scope_category_id, active_category_id,
                         entry_a_id, entry_b_id, status, phase, strategy,
                         comparison_count, repair_count, operation_state,
-                        undo_state, created_at, updated_at, completed_at, matchup_version
+                        undo_state IS NOT NULL AS has_undo, created_at, updated_at, completed_at, matchup_version
                  FROM repair_sessions
                  WHERE id = ? AND user_id = ? AND status = 'active'`
             )

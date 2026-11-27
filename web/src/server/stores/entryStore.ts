@@ -70,13 +70,19 @@ export async function listActiveEntries(userId: string, categoryId: string, excl
     return rows.map(mapEntry);
 }
 
+export async function getActiveEntryAtRank(userId: string, categoryId: string, rank: number) {
+    const row = await first<EntryRow>(getDb().prepare(`
+      SELECT id, category_id, name, rank_position, image_key, created_at FROM entries
+      WHERE user_id = ? AND category_id = ? AND status = 'active' AND rank_position = ? LIMIT 1`)
+        .bind(userId, categoryId, rank));
+    return row ? mapEntry(row) : null;
+}
+
 export async function getActiveEntryCount(userId: string, categoryId: string) {
     const count = await first<{ count: number }>(
         getDb()
             .prepare(
-                `SELECT COUNT(*) AS count
-         FROM entries
-         WHERE user_id = ? AND category_id = ? AND status = 'active'`
+                `SELECT active_entry_count AS count FROM categories WHERE user_id = ? AND id = ?`
             )
             .bind(userId, categoryId)
     );
@@ -110,28 +116,21 @@ export function rewriteCategoryOrderStatements(
     return [
         db
             .prepare(
-                `WITH requested_order AS (
+                `WITH requested_order AS MATERIALIZED (
                    SELECT value AS id, CAST(key AS INTEGER) AS rank_position
                    FROM json_each(?)
                  )
-                 UPDATE entries
+                 UPDATE entries AS entry
                  SET status = 'active',
-                     rank_position = (
-                       SELECT requested_order.rank_position
-                       FROM requested_order
-                       WHERE requested_order.id = entries.id
-                     ),
+                     rank_position = requested_order.rank_position,
                      updated_at = ?
-                 WHERE user_id = ?
-                   AND category_id = ?
-                   AND id IN (SELECT id FROM requested_order)
+                 FROM requested_order
+                 WHERE entry.user_id = ?
+                   AND entry.category_id = ?
+                   AND entry.id = requested_order.id
                    AND (
-                     status != 'active'
-                     OR rank_position != (
-                       SELECT requested_order.rank_position
-                       FROM requested_order
-                       WHERE requested_order.id = entries.id
-                     )
+                     entry.status != 'active'
+                     OR entry.rank_position != requested_order.rank_position
                    )`
             )
             .bind(JSON.stringify(orderedEntryIds), updatedAt, userId, categoryId)

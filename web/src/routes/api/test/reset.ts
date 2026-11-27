@@ -33,6 +33,13 @@ export const Route = createFileRoute("/api/test/reset")({
                     ...tableNames.map((name) => db.prepare(`DELETE FROM "${name}"`))
                 ]);
 
+                // Candidate ranking is shared across viewers; reset its cache
+                // along with the isolated database so tests cannot share users.
+                try {
+                    const cache = (caches as CacheStorage & { default: Cache }).default;
+                    await cache.delete(new Request("https://explore-cache.goldshelf.internal/public-trending-v2"));
+                } catch { /* Cache API may be disabled in a local runtime. */ }
+
                 return Response.json({ ok: true, tablesCleared: tableNames });
             }
         }

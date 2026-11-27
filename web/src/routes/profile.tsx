@@ -9,6 +9,7 @@ import {
     declineFollowRequest,
     followProfile,
     loadProfileSettings,
+    loadProfilePage,
     removeFollower,
     removeFollow,
     requestFollowByProfileSlug,
@@ -17,7 +18,6 @@ import {
     updateUserProfile
 } from "@/server/profiles";
 import { deleteCurrentUserAccount } from "@/server/account";
-import { getSession } from "@/server/session";
 import { updateQueueSettings } from "@/server/queue";
 import { Ban, ExternalLink, Inbox, ListOrdered, Send, UserPlus, Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { showToast } from "@/lib/toast";
 import { signOut } from "@/lib/auth-client";
 import { clearDashboardSnapshot } from "@/lib/dashboardCache";
-import { redirectIfUnauthorized } from "@/lib/errors";
+import { isUnauthorizedError, redirectIfUnauthorized } from "@/lib/errors";
 import { canViewProfile, followRelationLabel } from "@/lib/follows";
 import { errorMessage, isTransientRequestFailure } from "@/lib/format";
 import { hasStoredImage } from "@/lib/images";
@@ -57,15 +57,11 @@ type SettingsSection = "profile" | "library" | "social";
 
 export const Route = createFileRoute("/profile")({
     loader: async () => {
-        const session = await getSession();
-        if (!session?.user) {
-            throw redirect({ to: "/signin" });
+        try { return await loadProfilePage(); }
+        catch (error) {
+            if (isUnauthorizedError(error)) throw redirect({ to: "/signin" });
+            throw error;
         }
-
-        return {
-            session,
-            settings: await loadProfileSettings()
-        };
     },
     component: ProfileRoute
 });

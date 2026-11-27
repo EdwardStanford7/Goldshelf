@@ -172,10 +172,10 @@ export async function saveRankingMatchUndoState(
     stageMutation(db
         .prepare(
             `UPDATE ranking_sessions
-             SET undo_state = ?
+             SET undo_state = ?, undo_revision = ?
              WHERE id = ? AND user_id = ? AND status = 'active'`
         )
-        .bind(JSON.stringify(undoState), session.id, userId));
+        .bind(JSON.stringify(undoState), undoState.expectedRevision!, session.id, userId));
 }
 
 export async function saveRepairMatchUndoState(
@@ -211,10 +211,10 @@ export async function saveRepairMatchUndoState(
     stageMutation(db
         .prepare(
             `UPDATE repair_sessions
-             SET undo_state = ?
+             SET undo_state = ?, undo_revision = ?
              WHERE id = ? AND user_id = ? AND status = 'active'`
         )
-        .bind(JSON.stringify(undoState), session.id, userId));
+        .bind(JSON.stringify(undoState), undoState.expectedRevision!, session.id, userId));
 }
 
 export async function restoreRankingMatchUndoState(
@@ -258,7 +258,7 @@ export async function restoreRankingMatchUndoState(
                      secondary_entry_id = ?,
                      secondary_original_rank_position = ?,
                      operation_state = ?,
-                     undo_state = NULL
+                     undo_state = NULL, undo_revision = NULL
                  WHERE id = ? AND user_id = ?`
             )
             .bind(
@@ -321,7 +321,7 @@ export async function restoreRepairMatchUndoState(
                      operation_state = ?,
                      updated_at = ?,
                      completed_at = NULL,
-                     undo_state = NULL
+                     undo_state = NULL, undo_revision = NULL
                  WHERE id = ? AND user_id = ?`
             )
             .bind(
@@ -444,17 +444,18 @@ function restoreEntryStatements(
     entries: EntryStateSnapshot[]
 ) {
     if (entries.length === 0) return [];
-    return [db.prepare(`WITH snapshot AS (SELECT
+    return [db.prepare(`WITH snapshot AS MATERIALIZED (SELECT
         json_extract(value, '$.id') AS id,
         json_extract(value, '$.categoryId') AS category_id,
         json_extract(value, '$.status') AS status,
         json_extract(value, '$.rankPosition') AS rank_position FROM json_each(?))
-        UPDATE entries SET
-          status = (SELECT status FROM snapshot WHERE snapshot.id = entries.id),
-          rank_position = (SELECT rank_position FROM snapshot WHERE snapshot.id = entries.id),
+        UPDATE entries AS entry SET
+          status = snapshot.status,
+          rank_position = snapshot.rank_position,
           updated_at = ?
-        WHERE user_id = ? AND EXISTS (SELECT 1 FROM snapshot
-          WHERE snapshot.id = entries.id AND snapshot.category_id = entries.category_id)`)
+        FROM snapshot
+        WHERE entry.user_id = ? AND snapshot.id = entry.id
+          AND snapshot.category_id = entry.category_id`)
         .bind(JSON.stringify(entries), Date.now(), userId)];
 }
 

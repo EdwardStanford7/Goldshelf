@@ -2,13 +2,16 @@ import { createServerFn } from "@tanstack/react-start";
 import type { ExploreData, ExploreProfile, RecentActivityItem } from "@/lib/types";
 import { all, getDb } from "@/server/lib/db";
 import { authMiddleware } from "@/server/middleware/auth";
+import { buildDashboard } from "@/server/engine/dashboard";
+import { hasAdminRole } from "@/lib/admin";
 
 const ACTIVITY_LIMIT = 24;
 const PROFILE_LIMIT = 24;
+const PROFILE_CANDIDATE_LIMIT = 120;
 const TRENDING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const NEW_PROFILE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_TRENDING_CACHE_TTL_MS = 5 * 60 * 1000;
-const PUBLIC_TRENDING_CACHE_URL = "https://explore-cache.goldshelf.internal/public-trending";
+const PUBLIC_TRENDING_CACHE_URL = "https://explore-cache.goldshelf.internal/public-trending-v2";
 
 interface CloudflareCacheStorage extends CacheStorage {
     default: Cache;
@@ -44,72 +47,83 @@ interface ExploreProfileRow {
  */
 export const loadExplore = createServerFn({ method: "GET" })
     .middleware([authMiddleware])
-    .handler(async ({ context }): Promise<ExploreData> => {
-        const userId = context.user.id;
-        const db = getDb();
-        const [followingEntries, recentPublicEntries, publicProfiles] = await Promise.all([
-            all<RecentActivityRow>(
-                db.prepare(
-                    `SELECT entries.id AS entry_id, entries.name AS entry_name,
-                    entries.image_key AS entry_image_key, categories.id AS category_id,
-                    categories.name AS category_name, entries.created_at,
-                    "user".id AS user_id, "user".name AS user_name,
-                    "user".image AS user_image, user_profiles.slug
-             FROM user_follows
-             INNER JOIN user_profiles ON user_profiles.user_id = user_follows.followed_user_id
-             INNER JOIN "user" ON "user".id = user_profiles.user_id
-             INNER JOIN categories ON categories.user_id = user_profiles.user_id
-             INNER JOIN entries ON entries.category_id = categories.id
-               AND entries.user_id = categories.user_id
-               AND entries.status = 'active'
-             WHERE user_follows.follower_user_id = ?
-               AND user_follows.status = 'accepted'
-               AND user_profiles.activity_visibility IN ('followers', 'public')
-               AND categories.visibility != 'private'
-               AND NOT EXISTS (
-                 SELECT 1 FROM user_blocks blocks
-                 WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id)
-                    OR (blocks.blocker_user_id = user_profiles.user_id AND blocks.blocked_user_id = ?)
-               )
-             ORDER BY entries.created_at DESC
-             LIMIT ?`
-                ).bind(userId, userId, userId, ACTIVITY_LIMIT)
-            ),
-            all<RecentActivityRow>(
-                db.prepare(
-                    `SELECT entries.id AS entry_id, entries.name AS entry_name,
-                    entries.image_key AS entry_image_key, categories.id AS category_id,
-                    categories.name AS category_name, entries.created_at,
-                    "user".id AS user_id, "user".name AS user_name,
-                    "user".image AS user_image, user_profiles.slug
-             FROM user_profiles
-             INNER JOIN "user" ON "user".id = user_profiles.user_id
-             INNER JOIN categories ON categories.user_id = user_profiles.user_id
-             INNER JOIN entries ON entries.category_id = categories.id
-               AND entries.user_id = categories.user_id
-               AND entries.status = 'active'
-             WHERE user_profiles.is_public = 1
-               AND user_profiles.activity_visibility = 'public'
-               AND user_profiles.user_id != ?
-               AND categories.visibility = 'public'
-               AND NOT EXISTS (
-                 SELECT 1 FROM user_blocks blocks
-                 WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id)
-                    OR (blocks.blocker_user_id = user_profiles.user_id AND blocks.blocked_user_id = ?)
-               )
-             ORDER BY entries.created_at DESC
-             LIMIT ?`
-                ).bind(userId, userId, userId, ACTIVITY_LIMIT)
-            ),
-            loadTrendingProfiles(userId)
-        ]);
+    .handler(({ context }): Promise<ExploreData> => loadExploreForUser(context.user.id));
 
-        return {
-            followingEntries: followingEntries.map(mapRecentActivity),
-            recentPublicEntries: recentPublicEntries.map(mapRecentActivity),
-            publicProfiles
-        };
+export const loadExplorePage = createServerFn({ method: "GET" })
+    .middleware([authMiddleware])
+    .handler(async ({ context }) => {
+        const [data, dashboard] = await Promise.all([
+            loadExploreForUser(context.user.id), buildDashboard(context.user.id, undefined, false, true)
+        ]);
+        return { data, home: { dashboard, user: { name: context.user.name,
+            image: context.user.image ?? null, isAdmin: hasAdminRole(context.user) } } };
     });
+
+async function loadExploreForUser(userId: string): Promise<ExploreData> {
+    const db = getDb();
+    const [followingEntries, recentPublicEntries, publicProfiles] = await Promise.all([
+        all<RecentActivityRow>(
+            db.prepare(
+                `SELECT entries.id AS entry_id, entries.name AS entry_name,
+                entries.image_key AS entry_image_key, categories.id AS category_id,
+                categories.name AS category_name, entries.created_at,
+                "user".id AS user_id, "user".name AS user_name,
+                "user".image AS user_image, user_profiles.slug
+         FROM user_follows
+         INNER JOIN user_profiles ON user_profiles.user_id = user_follows.followed_user_id
+         INNER JOIN "user" ON "user".id = user_profiles.user_id
+         INNER JOIN categories ON categories.user_id = user_profiles.user_id
+         INNER JOIN entries ON entries.category_id = categories.id
+           AND entries.user_id = categories.user_id
+           AND entries.status = 'active'
+         WHERE user_follows.follower_user_id = ?
+           AND user_follows.status = 'accepted'
+           AND user_profiles.activity_visibility IN ('followers', 'public')
+           AND categories.visibility != 'private'
+           AND NOT EXISTS (
+             SELECT 1 FROM user_blocks blocks
+             WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id)
+                OR (blocks.blocker_user_id = user_profiles.user_id AND blocks.blocked_user_id = ?)
+           )
+         ORDER BY entries.created_at DESC
+         LIMIT ?`
+            ).bind(userId, userId, userId, ACTIVITY_LIMIT)
+        ),
+        all<RecentActivityRow>(
+            db.prepare(
+                `SELECT entries.id AS entry_id, entries.name AS entry_name,
+                entries.image_key AS entry_image_key, categories.id AS category_id,
+                categories.name AS category_name, entries.created_at,
+                "user".id AS user_id, "user".name AS user_name,
+                "user".image AS user_image, user_profiles.slug
+         FROM user_profiles
+         INNER JOIN "user" ON "user".id = user_profiles.user_id
+         INNER JOIN categories ON categories.user_id = user_profiles.user_id
+         INNER JOIN entries ON entries.category_id = categories.id
+           AND entries.user_id = categories.user_id
+           AND entries.status = 'active'
+         WHERE user_profiles.is_public = 1
+           AND user_profiles.activity_visibility = 'public'
+           AND user_profiles.user_id != ?
+           AND categories.visibility = 'public'
+           AND NOT EXISTS (
+             SELECT 1 FROM user_blocks blocks
+             WHERE (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id)
+                OR (blocks.blocker_user_id = user_profiles.user_id AND blocks.blocked_user_id = ?)
+           )
+         ORDER BY entries.created_at DESC
+         LIMIT ?`
+            ).bind(userId, userId, userId, ACTIVITY_LIMIT)
+        ),
+        loadCachedPublicTrendingProfiles(userId)
+    ]);
+
+    return {
+        followingEntries: followingEntries.map(mapRecentActivity),
+        recentPublicEntries: recentPublicEntries.map(mapRecentActivity),
+        publicProfiles
+    };
+}
 
 function mapRecentActivity(row: RecentActivityRow): RecentActivityItem {
     return {
@@ -143,22 +157,19 @@ function mapExploreProfile(row: ExploreProfileRow): ExploreProfile {
  * public shelves. Freshness is based solely on activity the owner chose to
  * publish, so an "off" activity setting never becomes an indirect signal.
  */
-async function loadTrendingProfiles(viewerUserId?: string): Promise<ExploreProfile[]> {
-    const viewerId = viewerUserId ?? "";
+async function loadTrendingProfiles(): Promise<ExploreProfile[]> {
     const rows = await all<ExploreProfileRow>(
         getDb().prepare(
             `WITH public_shelves AS (
-               SELECT user_id, COUNT(*) AS public_category_count
-               FROM categories WHERE visibility = 'public' GROUP BY user_id
-             ), public_entries AS (
-               SELECT categories.user_id, COUNT(*) AS public_entry_count,
-                 MAX(CASE WHEN user_profiles.activity_visibility = 'public' THEN entries.created_at END) AS latest_public_activity_at
-               FROM categories
-               INNER JOIN entries ON entries.category_id = categories.id
-                 AND entries.user_id = categories.user_id AND entries.status = 'active'
-               INNER JOIN user_profiles ON user_profiles.user_id = categories.user_id
-               WHERE categories.visibility = 'public'
-               GROUP BY categories.user_id
+               SELECT c.user_id, COUNT(*) AS public_category_count,
+                 SUM(c.active_entry_count) AS public_entry_count,
+                 MAX(CASE WHEN p.activity_visibility = 'public' THEN (
+                   SELECT e.created_at FROM entries e WHERE e.category_id = c.id
+                     AND e.user_id = c.user_id AND e.status = 'active'
+                   ORDER BY e.created_at DESC LIMIT 1
+                 ) END) AS latest_public_activity_at
+               FROM categories c JOIN user_profiles p ON p.user_id = c.user_id
+               WHERE c.visibility = 'public' AND p.is_public = 1 GROUP BY c.user_id
              ), followers AS (
                SELECT followed_user_id AS user_id, COUNT(*) AS follower_count
                FROM user_follows WHERE status = 'accepted' GROUP BY followed_user_id
@@ -166,25 +177,20 @@ async function loadTrendingProfiles(viewerUserId?: string): Promise<ExploreProfi
              SELECT "user".id AS user_id, "user".name, "user".image, user_profiles.slug,
                COALESCE(public_shelves.public_category_count, 0) AS public_category_count,
                COALESCE(followers.follower_count, 0) AS follower_count,
-               COALESCE(public_entries.public_entry_count, 0) AS public_entry_count,
-               public_entries.latest_public_activity_at
+               COALESCE(public_shelves.public_entry_count, 0) AS public_entry_count,
+               public_shelves.latest_public_activity_at
              FROM user_profiles
              INNER JOIN "user" ON "user".id = user_profiles.user_id
              LEFT JOIN public_shelves ON public_shelves.user_id = user_profiles.user_id
-             LEFT JOIN public_entries ON public_entries.user_id = user_profiles.user_id
              LEFT JOIN followers ON followers.user_id = user_profiles.user_id
              WHERE user_profiles.is_public = 1
                AND (
                  (COALESCE(public_shelves.public_category_count, 0) > 0 AND (
-                   public_entries.latest_public_activity_at >= ?
+                   public_shelves.latest_public_activity_at >= ?
                    OR user_profiles.updated_at >= ?
                  ))
                  OR user_profiles.created_at >= ?
                )
-               AND (? = '' OR user_profiles.user_id != ?)
-               AND (? = '' OR NOT EXISTS (SELECT 1 FROM user_blocks blocks WHERE
-                    (blocks.blocker_user_id = ? AND blocks.blocked_user_id = user_profiles.user_id) OR
-                    (blocks.blocker_user_id = user_profiles.user_id AND blocks.blocked_user_id = ?)))
              ORDER BY (
                 follower_count * 6 + public_category_count * 4 + MIN(public_entry_count, 100) * 0.2 +
                 CASE WHEN latest_public_activity_at IS NULL THEN 0 ELSE
@@ -195,8 +201,7 @@ async function loadTrendingProfiles(viewerUserId?: string): Promise<ExploreProfi
             Date.now() - TRENDING_WINDOW_MS,
             Date.now() - TRENDING_WINDOW_MS,
             Date.now() - NEW_PROFILE_WINDOW_MS,
-            viewerId, viewerId, viewerId, viewerId, viewerId,
-            Date.now(), TRENDING_WINDOW_MS, PROFILE_LIMIT
+            Date.now(), TRENDING_WINDOW_MS, PROFILE_CANDIDATE_LIMIT
         )
     );
 
@@ -213,50 +218,48 @@ export const loadPublicExplore = createServerFn({ method: "GET" })
  * per-edge cache removes repeated global aggregation without caching any
  * viewer-specific relationship data.
  */
-async function loadCachedPublicTrendingProfiles() {
+async function loadCachedPublicTrendingProfiles(viewerUserId = "") {
     const cacheRequest = new Request(PUBLIC_TRENDING_CACHE_URL);
     let cache: Cache | null = null;
+    let profiles: ExploreProfile[] | null = null;
     try {
         cache = (caches as CloudflareCacheStorage).default;
         const cached = await cache.match(cacheRequest);
-        const expiresAt = Number(cached?.headers.get("x-goldshelf-expires-at"));
-        if (cached && Number.isFinite(expiresAt) && expiresAt > Date.now()) {
-            const profiles = await cached.json() as ExploreProfile[];
-            // Cache ranking order, but revalidate the current audience and
-            // public metadata before returning a directory entry.
-            const visible = await all<{ user_id: string; name: string; image: string | null; slug: string; public_category_count: number }>(getDb().prepare(`
-              SELECT p.user_id, u.name, u.image, p.slug,
-                (SELECT COUNT(*) FROM categories WHERE user_id = p.user_id AND visibility = 'public') AS public_category_count
-              FROM user_profiles p JOIN "user" u ON u.id = p.user_id
-              WHERE p.is_public = 1 AND p.user_id IN (SELECT value FROM json_each(?))`)
-                .bind(JSON.stringify(profiles.map((profile) => profile.userId))));
-            const byId = new Map(visible.map((row) => [row.user_id, row]));
-            return profiles.flatMap((profile) => {
-                const row = byId.get(profile.userId);
-                return row ? [{ userId: row.user_id, name: row.name, imageKey: row.image, slug: row.slug, publicCategoryCount: row.public_category_count }] : [];
-            });
+        if (cached && Number(cached.headers.get("x-goldshelf-expires-at")) > Date.now()) {
+            profiles = await cached.json() as ExploreProfile[];
         }
-        if (cached) {
-            await cache.delete(cacheRequest);
-        }
-    } catch {
-        // Cache API is best-effort and unavailable in local development.
-        cache = null;
-    }
-
-    const profiles = await loadTrendingProfiles();
-    if (cache) {
-        try {
-            const response = Response.json(profiles, {
-                headers: {
+    } catch { cache = null; }
+    if (!profiles) {
+        profiles = await loadTrendingProfiles();
+        if (cache) {
+            try {
+                await cache.put(cacheRequest, Response.json(profiles, { headers: {
                     "cache-control": `public, max-age=${PUBLIC_TRENDING_CACHE_TTL_MS / 1000}`,
                     "x-goldshelf-expires-at": String(Date.now() + PUBLIC_TRENDING_CACHE_TTL_MS)
-                }
-            });
-            await cache.put(cacheRequest, response.clone());
-        } catch {
-            // A cache write must not repeat or fail the directory query.
+                } }));
+            } catch { /* Caching must not repeat or fail the database query. */ }
         }
     }
-    return profiles;
+
+    // Share only the ranking pool. Recheck current public metadata, audiences
+    // and viewer-specific blocks on every response, including cache misses.
+    const visible = await all<{ user_id: string; name: string; image: string | null; slug: string; public_category_count: number }>(
+        getDb().prepare(`WITH candidates AS MATERIALIZED (
+          SELECT p.user_id, u.name, u.image, p.slug, p.created_at,
+            (SELECT COUNT(*) FROM categories WHERE user_id = p.user_id AND visibility = 'public') AS public_category_count
+          FROM user_profiles p JOIN "user" u ON u.id = p.user_id
+          WHERE p.is_public = 1 AND p.user_id IN (SELECT value FROM json_each(?))
+            AND p.user_id != ? AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+              (b.blocker_user_id = ? AND b.blocked_user_id = p.user_id) OR
+              (b.blocker_user_id = p.user_id AND b.blocked_user_id = ?))
+        ) SELECT * FROM candidates WHERE public_category_count > 0 OR created_at >= ?`)
+            .bind(JSON.stringify(profiles.map((profile) => profile.userId)), viewerUserId,
+                viewerUserId, viewerUserId, Date.now() - NEW_PROFILE_WINDOW_MS)
+    );
+    const byId = new Map(visible.map((row) => [row.user_id, row]));
+    return profiles.flatMap((profile) => {
+        const row = byId.get(profile.userId);
+        return row ? [{ userId: row.user_id, name: row.name, imageKey: row.image,
+            slug: row.slug, publicCategoryCount: row.public_category_count }] : [];
+    }).slice(0, PROFILE_LIMIT);
 }

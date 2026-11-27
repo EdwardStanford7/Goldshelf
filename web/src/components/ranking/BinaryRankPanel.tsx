@@ -219,11 +219,12 @@ export function BinaryRankPanel({
                 return;
             }
 
-            const nextSession = await reloadCurrentSession({ retryTransient: true });
+            const nextSession = result.session ?? await reloadCurrentSession({ retryTransient: true });
             if (!nextSession) {
                 return;
             }
 
+            resetTransientLoadRetry();
             setSession(nextSession);
         } catch (submitError) {
             if (isStaleDataError(submitError)) {

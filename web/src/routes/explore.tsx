@@ -17,30 +17,22 @@ import {
 } from "@/components/ui/context-menu";
 import { hasStoredImage, isNoImageKey } from "@/lib/images";
 import { formatDate } from "@/lib/format";
-import { redirectIfUnauthorized } from "@/lib/errors";
+import { isUnauthorizedError, redirectIfUnauthorized } from "@/lib/errors";
 import { showToast } from "@/lib/toast";
 import type { ExploreData, ExploreProfile, FollowRelationState, FollowSearchResult, RecentActivityItem } from "@/lib/types";
-import { getSession } from "@/server/session";
-import { loadExplore } from "@/server/explore";
+import { loadExplorePage } from "@/server/explore";
 import { copyPublicCategoryToQueue, followProfile, searchPublicProfiles } from "@/server/profiles";
-import { loadHome } from "@/server/dashboard";
 
 const SEARCH_DELAY_MS = 250;
 type Feed = "following" | "everyone";
 
 export const Route = createFileRoute("/explore")({
     loader: async () => {
-        const session = await getSession();
-        if (!session?.user) {
-            throw redirect({ to: "/signin" });
+        try { return await loadExplorePage(); }
+        catch (error) {
+            if (isUnauthorizedError(error)) throw redirect({ to: "/signin" });
+            throw error;
         }
-
-        const [data, home] = await Promise.all([loadExplore(), loadHome()]);
-        if (!home.dashboard || !home.user) {
-            throw redirect({ to: "/signin" });
-        }
-
-        return { data, home };
     },
     component: ExploreRoute
 });

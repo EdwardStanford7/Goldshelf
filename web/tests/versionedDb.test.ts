@@ -59,6 +59,7 @@ describe("versioned mutations", () => {
             await withVersionedDb(db, "user", async () => {
                 const scoped = versionedDb(db);
                 await scoped.batch([scoped.prepare("SELECT * FROM categories")]);
+                await scoped.batch([scoped.prepare("WITH shelves AS (SELECT * FROM categories) SELECT * FROM shelves")]);
                 expect(mutationRevision()).toBe(0);
                 await scoped.prepare("DELETE FROM categories").run();
                 await scoped.prepare('DELETE FROM "user"').run();

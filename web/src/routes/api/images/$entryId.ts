@@ -1,5 +1,4 @@
-import { versionedImageHandlers } from "@/server/lib/imageMutationScope";
-import { auth } from "@/server/lib/auth";
+import { imageRequestSession, versionedImageHandlers } from "@/server/lib/imageMutationScope";
 import { first, getDb, now } from "@/server/lib/db";
 import { isNoImageKey, hasStoredImage } from "@/lib/images";
 import { requireSameOriginMutation } from "@/server/lib/requestGuards";
@@ -20,7 +19,7 @@ export const Route = createFileRoute("/api/images/$entryId")({
                 request: Request;
                 params: { entryId: string };
             }) => {
-                const session = await auth.api.getSession({ headers: request.headers });
+                const session = await imageRequestSession(request);
                 if (!session?.user) {
                     return new Response("Unauthorized", { status: 401 });
                 }
@@ -56,7 +55,7 @@ export const Route = createFileRoute("/api/images/$entryId")({
                 request: Request;
                 params: { entryId: string };
             }) => {
-                const session = await auth.api.getSession({ headers: request.headers });
+                const session = await imageRequestSession(request);
                 if (!session?.user) {
                     return Response.json({ message: "Unauthorized" }, { status: 401 });
                 }
@@ -118,7 +117,7 @@ export const Route = createFileRoute("/api/images/$entryId")({
                 request: Request;
                 params: { entryId: string };
             }) => {
-                const session = await auth.api.getSession({ headers: request.headers });
+                const session = await imageRequestSession(request);
                 if (!session?.user) {
                     return Response.json({ message: "Unauthorized" }, { status: 401 });
                 }

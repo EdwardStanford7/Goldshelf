@@ -35,10 +35,13 @@ test("a stale matchup answer from another tab is rejected and refreshed", async 
     const other = await context.newPage();
     await gotoApp(other);
     await expect(other.getByRole("button", { name: /^Zeta\b/ })).toBeVisible();
+    let comparisonReloads = 0;
+    page.on("request", (request) => { if (isServerFnRequest(request.url(), "getBinarySession")) comparisonReloads++; });
     const saved = serverFnResponse(page, "submitBinaryWinner");
     await page.getByRole("button", { name: /^Zeta\b/ }).click();
     await saved;
     await expect(page.getByText(/1 comparisons/)).toBeVisible();
+    expect(comparisonReloads).toBe(0);
     await other.getByRole("button", { name: /^Zeta\b/ }).click();
     await expect(other.getByText("This comparison changed in another tab. The current comparison has been loaded.")).toBeVisible();
     await expect(other.getByText(/1 comparisons/)).toBeVisible();

@@ -129,6 +129,12 @@ Ranking and repair answers also carry a matchup token. Undo snapshots are staged
 
 Shelf entry revisions are maintained by database triggers. The home loader supplies metadata; the browser restores matching entries from IndexedDB or uses the focused category loader. Local snapshots are per account, expire after seven days, and are invalidated across tabs on sign-out/session loss. They are a read cache; edits require the server.
 
+Shelf active-entry counts are stored alongside the revision. Entry triggers mark a shelf dirty when membership changes in a versioned transaction; deleting the mutation guard recounts each dirty shelf once before committing. Rank-only changes do not recount, and unscoped maintenance applies count deltas directly. Keeping the flush in a database trigger also supports the previous Worker while migrations run before deployment. Initial home/settings loads read these counts without scanning the library. Public profiles fetch only the first visible shelf, then authorize and load other shelves on selection.
+
+Ranking/repair answer responses include their next comparison. Normal binary steps locate the next pivot through the rank index. Avoid adding an unconditional follow-up session GET to those paths. Scheduled maintenance clears obsolete closed-session Undo and operation payloads in bounded batches, preserving a completed session's still-valid Undo and the small records used for recovery.
+
+Explore shares a five-minute public ranking pool across signed-in and anonymous viewers. Each response revalidates current public visibility and viewer blocks before filtering to 24 profiles; follower activity remains viewer-specific. Page bootstrap functions share the authenticated identity, and image mutations memoize identity only for the same Request object. Profile-search documents have stable numeric IDs and update only when indexed text changes.
+
 Image cleanup first marks an unreferenced asset for deletion. Database fences prevent attaching an image being deleted, and cleanup can resume after interruption. Uploads reserve the asset briefly before storing bytes. Do not delete an R2 object before claiming its deletion marker.
 
 Import requests commit their JSON inserts atomically. Larger UI operations report completed chunks and allow retries that skip duplicates. SQLite integration tests exercise the actual migrations, revision guards, image fences and undo behavior; Playwright covers multi-tab recovery and local-cache reuse.

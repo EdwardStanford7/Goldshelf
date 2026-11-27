@@ -121,14 +121,9 @@ export async function buildDashboard(
                 .prepare(
                     `SELECT categories.id, categories.name, categories.sort_order,
                             categories.created_at, categories.is_public, categories.visibility, categories.data_revision,
-                            COUNT(entries.id) AS entry_count
+                            categories.active_entry_count AS entry_count
                      FROM categories
-                     LEFT JOIN entries ON entries.category_id = categories.id
-                       AND entries.user_id = categories.user_id
-                       AND entries.status = 'active'
                      WHERE categories.user_id = ?
-                     GROUP BY categories.id, categories.name, categories.sort_order,
-                              categories.created_at, categories.is_public, categories.visibility, categories.data_revision
                      ORDER BY categories.sort_order ASC, categories.name ASC`
                 )
                 .bind(userId)

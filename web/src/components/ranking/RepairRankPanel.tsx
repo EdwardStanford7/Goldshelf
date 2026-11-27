@@ -218,7 +218,8 @@ export function RepairRankPanel({
                 return;
             }
 
-            await reloadCurrentSession({ retryTransient: true });
+            if (result.session) { resetTransientLoadRetry(); setSession(result.session); }
+            else await reloadCurrentSession({ retryTransient: true });
         } catch (submitError) {
             if (isStaleDataError(submitError)) {
                 await reloadCurrentSession({ retryTransient: true }).catch((error) => setError(errorMessage(error)));
@@ -256,7 +257,8 @@ export function RepairRankPanel({
                 return;
             }
 
-            await reloadCurrentSession({ retryTransient: true });
+            if (result.session) { resetTransientLoadRetry(); setSession(result.session); }
+            else await reloadCurrentSession({ retryTransient: true });
         } catch (skipError) {
             if (!redirectIfUnauthorized(skipError)) {
                 if (isTransientRequestFailure(skipError)) {

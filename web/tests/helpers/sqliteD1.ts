@@ -11,19 +11,24 @@ export function sqliteD1() {
         .run("user", "User", "user@test.local", 0, 1, 1);
     sqlite.prepare("INSERT INTO categories (id,user_id,name,sort_order,created_at,updated_at) VALUES (?,?,?,?,?,?)")
         .run("category", "user", "Books", 0, 1, 1);
+    const queries: string[] = [];
+    const metrics = { batches: 0 };
     function prepare(sql: string) {
         let values: (string | number | null)[] = [];
         const statement = {
             bind(...args: (string | number | null)[]) { values = args; return statement; },
             async first(column?: string) {
+                queries.push(sql);
                 const row = sqlite.prepare(sql).get(...values);
                 return column ? row?.[column] ?? null : row ?? null;
             },
             async run() {
+                queries.push(sql);
                 const result = sqlite.prepare(sql).run(...values);
                 return { results: [], success: true, meta: { changes: Number(result.changes) } };
             },
             async all() {
+                queries.push(sql);
                 const results = sqlite.prepare(sql).all(...values);
                 const changes = sqlite.prepare("SELECT changes() AS n").get()?.n;
                 return { results, success: true, meta: { changes: Number(changes) } };
@@ -34,6 +39,7 @@ export function sqliteD1() {
     const db = {
         prepare,
         async batch(statements: ReturnType<typeof prepare>[]) {
+            metrics.batches++;
             sqlite.exec("BEGIN");
             try {
                 const results = [];
@@ -43,5 +49,5 @@ export function sqliteD1() {
             } catch (error) { sqlite.exec("ROLLBACK"); throw error; }
         }
     } as unknown as D1Database;
-    return { db, sqlite };
+    return { db, sqlite, queries, metrics };
 }

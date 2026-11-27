@@ -16,9 +16,8 @@ export const loadCategoryEntries = createServerFn({ method: "GET" })
     .handler(async ({ context, data }) => {
         const db = getDb();
         const [metadata, entries] = await db.batch([
-            db.prepare(`SELECT data_revision, (SELECT COUNT(*) FROM entries WHERE category_id = categories.id
-              AND user_id = ? AND status = 'active') AS entry_count
-              FROM categories WHERE id = ? AND user_id = ?`).bind(context.user.id, data.categoryId, context.user.id),
+            db.prepare(`SELECT data_revision, active_entry_count AS entry_count
+              FROM categories WHERE id = ? AND user_id = ?`).bind(data.categoryId, context.user.id),
             db.prepare(`SELECT id, category_id, name, rank_position, image_key, created_at FROM entries
               WHERE user_id = ? AND category_id = ? AND status = 'active' ORDER BY rank_position`).bind(context.user.id, data.categoryId)
         ]);
