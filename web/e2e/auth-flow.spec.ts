@@ -94,6 +94,41 @@ test.describe("Auth flows", () => {
         await expect(
             page.getByRole("heading", { name: "Rank everything you love." })
         ).toBeVisible({ timeout: 15_000 });
+        const session = await context.request.get("/api/auth/get-session");
+        expect(await session.json()).toBeNull();
+    });
+
+    for (const failure of ["server", "network"] as const) {
+        test(`sign out reports a ${failure} failure and allows retry`, async ({ page, context }) => {
+            await seedUsers([{ email: "signout-retry@e2e.test", name: "Reader" }]);
+            await signInViaApi(context, "signout-retry@e2e.test");
+            await gotoApp(page, "/profile");
+            await page.route("**/api/auth/sign-out", async (route) => {
+                if (failure === "network") await route.abort("failed");
+                else await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "Please try again." }) });
+            });
+            await page.getByRole("button", { name: "Sign Out", exact: true }).click();
+            await expect(page.getByText(/Could not sign out\./)).toBeVisible();
+            await expect(page).toHaveURL(/\/profile$/);
+            await expect(page.getByRole("button", { name: "Sign Out", exact: true })).toBeEnabled();
+            expect(await (await context.request.get("/api/auth/get-session")).json()).not.toBeNull();
+            await page.unroute("**/api/auth/sign-out");
+            await page.getByRole("button", { name: "Sign Out", exact: true }).click();
+            await expect(page.getByRole("heading", { name: "Rank everything you love." })).toBeVisible();
+            expect(await (await context.request.get("/api/auth/get-session")).json()).toBeNull();
+        });
+    }
+
+    test("sign out completes when cache notifications fail", async ({ page, context }) => {
+        await seedUsers([{ email: "signout-channel@e2e.test", name: "Reader", categories: [{ name: "Private", entries: ["Secret"] }] }]);
+        await signInViaApi(context, "signout-channel@e2e.test");
+        await gotoApp(page, "/profile");
+        await page.evaluate(() => {
+            BroadcastChannel.prototype.postMessage = () => { throw new Error("Channel unavailable"); };
+        });
+        await page.getByRole("button", { name: "Sign Out", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Rank everything you love." })).toBeVisible();
+        expect(await (await context.request.get("/api/auth/get-session")).json()).toBeNull();
     });
 
     test("password reset via captured email link", async ({ page }) => {

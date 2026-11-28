@@ -122,7 +122,9 @@ export async function saveDashboardSnapshot(dashboard: DashboardData) {
 
 export async function clearDashboardSnapshot(userId?: string) {
     if (userId) blockedUsers.add(userId); else blockAll = true;
-    invalidationChannel?.postMessage({ userId: userId ?? null });
+    try {
+        invalidationChannel?.postMessage({ userId: userId ?? null });
+    } catch { /* A disabled/closed channel must not prevent storage cleanup or sign-out. */ }
     try {
         window.localStorage.setItem(INVALIDATION_KEY, JSON.stringify({ userId: userId ?? null, nonce: crypto.randomUUID() }));
     } catch { /* Storage may be disabled. */ }

@@ -86,6 +86,7 @@ function ProfileRoute() {
     const [savingBlockId, setSavingBlockId] = useState<string | null>(null);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
     const [deletingAccount, setDeletingAccount] = useState(false);
+    const [signingOut, setSigningOut] = useState(false);
     const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialThemeMode());
     const [showEntryPercentile, setShowEntryPercentile] = useState(() => readInitialShowEntryPercentile());
     const [savingQueueSettings, setSavingQueueSettings] = useState(false);
@@ -247,11 +248,20 @@ function ProfileRoute() {
     }
 
     async function handleSignOut() {
-        await signOut();
-        if (settings) {
-            await clearDashboardSnapshot(settings.user.id);
+        if (signingOut) return;
+        setSigningOut(true);
+        try {
+            const result = await signOut({ fetchOptions: { signal: AbortSignal.timeout(15_000) } });
+            // Better Auth returns HTTP failures as data rather than throwing.
+            if (result.error) {
+                throw new Error(result.error.message || "Please try again.");
+            }
+            await clearDashboardSnapshot(settings?.user.id);
+            window.location.assign("/");
+        } catch (error) {
+            setError(`Could not sign out. ${errorMessage(error)}`);
+            setSigningOut(false);
         }
-        window.location.assign("/");
     }
 
     async function handleProfileImageInput(event: ChangeEvent<HTMLInputElement>) {
@@ -969,8 +979,8 @@ function ProfileRoute() {
                                 <p className="mb-0 text-sm text-muted-foreground">Sign out or manage permanent account removal.</p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <Button type="button" variant="outline" onClick={() => void handleSignOut()}>
-                                    Sign Out
+                                <Button type="button" variant="outline" disabled={signingOut || deletingAccount} onClick={() => void handleSignOut()}>
+                                    {signingOut ? "Signing out..." : "Sign Out"}
                                 </Button>
                                 <details className="relative">
                                     <summary className="flex h-9 cursor-pointer list-none items-center rounded-lg border border-destructive/50 px-3 text-sm font-medium text-destructive [&::-webkit-details-marker]:hidden">
